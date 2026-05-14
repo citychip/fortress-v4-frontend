@@ -232,6 +232,18 @@ function TickerIntelPanel({ ticker }: { ticker: string }) {
   const colorMap = { red: 'oklch(0.65 0.22 25)', amber: 'oklch(0.78 0.18 85)', green: 'oklch(0.72 0.18 145)', cyan: 'oklch(0.80 0.15 200)' };
   const regimeHex = colorMap[regimeColor];
 
+  // Derive DP floor/ceiling from dark_pool.floors array (sorted by notional)
+  const currentPrice = data.current_price ?? 0;
+  const allFloors: Array<{ price: number; notional_m: number }> = (data as any).dark_pool?.floors ?? [];
+  const floorsBelow = allFloors.filter(f => f.price < currentPrice).sort((a, b) => b.notional_m - a.notional_m);
+  const floorsAbove = allFloors.filter(f => f.price >= currentPrice).sort((a, b) => b.notional_m - a.notional_m);
+  const dpFloor = floorsBelow[0]?.price ?? null;
+  const dpCeiling = floorsAbove[0]?.price ?? null;
+  const netDrift = (data as any).net_drift ?? null;
+  // GEX: from gex object if present
+  const gexData = (data as any).gex;
+  const gexCallWall = gexData?.call_wall ?? gexData?.call_resistance ?? null;
+
   return (
     <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
       <div className="flex items-center justify-between mb-3">
@@ -243,10 +255,10 @@ function TickerIntelPanel({ ticker }: { ticker: string }) {
       </div>
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: 'GEX Call Wall', value: regime?.gex_call_wall !== undefined && regime.gex_call_wall !== null ? `$${regime.gex_call_wall.toFixed(2)}` : '—' },
-          { label: 'DP Floor', value: regime?.dp_floor !== undefined && regime.dp_floor !== null ? `$${regime.dp_floor.toFixed(2)}` : '—' },
-          { label: 'DP Ceiling', value: regime?.dp_ceiling !== undefined && regime.dp_ceiling !== null ? `$${regime.dp_ceiling.toFixed(2)}` : '—' },
-          { label: 'Net Drift', value: regime?.net_drift !== undefined && regime.net_drift !== null ? `${regime.net_drift > 0 ? '+' : ''}${regime.net_drift.toFixed(2)}` : '—' },
+          { label: 'GEX Call Wall', value: gexCallWall !== null ? `$${Number(gexCallWall).toFixed(2)}` : '—' },
+          { label: 'DP Floor', value: dpFloor !== null ? `$${dpFloor.toFixed(2)}` : '—' },
+          { label: 'DP Ceiling', value: dpCeiling !== null ? `$${dpCeiling.toFixed(2)}` : '—' },
+          { label: 'Net Drift', value: netDrift !== null ? `${netDrift > 0 ? '+' : ''}${Number(netDrift).toFixed(2)}` : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
             <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>
@@ -254,6 +266,18 @@ function TickerIntelPanel({ ticker }: { ticker: string }) {
           </div>
         ))}
       </div>
+      {floorsBelow.length > 0 && (
+        <div className="mt-3 pt-3" style={{ borderTop: '1px solid oklch(1 0 0 / 8%)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'oklch(0.50 0.010 258)' }}>Top DP Floors (below price)</div>
+          <div className="flex flex-wrap gap-2">
+            {floorsBelow.slice(0, 5).map(f => (
+              <span key={f.price} className="font-mono-data text-xs px-2 py-0.5 rounded" style={{ background: 'oklch(0.80 0.15 200 / 10%)', color: 'oklch(0.80 0.15 200)' }}>
+                ${f.price.toFixed(2)} <span style={{ color: 'oklch(0.50 0.010 258)' }}>${f.notional_m.toFixed(1)}M</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
