@@ -46,7 +46,10 @@ export interface AppConfig {
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
-  apiUrl: 'http://76.13.138.194:8080',
+  // Empty string = relative URL, so requests go to the same origin.
+  // When served via nginx on port 3000, /api/* is proxied to port 8080 automatically.
+  // Set this to an absolute URL only if running the dashboard on a different host.
+  apiUrl: '',
   apiToken: '',
   tickers: ['MSFT', 'AVGO', 'NFLX', 'SPY', 'AMD', 'GOOGL', 'UNH', 'NVDA'],
   strategy: {

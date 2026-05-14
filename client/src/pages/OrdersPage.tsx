@@ -1,46 +1,59 @@
 /**
  * FORTRESS V2 — Orders Page
  * Layer 4: Prioritised order recommendations — URGENT / THIS WEEK / WATCH.
- * Each order includes action, ticker, right, strike, expiry, qty, and reason.
+ * Built from /api/manage/stop_loss_all + /api/manage/roll_all + /api/alerts.
  */
 
-import { useBriefing, type OrderRecommendation } from '@/hooks/useApi';
+import { useStopLossAll, useRollAll, useAlerts, calcDte } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
-import { UrgencyBadge } from '@/components/UrgencyBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { StatCard } from '@/components/StatCard';
 import { AlertTriangle, Clock, Eye, Copy, CheckCircle2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
+
+// ─── Normalised order type ────────────────────────────────────────────────────
+
+interface NormalisedOrder {
+  id: string;
+  urgency: 'URGENT' | 'THIS_WEEK' | 'WATCH';
+  action: string;
+  ticker: string;
+  strategy?: string;
+  strike?: number;
+  expiry?: string;
+  reason: string;
+  detail?: string;
+}
 
 // ─── Order Card ───────────────────────────────────────────────────────────────
 
-function OrderCard({ order }: { order: OrderRecommendation }) {
+function OrderCard({ order }: { order: NormalisedOrder }) {
   const [copied, setCopied] = useState(false);
 
-  const actionColor = {
-    BUY:   'oklch(0.72 0.18 145)',
-    SELL:  'oklch(0.65 0.22 25)',
-    ROLL:  'oklch(0.78 0.18 85)',
-    CLOSE: 'oklch(0.65 0.22 25)',
-    ADJUST:'oklch(0.80 0.15 200)',
-  }[order.action] ?? 'oklch(0.80 0.15 200)';
+  const actionColor: Record<string, string> = {
+    'CLOSE': 'oklch(0.65 0.22 25)',
+    'ROLL':  'oklch(0.78 0.18 85)',
+    'SELL':  'oklch(0.65 0.22 25)',
+    'BUY':   'oklch(0.72 0.18 145)',
+    'HEDGE': 'oklch(0.80 0.15 200)',
+  };
+  const aColor = actionColor[order.action] ?? 'oklch(0.80 0.15 200)';
 
-  const borderColor = {
+  const borderColor: Record<string, string> = {
     URGENT:    'oklch(0.65 0.22 25 / 35%)',
     THIS_WEEK: 'oklch(0.78 0.18 85 / 25%)',
     WATCH:     'oklch(0.80 0.15 200 / 20%)',
-  }[order.urgency];
+  };
 
   const copyOrder = () => {
     const text = [
       order.action,
       order.ticker,
-      order.right ? `${order.right}` : '',
+      order.strategy ?? '',
       order.strike ? `$${order.strike}` : '',
       order.expiry ?? '',
-      order.qty ? `x${order.qty}` : '',
       `— ${order.reason}`,
     ].filter(Boolean).join(' ');
     navigator.clipboard.writeText(text);
@@ -52,35 +65,30 @@ function OrderCard({ order }: { order: OrderRecommendation }) {
   return (
     <div
       className="rounded border p-4 transition-all hover:bg-[oklch(1_0_0_/_2%)]"
-      style={{
-        background: 'oklch(0.17 0.010 258)',
-        borderColor,
-      }}
+      style={{ background: 'oklch(0.17 0.010 258)', borderColor: borderColor[order.urgency] }}
     >
       <div className="flex items-start gap-3">
-        <UrgencyBadge urgency={order.urgency} pulse={order.urgency === 'URGENT'} />
+        <span
+          className="text-[10px] font-bold font-mono-data px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
+          style={{
+            background: `${borderColor[order.urgency].replace(' / 35%)', ' / 15%)').replace(' / 25%)', ' / 15%)').replace(' / 20%)', ' / 15%)')}`,
+            color: order.urgency === 'URGENT' ? 'oklch(0.75 0.22 25)' : order.urgency === 'THIS_WEEK' ? 'oklch(0.85 0.18 85)' : 'oklch(0.85 0.15 200)',
+          }}
+        >
+          {order.urgency.replace('_', ' ')}
+        </span>
 
         <div className="flex-1 min-w-0">
-          {/* Action line */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="font-mono-data text-sm font-bold"
-              style={{ color: actionColor }}
-            >
+            <span className="font-mono-data text-sm font-bold" style={{ color: aColor }}>
               {order.action}
             </span>
             <span className="font-mono-data text-sm font-semibold" style={{ color: 'oklch(0.93 0.005 258)' }}>
               {order.ticker}
             </span>
-            {order.right && (
-              <span
-                className="font-mono-data text-xs px-1.5 py-0.5 rounded"
-                style={{
-                  background: order.right === 'C' ? 'oklch(0.72 0.18 145 / 15%)' : 'oklch(0.65 0.22 25 / 15%)',
-                  color: order.right === 'C' ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
-                }}
-              >
-                {order.right}
+            {order.strategy && (
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'oklch(0.80 0.15 200 / 12%)', color: 'oklch(0.80 0.15 200)' }}>
+                {order.strategy}
               </span>
             )}
             {order.strike && (
@@ -93,19 +101,10 @@ function OrderCard({ order }: { order: OrderRecommendation }) {
                 {order.expiry}
               </span>
             )}
-            {order.qty && (
-              <span className="font-mono-data text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>
-                ×{Math.abs(order.qty)}
-              </span>
-            )}
           </div>
-
-          {/* Reason */}
           <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'oklch(0.60 0.010 258)' }}>
             {order.reason}
           </p>
-
-          {/* Detail */}
           {order.detail && (
             <p className="text-xs mt-1 leading-relaxed" style={{ color: 'oklch(0.50 0.010 258)' }}>
               {order.detail}
@@ -113,7 +112,6 @@ function OrderCard({ order }: { order: OrderRecommendation }) {
           )}
         </div>
 
-        {/* Copy button */}
         <button
           onClick={copyOrder}
           className="flex-shrink-0 p-1.5 rounded transition-all hover:bg-[oklch(1_0_0_/_8%)]"
@@ -130,15 +128,11 @@ function OrderCard({ order }: { order: OrderRecommendation }) {
 // ─── Section ──────────────────────────────────────────────────────────────────
 
 function OrderSection({
-  title,
-  icon: Icon,
-  orders,
-  iconColor,
-  emptyText,
+  title, icon: Icon, orders, iconColor, emptyText,
 }: {
   title: string;
   icon: React.ElementType;
-  orders: OrderRecommendation[];
+  orders: NormalisedOrder[];
   iconColor: string;
   emptyText: string;
 }) {
@@ -156,19 +150,13 @@ function OrderSection({
           {orders.length}
         </span>
       </div>
-
       {orders.length === 0 ? (
-        <div
-          className="rounded border py-6 text-center text-xs"
-          style={{ borderColor: 'oklch(1 0 0 / 8%)', color: 'oklch(0.50 0.010 258)' }}
-        >
+        <div className="rounded border py-6 text-center text-xs" style={{ borderColor: 'oklch(1 0 0 / 8%)', color: 'oklch(0.50 0.010 258)' }}>
           {emptyText}
         </div>
       ) : (
         <div className="space-y-2">
-          {orders.map(order => (
-            <OrderCard key={order.id} order={order} />
-          ))}
+          {orders.map(order => <OrderCard key={order.id} order={order} />)}
         </div>
       )}
     </div>
@@ -178,10 +166,92 @@ function OrderSection({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OrdersPage() {
-  const { data, loading, error, refresh, lastUpdated } = useBriefing();
+  const { data: stopData, loading: stopLoading, error: stopError, refresh: refreshStop, lastUpdated } = useStopLossAll();
+  const { data: rollData, loading: rollLoading, refresh: refreshRoll } = useRollAll();
+  const { data: alertData } = useAlerts();
   const { config } = useConfig();
 
-  const orders = data?.today_actions ?? [];
+  const loading = stopLoading || rollLoading;
+  const error = stopError;
+
+  const refresh = () => { refreshStop(); refreshRoll(); };
+
+  // Build normalised order list
+  const orders = useMemo<NormalisedOrder[]>(() => {
+    const result: NormalisedOrder[] = [];
+
+    // URGENT: stop-loss ACT
+    stopData?.positions
+      .filter(p => p.verdict === 'ACT')
+      .forEach(p => result.push({
+        id: `sl-${p.synthesized_id}`,
+        urgency: 'URGENT',
+        action: 'CLOSE',
+        ticker: p.ticker,
+        strategy: p.strategy,
+        strike: p.short_strike,
+        expiry: p.expiry,
+        reason: p.recommended_action,
+        detail: p.reasons.join(' · '),
+      }));
+
+    // URGENT: roll with urgency=URGENT
+    rollData?.positions
+      .filter(p => p.roll_needed && p.urgency === 'URGENT')
+      .forEach(p => result.push({
+        id: `roll-urgent-${p.synthesized_id}`,
+        urgency: 'URGENT',
+        action: 'ROLL',
+        ticker: p.ticker,
+        strategy: p.strategy,
+        strike: p.short_strike,
+        expiry: p.expiry,
+        reason: p.reasons.join(' · ') || `${p.current_dte}d to expiry — roll now`,
+      }));
+
+    // THIS_WEEK: roll with urgency=SOON
+    rollData?.positions
+      .filter(p => p.roll_needed && p.urgency === 'SOON')
+      .forEach(p => result.push({
+        id: `roll-soon-${p.synthesized_id}`,
+        urgency: 'THIS_WEEK',
+        action: 'ROLL',
+        ticker: p.ticker,
+        strategy: p.strategy,
+        strike: p.short_strike,
+        expiry: p.expiry,
+        reason: p.reasons.join(' · ') || `${p.current_dte}d to expiry`,
+      }));
+
+    // WATCH: stop-loss WATCH
+    stopData?.positions
+      .filter(p => p.verdict === 'WATCH')
+      .forEach(p => result.push({
+        id: `sl-watch-${p.synthesized_id}`,
+        urgency: 'WATCH',
+        action: 'CLOSE',
+        ticker: p.ticker,
+        strategy: p.strategy,
+        strike: p.short_strike,
+        expiry: p.expiry,
+        reason: p.recommended_action,
+        detail: p.reasons.join(' · '),
+      }));
+
+    // WATCH: active alerts
+    alertData?.alerts
+      .filter(a => !a.snoozed)
+      .forEach(a => result.push({
+        id: `alert-${a.id}`,
+        urgency: 'WATCH',
+        action: 'HEDGE',
+        ticker: a.ticker,
+        reason: a.message,
+      }));
+
+    return result;
+  }, [stopData, rollData, alertData]);
+
   const urgent = orders.filter(o => o.urgency === 'URGENT');
   const thisWeek = orders.filter(o => o.urgency === 'THIS_WEEK');
   const watch = orders.filter(o => o.urgency === 'WATCH');
@@ -197,81 +267,31 @@ export default function OrdersPage() {
       />
 
       <div className="p-6 space-y-6">
-        {/* Summary stats */}
         <div className="grid grid-cols-3 gap-3">
-          <StatCard
-            label="Urgent (Act Today)"
-            value={urgent.length.toString()}
-            signal={urgent.length > 0 ? 'red' : 'green'}
-            loading={loading}
-          />
-          <StatCard
-            label="This Week"
-            value={thisWeek.length.toString()}
-            signal={thisWeek.length > 0 ? 'amber' : 'default'}
-            loading={loading}
-          />
-          <StatCard
-            label="Watch"
-            value={watch.length.toString()}
-            signal="cyan"
-            loading={loading}
-          />
+          <StatCard label="Urgent (Act Today)" value={urgent.length.toString()} signal={urgent.length > 0 ? 'red' : 'green'} loading={loading} />
+          <StatCard label="This Week" value={thisWeek.length.toString()} signal={thisWeek.length > 0 ? 'amber' : 'default'} loading={loading} />
+          <StatCard label="Watch" value={watch.length.toString()} signal="cyan" loading={loading} />
         </div>
 
-        {/* Workflow explanation */}
-        <div
-          className="rounded p-3 text-xs"
-          style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 8%)' }}
-        >
+        <div className="rounded p-3 text-xs" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 8%)' }}>
           <span className="font-semibold" style={{ color: 'oklch(0.80 0.15 200)' }}>Order generation: </span>
           <span style={{ color: 'oklch(0.58 0.010 258)' }}>
             Orders are synthesised from Layers 1–3: regime gate → per-ticker flow → position evaluation.
-            <span style={{ color: 'oklch(0.65 0.22 25)' }}> URGENT</span> = stop-loss triggers, delta ≥ {config.strategy.deltaAlertThreshold}, expiry ≤ 7d.
-            <span style={{ color: 'oklch(0.78 0.18 85)' }}> THIS WEEK</span> = roll candidates, hedge adjustments.
-            <span style={{ color: 'oklch(0.80 0.15 200)' }}> WATCH</span> = approaching thresholds, no action yet.
+            <span style={{ color: 'oklch(0.65 0.22 25)' }}> URGENT</span> = stop-loss ACT, roll URGENT.
+            <span style={{ color: 'oklch(0.78 0.18 85)' }}> THIS WEEK</span> = roll SOON.
+            <span style={{ color: 'oklch(0.80 0.15 200)' }}> WATCH</span> = stop-loss WATCH, active alerts.
           </span>
         </div>
 
-        {/* Error / loading */}
-        {error && !loading && (
-          <EmptyState type="error" title="Failed to load orders" description={error} />
-        )}
-        {loading && !data && (
-          <EmptyState type="loading" title="Loading orders…" />
-        )}
-        {!config.apiToken && !loading && (
-          <EmptyState
-            type="no-config"
-            title="API token required"
-            description="Configure your API URL and token in Settings."
-          />
-        )}
+        {error && !loading && <EmptyState type="error" title="Failed to load orders" description={error} />}
+        {loading && !stopData && <EmptyState type="loading" title="Loading orders…" />}
+        {!config.apiToken && !loading && <EmptyState type="no-config" title="API token required" description="Configure your API URL and token in Settings." />}
 
-        {/* Order sections */}
         {!loading && (
           <>
-            <OrderSection
-              title="URGENT — Act Today"
-              icon={AlertTriangle}
-              orders={urgent}
-              iconColor="oklch(0.65 0.22 25)"
-              emptyText="No urgent actions required"
-            />
-            <OrderSection
-              title="THIS WEEK"
-              icon={Clock}
-              orders={thisWeek}
-              iconColor="oklch(0.78 0.18 85)"
-              emptyText="No actions required this week"
-            />
-            <OrderSection
-              title="WATCH — No Action Yet"
-              icon={Eye}
-              orders={watch}
-              iconColor="oklch(0.80 0.15 200)"
-              emptyText="No positions approaching thresholds"
-            />
+            <OrderSection title="URGENT — Act Today" icon={AlertTriangle} orders={urgent} iconColor="oklch(0.65 0.22 25)" emptyText="No urgent actions required" />
+            <OrderSection title="THIS WEEK" icon={Clock} orders={thisWeek} iconColor="oklch(0.78 0.18 85)" emptyText="No actions required this week" />
+            <OrderSection title="WATCH — No Action Yet" icon={Eye} orders={watch} iconColor="oklch(0.80 0.15 200)" emptyText="No positions approaching thresholds" />
           </>
         )}
       </div>

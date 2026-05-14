@@ -5,7 +5,7 @@
  */
 
 import { cn } from '@/lib/utils';
-import { regimeLabel } from '@/hooks/useApi';
+import { regimeInfo } from '@/hooks/useApi';
 import { ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
 
 interface RegimeBadgeProps {
@@ -16,7 +16,7 @@ interface RegimeBadgeProps {
 }
 
 export function RegimeBadge({ score, entryPermitted, className, size = 'md' }: RegimeBadgeProps) {
-  const { label, color } = regimeLabel(score);
+  const { label, color } = regimeInfo(typeof score === 'number' ? (score >= 0 ? 'bullish' : 'bearish') : String(score));
 
   const colorMap = {
     red:   { text: 'oklch(0.65 0.22 25)',  border: 'oklch(0.65 0.22 25 / 40%)',  bg: 'oklch(0.65 0.22 25 / 12%)' },
