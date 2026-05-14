@@ -17,8 +17,10 @@ import {
   Cell, ReferenceLine, CartesianGrid,
 } from 'recharts';
 import { useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, Filter, X, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocation } from 'wouter';
+import { toast } from 'sonner';
 
 const GREEN  = 'oklch(0.72 0.18 145)';
 const RED    = 'oklch(0.65 0.22 25)';
@@ -125,17 +127,32 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   );
 }
 
-// ─── Leg row ─────────────────────────────────────────────────────────────────
+// ─── Leg row// ─── Leg row ─────────────────────────────────────────────────────
 
-function LegRow({ leg }: { leg: LegPnL }) {
+function LegRow({ leg, onTriageClick }: { leg: LegPnL; onTriageClick: (ticker: string) => void }) {
   const isShort = leg.qty < 0;
+  const isExpiringSoon = leg.dte !== null && leg.dte <= 7;
+
   return (
-    <div className="grid gap-3 items-center py-3 border-b text-xs hover:bg-[oklch(1_0_0_/_2%)] transition-colors" style={{ gridTemplateColumns: '1fr 55px 80px 90px 70px 90px', borderColor: 'oklch(1 0 0 / 6%)' }}>
+    <div
+      className={cn(
+        'grid gap-3 items-center py-3 border-b text-xs transition-colors',
+        isExpiringSoon ? 'hover:bg-[oklch(0.78_0.18_85_/_6%)] cursor-pointer' : 'hover:bg-[oklch(1_0_0_/_2%)]'
+      )}
+      style={{ gridTemplateColumns: '1fr 55px 80px 90px 70px 90px', borderColor: 'oklch(1 0 0 / 6%)' }}
+      onClick={isExpiringSoon ? () => onTriageClick(leg.ticker) : undefined}
+      title={isExpiringSoon ? `${leg.dte}d to expiry — click to open Analysis for ${leg.ticker}` : undefined}
+    >
       {/* Leg description */}
       <div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono-data font-semibold" style={{ color: BRIGHT }}>{leg.ticker}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: isShort ? 'oklch(0.65 0.22 25 / 12%)' : 'oklch(0.72 0.18 145 / 12%)', color: isShort ? RED : GREEN }}>
+          {isExpiringSoon && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded font-mono-data font-bold animate-pulse"
+              style={{ color: AMBER, background: 'oklch(0.78 0.18 85 / 15%)', border: '1px solid oklch(0.78 0.18 85 / 30%)' }}>
+              <Zap className="w-2.5 h-2.5" /> TRIAGE
+            </span>
+          )}         <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: isShort ? 'oklch(0.65 0.22 25 / 12%)' : 'oklch(0.72 0.18 145 / 12%)', color: isShort ? RED : GREEN }}>
             {isShort ? 'SHORT' : 'LONG'}
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: leg.right === 'C' ? 'oklch(0.72 0.18 145 / 8%)' : 'oklch(0.65 0.22 25 / 8%)', color: leg.right === 'C' ? GREEN : RED }}>
@@ -171,6 +188,7 @@ function LegRow({ leg }: { leg: LegPnL }) {
 export default function PnLPage() {
   const { data, loading, error, refresh, lastUpdated } = usePositions();
   const { config } = useConfig();
+  const [, setLocation] = useLocation();
 
   // ── Sort state ──
   const [sortField, setSortField] = useState<SortField>('pnl');
@@ -181,6 +199,16 @@ export default function PnLPage() {
   const [filterSide,   setFilterSide]   = useState<FilterSide>('all');
   const [filterRight,  setFilterRight]  = useState<FilterRight>('all');
   const [filterPnL,    setFilterPnL]    = useState<FilterPnL>('all');
+
+  // ── DTE triage shortcut ──
+  function handleTriageClick(ticker: string) {
+    toast.info(`Opening Analysis for ${ticker}`, {
+      description: `DTE ≤ 7 — navigating to Analysis tab with ${ticker} pre-selected`,
+    });
+    // Store triage ticker in sessionStorage so AnalysisPage can pick it up
+    sessionStorage.setItem('fortress_triage_ticker', ticker);
+    setLocation('/analysis');
+  }
 
   const legs = useMemo<LegPnL[]>(() => {
     if (!data?.positions) return [];
@@ -411,7 +439,7 @@ export default function PnLPage() {
                 </div>
               ) : (
                 <div className="px-4">
-                  {sortedLegs.map((leg, i) => <LegRow key={i} leg={leg} />)}
+                  {sortedLegs.map((leg, i) => <LegRow key={i} leg={leg} onTriageClick={handleTriageClick} />)}
                 </div>
               )}
 

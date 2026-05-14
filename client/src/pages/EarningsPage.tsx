@@ -2,6 +2,7 @@
  * FORTRESS V2 — Earnings Calendar Page
  * Consumes /api/calendar — shows all tickers with earnings dates, DTE countdown,
  * status badges (CLEAR/APPROACHING/BLACKOUT/PAST), and CRUD actions.
+ * Includes "Push to Outlook Calendar" button via tRPC → MCP integration.
  */
 
 import { useState } from 'react';
@@ -9,22 +10,25 @@ import { useCalendar, useCalendarActions, type EarningsEntry } from '@/hooks/use
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { useConfig } from '@/contexts/ConfigContext';
-import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, Download, Edit2, Check, X } from 'lucide-react';
+import { trpc } from '@/lib/trpc';
+import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, Download, Edit2, Check, X, Calendar } from 'lucide-react';
+import { toast } from 'sonner';
 
 const GREEN  = 'oklch(0.72 0.18 145)';
 const RED    = 'oklch(0.65 0.22 25)';
 const AMBER  = 'oklch(0.78 0.18 85)';
 const CYAN   = 'oklch(0.80 0.15 200)';
+const PURPLE = 'oklch(0.72 0.18 290)';
 const DIM    = 'oklch(0.55 0.010 258)';
 const BRIGHT = 'oklch(0.93 0.005 258)';
 
 function statusConfig(status: string) {
   switch (status) {
-    case 'blackout':   return { label: 'BLACKOUT',   color: RED,   bg: 'oklch(0.65 0.22 25 / 15%)',  icon: XCircle };
+    case 'blackout':    return { label: 'BLACKOUT',    color: RED,   bg: 'oklch(0.65 0.22 25 / 15%)',  icon: XCircle };
     case 'approaching': return { label: 'APPROACHING', color: AMBER, bg: 'oklch(0.78 0.18 85 / 15%)', icon: AlertTriangle };
-    case 'clear':      return { label: 'CLEAR',      color: GREEN, bg: 'oklch(0.72 0.18 145 / 12%)', icon: CheckCircle };
-    case 'past':       return { label: 'PAST',       color: DIM,   bg: 'oklch(1 0 0 / 5%)',          icon: Clock };
-    default:           return { label: status.toUpperCase(), color: DIM, bg: 'oklch(1 0 0 / 5%)', icon: Clock };
+    case 'clear':       return { label: 'CLEAR',       color: GREEN, bg: 'oklch(0.72 0.18 145 / 12%)', icon: CheckCircle };
+    case 'past':        return { label: 'PAST',        color: DIM,   bg: 'oklch(1 0 0 / 5%)',          icon: Clock };
+    default:            return { label: status.toUpperCase(), color: DIM, bg: 'oklch(1 0 0 / 5%)', icon: Clock };
   }
 }
 
@@ -157,10 +161,114 @@ function EarningsRow({ ticker, entry, onRefresh }: { ticker: string; entry: Earn
   );
 }
 
+// ─── Push to Calendar modal ───────────────────────────────────────────────────
+
+function PushCalendarModal({
+  entries,
+  onClose,
+}: {
+  entries: Array<[string, EarningsEntry]>;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(entries.filter(([, e]) => e.status !== 'past').map(([t]) => t))
+  );
+  const pushMutation = trpc.fortress.pushEarningsToCalendar.useMutation();
+
+  function toggle(ticker: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  }
+
+  async function handlePush() {
+    const toSend = entries
+      .filter(([t]) => selected.has(t))
+      .map(([ticker, e]) => ({
+        ticker,
+        earnings_date: e.next_earnings,
+        dte_to_earnings: e.days_to_earnings,
+        status: e.status,
+      }));
+
+    try {
+      const result = await pushMutation.mutateAsync({ earnings: toSend });
+      toast.success(`Pushed ${result.created} events to Outlook Calendar`, {
+        description: 'Earnings dates and 21-DTE roll-window reminders created.',
+      });
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Calendar push failed', { description: msg });
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'oklch(0 0 0 / 70%)' }}>
+      <div className="rounded-xl border p-6 w-full max-w-md space-y-4" style={{ background: 'oklch(0.15 0.010 258)', borderColor: 'oklch(1 0 0 / 15%)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-display font-bold text-sm" style={{ color: BRIGHT }}>Push to Outlook Calendar</h2>
+            <p className="text-xs mt-0.5" style={{ color: DIM }}>Creates earnings events + 21-DTE roll-window reminders</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:opacity-80" style={{ color: DIM }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-1 max-h-64 overflow-y-auto">
+          {entries.map(([ticker, entry]) => {
+            const cfg = statusConfig(entry.status);
+            return (
+              <label key={ticker} className="flex items-center gap-3 px-3 py-2 rounded cursor-pointer hover:opacity-80"
+                style={{ background: 'oklch(0.18 0.010 258)' }}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(ticker)}
+                  onChange={() => toggle(ticker)}
+                  className="rounded"
+                />
+                <span className="font-display font-bold text-sm flex-1" style={{ color: BRIGHT }}>{ticker}</span>
+                <span className="font-mono-data text-xs" style={{ color: DIM }}>{entry.next_earnings}</span>
+                <StatusBadge status={entry.status} />
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'oklch(1 0 0 / 10%)' }}>
+          <span className="text-xs" style={{ color: DIM }}>{selected.size} ticker{selected.size !== 1 ? 's' : ''} selected → {selected.size * 2} events</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 rounded border text-xs hover:opacity-80"
+              style={{ color: DIM, borderColor: 'oklch(1 0 0 / 15%)' }}>
+              Cancel
+            </button>
+            <button
+              onClick={handlePush}
+              disabled={pushMutation.isPending || selected.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold hover:opacity-80 disabled:opacity-40"
+              style={{ background: PURPLE, color: 'oklch(0.10 0 0)' }}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              {pushMutation.isPending ? 'Pushing…' : 'Push to Calendar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function EarningsPage() {
   const { data, loading, error, refresh, lastUpdated } = useCalendar();
   const { fetchEarnings, loading: fetching } = useCalendarActions();
   const { config } = useConfig();
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
 
   const entries = data?.tickers ? Object.entries(data.tickers) : [];
   const sorted = [...entries].sort((a, b) => {
@@ -195,10 +303,10 @@ export default function EarningsPage() {
         {!loading && entries.length > 0 && (
           <div className="grid grid-cols-4 gap-3">
             {[
-              { label: 'Blackout', count: blackout.length, color: RED, bg: 'oklch(0.65 0.22 25 / 12%)' },
+              { label: 'Blackout',    count: blackout.length,    color: RED,   bg: 'oklch(0.65 0.22 25 / 12%)' },
               { label: 'Approaching', count: approaching.length, color: AMBER, bg: 'oklch(0.78 0.18 85 / 12%)' },
-              { label: 'Clear', count: clear.length, color: GREEN, bg: 'oklch(0.72 0.18 145 / 10%)' },
-              { label: 'Past', count: past.length, color: DIM, bg: 'oklch(1 0 0 / 5%)' },
+              { label: 'Clear',       count: clear.length,       color: GREEN, bg: 'oklch(0.72 0.18 145 / 10%)' },
+              { label: 'Past',        count: past.length,        color: DIM,   bg: 'oklch(1 0 0 / 5%)' },
             ].map(s => (
               <div key={s.label} className="rounded border p-4 text-center" style={{ background: s.bg, borderColor: `${s.color}30` }}>
                 <div className="font-display font-bold text-2xl" style={{ color: s.color }}>{s.count}</div>
@@ -209,7 +317,7 @@ export default function EarningsPage() {
         )}
 
         {/* Action bar */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={handleFetchEarnings}
             disabled={fetching}
@@ -219,6 +327,18 @@ export default function EarningsPage() {
             <Download className="w-3.5 h-3.5" />
             {fetching ? 'Fetching…' : 'Auto-fetch from yfinance'}
           </button>
+
+          {entries.length > 0 && (
+            <button
+              onClick={() => setShowCalendarModal(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded border text-xs font-mono-data hover:opacity-80 transition-opacity"
+              style={{ color: PURPLE, borderColor: 'oklch(0.72 0.18 290 / 30%)', background: 'oklch(0.72 0.18 290 / 8%)' }}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Push to Outlook Calendar
+            </button>
+          )}
+
           <button
             onClick={refresh}
             disabled={loading}
@@ -283,6 +403,10 @@ export default function EarningsPage() {
           <EmptyState type="empty" title="No earnings data" description="Use Auto-fetch to populate earnings dates from yfinance." />
         )}
       </div>
+
+      {showCalendarModal && (
+        <PushCalendarModal entries={sorted} onClose={() => setShowCalendarModal(false)} />
+      )}
     </div>
   );
 }

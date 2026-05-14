@@ -45,7 +45,6 @@ import EarningsPage from "./pages/EarningsPage";
 import JournalPage from "./pages/JournalPage";
 import ScriptsPage from "./pages/ScriptsPage";
 import NotFound from "./pages/NotFound";
-
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
@@ -81,6 +80,7 @@ function Sidebar() {
     toast.success('IBKR sync triggered', { description: 'Positions will update shortly.' });
   };
 
+  // make sure to consider if you need authentication for certain routes
   return (
     <aside
       className="fixed left-0 top-0 h-screen w-56 flex flex-col z-40"

@@ -10,7 +10,7 @@
  *   Position             → { current_delta, market_value, local_symbol, expiry, right, strike, qty }
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow, useSpyHedgeCoverage,
   calcDte, formatDollar, regimeInfo,
@@ -436,7 +436,24 @@ function SpyHedgePanel() {
 
 export default function AnalysisPage() {
   const { config } = useConfig();
-  const [selectedTicker, setSelectedTicker] = useState(config.tickers[0] ?? '');
+  const [selectedTicker, setSelectedTicker] = useState(() => {
+    // Check for triage ticker set by DTE shortcut from P&L page
+    const triage = sessionStorage.getItem('fortress_triage_ticker');
+    if (triage && config.tickers.includes(triage)) {
+      sessionStorage.removeItem('fortress_triage_ticker');
+      return triage;
+    }
+    return config.tickers[0] ?? '';
+  });
+
+  // Also handle if tickers load after initial render
+  useEffect(() => {
+    const triage = sessionStorage.getItem('fortress_triage_ticker');
+    if (triage && config.tickers.includes(triage)) {
+      sessionStorage.removeItem('fortress_triage_ticker');
+      setSelectedTicker(triage);
+    }
+  }, [config.tickers]);
 
   if (!config.tickers.length) {
     return (

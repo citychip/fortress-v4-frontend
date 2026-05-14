@@ -4,6 +4,7 @@
  * Account health + Macro Regime Gate + SPY Hedge Coverage + Priority orders + Position alerts.
  */
 
+import { useState } from 'react';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
   useTradeReport, useIbkrPreview, useSpyHedgeCoverage,
@@ -14,10 +15,13 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
+import { trpc } from '@/lib/trpc';
 import { Link } from 'wouter';
+import { toast } from 'sonner';
 import {
   ArrowRight, AlertTriangle, TrendingUp, BookOpen, Crosshair,
   DollarSign, Shield, Zap, TrendingDown, CheckCircle, XCircle, Target,
+  Mail, X,
 } from 'lucide-react';
 
 const GREEN  = 'oklch(0.72 0.18 145)';
@@ -473,10 +477,140 @@ function QuickNav() {
   );
 }
 
+// ─── Send Briefing Modal ─────────────────────────────────────────────────────
+
+function SendBriefingModal({
+  tradeReport,
+  onClose,
+}: {
+  tradeReport: TradeReport | null;
+  onClose: () => void;
+}) {
+  const [email, setEmail] = useState('');
+  const sendMutation = trpc.fortress.sendMorningBriefing.useMutation();
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  function buildBody(): string {
+    if (!tradeReport) return 'No trade report data available.';
+    const r = tradeReport;
+    const lines: string[] = [
+      `FORTRESS MORNING BRIEFING — ${today}`,
+      '='.repeat(60),
+      '',
+    ];
+
+    if (r.macro) {
+      lines.push(`MACRO REGIME: ${r.macro.regime?.toUpperCase() ?? 'UNKNOWN'}`);
+      lines.push(`VIX: ${r.macro.vix?.toFixed(2) ?? '—'}  |  State: ${r.macro.vix_state ?? '—'}`);
+      lines.push('');
+    }
+
+    if (r.stop_loss_alerts?.length) {
+      lines.push('STOP-LOSS ALERTS:');
+      r.stop_loss_alerts.filter(a => a.verdict !== 'OK').forEach(a => {
+        lines.push(`  ⚠ ${a.ticker} ${a.strategy} — ${a.recommended_action}`);
+      });
+      lines.push('');
+    }
+
+    if (r.entry_candidates?.length) {
+      lines.push('TOP ENTRY CANDIDATES (by IV Rank):');
+      r.entry_candidates.slice(0, 5).forEach((c, i) => {
+        lines.push(`  ${i + 1}. ${c.ticker}  IVR ${c.iv_rank.toFixed(0)}  ${c.concentration_pct.toFixed(1)}% conc  ${c.action}`);
+      });
+      lines.push('');
+    }
+
+    if (r.exit_candidates?.length) {
+      lines.push('EXIT CANDIDATES (near profit target):');
+      r.exit_candidates.slice(0, 3).forEach(e => {
+        lines.push(`  • ${e.ticker}  ${e.net_liq_pct.toFixed(1)}% net liq  ${e.action}`);
+      });
+      lines.push('');
+    }
+
+    if (r.roll_candidates?.length) {
+      lines.push('ROLL CANDIDATES:');
+      r.roll_candidates.slice(0, 3).forEach((rc: unknown) => {
+        const r2 = rc as Record<string, unknown>;
+        lines.push(`  • ${r2['ticker'] ?? ''}  ${r2['strategy'] ?? ''}  ${r2['note'] ?? ''}`);
+      });
+      lines.push('');
+    }
+
+    lines.push('─'.repeat(60));
+    lines.push('Sent via Fortress Trading Dashboard v2');
+    return lines.join('\n');
+  }
+
+  async function handleSend() {
+    if (!email.trim()) { toast.error('Please enter an email address'); return; }
+    try {
+      await sendMutation.mutateAsync({ to: email.trim(), body: buildBody() });
+      toast.success('Morning briefing sent!', { description: `Delivered to ${email}` });
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Failed to send briefing', { description: msg });
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'oklch(0 0 0 / 70%)' }}>
+      <div className="rounded-xl border p-6 w-full max-w-lg space-y-4" style={{ background: 'oklch(0.15 0.010 258)', borderColor: 'oklch(1 0 0 / 15%)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-display font-bold text-sm" style={{ color: BRIGHT }}>Send Morning Briefing</h2>
+            <p className="text-xs mt-0.5" style={{ color: DIM }}>Emails today's trade report summary via Gmail</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:opacity-80" style={{ color: DIM }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="rounded border p-3 font-mono-data text-[10px] max-h-48 overflow-y-auto whitespace-pre-wrap"
+          style={{ background: 'oklch(0.12 0.010 258)', borderColor: 'oklch(1 0 0 / 10%)', color: DIM }}>
+          {buildBody()}
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs" style={{ color: DIM }}>Recipient email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full font-mono-data text-xs px-3 py-2 rounded border"
+            style={{ background: 'oklch(0.13 0.010 258)', borderColor: 'oklch(1 0 0 / 20%)', color: BRIGHT }}
+          />
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <button onClick={onClose} className="px-3 py-1.5 rounded border text-xs hover:opacity-80"
+            style={{ color: DIM, borderColor: 'oklch(1 0 0 / 15%)' }}>
+            Cancel
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={sendMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold hover:opacity-80 disabled:opacity-40"
+            style={{ background: CYAN, color: 'oklch(0.10 0 0)' }}
+          >
+            <Mail className="w-3.5 h-3.5" />
+            {sendMutation.isPending ? 'Sending…' : 'Send Briefing'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const { data, loading, refresh } = useBriefing();
+  const { data: tradeReportData } = useTradeReport();
+  const [showBriefingModal, setShowBriefingModal] = useState(false);
   return (
     <div className="min-h-screen">
       <PageHeader
@@ -497,9 +631,18 @@ export default function DashboardPage() {
               <h2 className="font-display text-sm" style={{ color: BRIGHT }}>Morning Trade Report</h2>
               <p className="text-xs mt-0.5" style={{ color: DIM }}>Prioritised action list from /api/manage/trade_report</p>
             </div>
-            <Link href="/candidates">
-              <span className="text-xs cursor-pointer" style={{ color: CYAN }}>All candidates →</span>
-            </Link>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowBriefingModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-mono-data hover:opacity-80 transition-opacity"
+                style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
+              >
+                <Mail className="w-3 h-3" /> Send Briefing
+              </button>
+              <Link href="/candidates">
+                <span className="text-xs cursor-pointer" style={{ color: CYAN }}>All candidates →</span>
+              </Link>
+            </div>
           </div>
           <TradeReportPanel />
         </div>
@@ -532,6 +675,13 @@ export default function DashboardPage() {
           </p>
         )}
       </div>
+
+      {showBriefingModal && (
+        <SendBriefingModal
+          tradeReport={tradeReportData as TradeReport | null}
+          onClose={() => setShowBriefingModal(false)}
+        />
+      )}
     </div>
   );
 }
