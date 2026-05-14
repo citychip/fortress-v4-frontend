@@ -1,3 +1,10 @@
+/*
+ * FORTRESS V2 — OBSIDIAN EDGE DESIGN SYSTEM
+ * Design Movement: Premium Dark UI / Vercel-Linear aesthetic applied to trading
+ * Core: Deep blue-black surfaces, cyan interactive accents, amber/red/green signal hierarchy
+ * Typography: Syne Bold (headers), JetBrains Mono (numbers/data), Inter (body)
+ */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -40,85 +47,126 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Obsidian Edge custom tokens */
+  --color-cyan: var(--cyan);
+  --color-cyan-dim: var(--cyan-dim);
+  --color-amber-signal: var(--amber-signal);
+  --color-red-signal: var(--red-signal);
+  --color-green-signal: var(--green-signal);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --radius: 0.375rem;
+
+  /* Obsidian Edge — always dark */
+  --background:    oklch(0.12 0.010 258);   /* deep blue-black */
+  --foreground:    oklch(0.93 0.005 258);   /* near-white with blue tint */
+  --card:          oklch(0.17 0.010 258);   /* surface L1 */
+  --card-foreground: oklch(0.93 0.005 258);
+  --popover:       oklch(0.20 0.010 258);
+  --popover-foreground: oklch(0.93 0.005 258);
+
+  /* Cyan primary */
+  --primary:          oklch(0.80 0.15 200);  /* cyan accent */
+  --primary-foreground: oklch(0.10 0.010 258);
+
+  --secondary:        oklch(0.22 0.010 258);
+  --secondary-foreground: oklch(0.75 0.008 258);
+
+  --muted:            oklch(0.20 0.008 258);
+  --muted-foreground: oklch(0.58 0.010 258);
+
+  --accent:           oklch(0.22 0.010 258);
+  --accent-foreground: oklch(0.93 0.005 258);
+
+  --destructive:      oklch(0.65 0.22 25);   /* red signal */
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border:           oklch(1 0 0 / 9%);
+  --input:            oklch(1 0 0 / 12%);
+  --ring:             oklch(0.80 0.15 200);  /* cyan ring */
+
+  /* Charts */
+  --chart-1: oklch(0.80 0.15 200);   /* cyan */
+  --chart-2: oklch(0.72 0.18 145);   /* emerald */
+  --chart-3: oklch(0.78 0.18 85);    /* amber */
+  --chart-4: oklch(0.65 0.22 25);    /* red */
+  --chart-5: oklch(0.65 0.15 280);   /* purple */
+
+  /* Sidebar */
+  --sidebar:          oklch(0.14 0.010 258);
+  --sidebar-foreground: oklch(0.93 0.005 258);
+  --sidebar-primary:  oklch(0.80 0.15 200);
+  --sidebar-primary-foreground: oklch(0.10 0.010 258);
+  --sidebar-accent:   oklch(0.20 0.010 258);
+  --sidebar-accent-foreground: oklch(0.93 0.005 258);
+  --sidebar-border:   oklch(1 0 0 / 8%);
+  --sidebar-ring:     oklch(0.80 0.15 200);
+
+  /* Custom Obsidian Edge tokens */
+  --cyan:             oklch(0.80 0.15 200);
+  --cyan-dim:         oklch(0.60 0.10 200);
+  --amber-signal:     oklch(0.78 0.18 85);
+  --red-signal:       oklch(0.65 0.22 25);
+  --green-signal:     oklch(0.72 0.18 145);
+  --surface-1:        oklch(0.17 0.010 258);
+  --surface-2:        oklch(0.22 0.010 258);
+  --surface-3:        oklch(0.27 0.010 258);
 }
 
+/* Force dark theme always — no light mode for trading dashboard */
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --background:    oklch(0.12 0.010 258);
+  --foreground:    oklch(0.93 0.005 258);
+  --card:          oklch(0.17 0.010 258);
+  --card-foreground: oklch(0.93 0.005 258);
+  --popover:       oklch(0.20 0.010 258);
+  --popover-foreground: oklch(0.93 0.005 258);
+  --primary:          oklch(0.80 0.15 200);
+  --primary-foreground: oklch(0.10 0.010 258);
+  --secondary:        oklch(0.22 0.010 258);
+  --secondary-foreground: oklch(0.75 0.008 258);
+  --muted:            oklch(0.20 0.008 258);
+  --muted-foreground: oklch(0.58 0.010 258);
+  --accent:           oklch(0.22 0.010 258);
+  --accent-foreground: oklch(0.93 0.005 258);
+  --destructive:      oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border:           oklch(1 0 0 / 9%);
+  --input:            oklch(1 0 0 / 12%);
+  --ring:             oklch(0.80 0.15 200);
+  --chart-1: oklch(0.80 0.15 200);
+  --chart-2: oklch(0.72 0.18 145);
+  --chart-3: oklch(0.78 0.18 85);
+  --chart-4: oklch(0.65 0.22 25);
+  --chart-5: oklch(0.65 0.15 280);
+  --sidebar:          oklch(0.14 0.010 258);
+  --sidebar-foreground: oklch(0.93 0.005 258);
+  --sidebar-primary:  oklch(0.80 0.15 200);
+  --sidebar-primary-foreground: oklch(0.10 0.010 258);
+  --sidebar-accent:   oklch(0.20 0.010 258);
+  --sidebar-accent-foreground: oklch(0.93 0.005 258);
+  --sidebar-border:   oklch(1 0 0 / 8%);
+  --sidebar-ring:     oklch(0.80 0.15 200);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -134,24 +182,11 @@
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -162,16 +197,110 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1440px;
     }
+  }
+
+  /* Typography utilities */
+  .font-display {
+    font-family: 'Syne', system-ui, sans-serif;
+    font-weight: 700;
+  }
+
+  .font-mono-data {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* Signal color utilities */
+  .text-signal-urgent {
+    color: oklch(0.65 0.22 25);
+  }
+  .text-signal-watch {
+    color: oklch(0.78 0.18 85);
+  }
+  .text-signal-safe {
+    color: oklch(0.72 0.18 145);
+  }
+  .text-signal-cyan {
+    color: oklch(0.80 0.15 200);
+  }
+
+  .bg-signal-urgent {
+    background-color: oklch(0.65 0.22 25 / 15%);
+    border-color: oklch(0.65 0.22 25 / 40%);
+  }
+  .bg-signal-watch {
+    background-color: oklch(0.78 0.18 85 / 15%);
+    border-color: oklch(0.78 0.18 85 / 40%);
+  }
+  .bg-signal-safe {
+    background-color: oklch(0.72 0.18 145 / 15%);
+    border-color: oklch(0.72 0.18 145 / 40%);
+  }
+
+  /* Glow effects */
+  .glow-cyan {
+    box-shadow: 0 0 12px oklch(0.80 0.15 200 / 30%);
+  }
+  .glow-amber {
+    box-shadow: 0 0 12px oklch(0.78 0.18 85 / 30%);
+  }
+  .glow-red {
+    box-shadow: 0 0 12px oklch(0.65 0.22 25 / 30%);
+  }
+
+  /* Card variants */
+  .card-surface {
+    background: oklch(0.17 0.010 258);
+    border: 1px solid oklch(1 0 0 / 9%);
+    border-radius: var(--radius);
+  }
+  .card-elevated {
+    background: oklch(0.22 0.010 258);
+    border: 1px solid oklch(1 0 0 / 12%);
+    border-radius: var(--radius);
+  }
+
+  /* Pulse animation for urgent alerts */
+  @keyframes pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 0 oklch(0.78 0.18 85 / 0%); }
+    50% { box-shadow: 0 0 0 4px oklch(0.78 0.18 85 / 20%); }
+  }
+  @keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 0 0 oklch(0.65 0.22 25 / 0%); }
+    50% { box-shadow: 0 0 0 4px oklch(0.65 0.22 25 / 25%); }
+  }
+  .animate-pulse-amber {
+    animation: pulse-amber 2s ease-in-out infinite;
+  }
+  .animate-pulse-red {
+    animation: pulse-red 1.5s ease-in-out infinite;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 15%);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(1 0 0 / 25%);
   }
 }

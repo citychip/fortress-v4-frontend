@@ -1,0 +1,630 @@
+/**
+ * FORTRESS V2 — Settings Page
+ * ALL configuration lives here — API URL, token, ticker universe, strategy parameters.
+ * Stored in localStorage via ConfigContext. Nothing is hardcoded.
+ * Supports export (without token) and import for backup/restore.
+ */
+
+import { useState } from 'react';
+import { useConfig, DEFAULT_CONFIG } from '@/contexts/ConfigContext';
+import { PageHeader } from '@/components/PageHeader';
+import { useHealth } from '@/hooks/useApi';
+import { toast } from 'sonner';
+import {
+  Save,
+  RotateCcw,
+  Download,
+  Upload,
+  Plus,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+// ─── Section wrapper ──────────────────────────────────────────────────────────
+
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded border p-5"
+      style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}
+    >
+      <div className="mb-4">
+        <h2 className="font-display text-sm font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>
+          {title}
+        </h2>
+        {description && (
+          <p className="text-xs mt-0.5" style={{ color: 'oklch(0.55 0.010 258)' }}>
+            {description}
+          </p>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── Field components ─────────────────────────────────────────────────────────
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'oklch(0.65 0.010 258)' }}>
+        {label}
+      </label>
+      {children}
+      {hint && (
+        <p className="text-[11px]" style={{ color: 'oklch(0.50 0.010 258)' }}>{hint}</p>
+      )}
+    </div>
+  );
+}
+
+function Input({
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  className,
+}: {
+  value: string | number;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  className?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={cn(
+        'w-full px-3 py-2 rounded border text-sm font-mono-data outline-none transition-all',
+        'focus:border-[oklch(0.80_0.15_200_/_60%)] focus:ring-1 focus:ring-[oklch(0.80_0.15_200_/_30%)]',
+        className,
+      )}
+      style={{
+        background: 'oklch(0.22 0.010 258)',
+        borderColor: 'oklch(1 0 0 / 12%)',
+        color: 'oklch(0.93 0.005 258)',
+      }}
+    />
+  );
+}
+
+function NumberInput({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  suffix,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  suffix?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="number"
+        value={value}
+        onChange={e => onChange(parseFloat(e.target.value) || 0)}
+        min={min}
+        max={max}
+        step={step ?? 1}
+        className="w-28 px-3 py-2 rounded border text-sm font-mono-data outline-none transition-all focus:border-[oklch(0.80_0.15_200_/_60%)]"
+        style={{
+          background: 'oklch(0.22 0.010 258)',
+          borderColor: 'oklch(1 0 0 / 12%)',
+          color: 'oklch(0.93 0.005 258)',
+        }}
+      />
+      {suffix && (
+        <span className="text-xs" style={{ color: 'oklch(0.55 0.010 258)' }}>{suffix}</span>
+      )}
+    </div>
+  );
+}
+
+// ─── API Connection Section ───────────────────────────────────────────────────
+
+function ApiSection() {
+  const { config, updateConfig } = useConfig();
+  const { data: health, error: healthError, loading } = useHealth();
+  const [showToken, setShowToken] = useState(false);
+
+  const isConnected = !!health && !healthError;
+
+  return (
+    <Section
+      title="API Connection"
+      description="Fortress Dashboard REST API endpoint and authentication token."
+    >
+      <div className="space-y-4">
+        <Field label="API Base URL" hint="e.g. http://76.13.138.194:8080 — no trailing slash">
+          <Input
+            value={config.apiUrl}
+            onChange={v => updateConfig({ apiUrl: v })}
+            placeholder="http://your-server:8080"
+          />
+        </Field>
+
+        <Field label="Bearer Token" hint="Stored locally in your browser only. Never sent to any third party.">
+          <div className="relative">
+            <input
+              type={showToken ? 'text' : 'password'}
+              value={config.apiToken}
+              onChange={e => updateConfig({ apiToken: e.target.value })}
+              placeholder="Enter your API bearer token"
+              className="w-full px-3 py-2 pr-10 rounded border text-sm font-mono-data outline-none transition-all focus:border-[oklch(0.80_0.15_200_/_60%)]"
+              style={{
+                background: 'oklch(0.22 0.010 258)',
+                borderColor: 'oklch(1 0 0 / 12%)',
+                color: 'oklch(0.93 0.005 258)',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowToken(s => !s)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2"
+              style={{ color: 'oklch(0.55 0.010 258)' }}
+            >
+              {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </Field>
+
+        {/* CORS notice for http:// APIs */}
+        {config.apiUrl.startsWith('http://') && (
+          <div
+            className="rounded border p-3 text-xs"
+            style={{ background: 'oklch(0.78 0.18 85 / 8%)', borderColor: 'oklch(0.78 0.18 85 / 25%)' }}
+          >
+            <span className="font-semibold" style={{ color: 'oklch(0.78 0.18 85)' }}>Browser CORS note: </span>
+            <span style={{ color: 'oklch(0.65 0.010 258)' }}>
+              Your API uses HTTP. When this dashboard is served over HTTPS, browsers block mixed-content requests.
+              To connect, either: (1) access the dashboard via HTTP, (2) add HTTPS to your API server,
+              or (3) run a local CORS proxy. The API will work fine when both are on the same protocol.
+            </span>
+          </div>
+        )}
+
+        {/* Connection status */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded border text-xs"
+          style={{
+            background: isConnected ? 'oklch(0.72 0.18 145 / 8%)' : 'oklch(0.65 0.22 25 / 8%)',
+            borderColor: isConnected ? 'oklch(0.72 0.18 145 / 30%)' : 'oklch(0.65 0.22 25 / 30%)',
+            color: isConnected ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
+          }}
+        >
+          {loading ? (
+            <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+          ) : isConnected ? (
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          ) : (
+            <AlertCircle className="w-3.5 h-3.5" />
+          )}
+          {loading ? 'Checking connection…' : isConnected ? `Connected — ${health?.status ?? 'OK'}` : `Disconnected${healthError ? ` — ${healthError}` : ''}`}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Ticker Universe Section ──────────────────────────────────────────────────
+
+function TickerSection() {
+  const { config, updateConfig } = useConfig();
+  const [newTicker, setNewTicker] = useState('');
+
+  const addTicker = () => {
+    const t = newTicker.trim().toUpperCase();
+    if (!t) return;
+    if (config.tickers.includes(t)) {
+      toast.error(`${t} is already in your universe`);
+      return;
+    }
+    updateConfig({ tickers: [...config.tickers, t] });
+    setNewTicker('');
+    toast.success(`Added ${t} to universe`);
+  };
+
+  const removeTicker = (t: string) => {
+    updateConfig({ tickers: config.tickers.filter(x => x !== t) });
+    toast.info(`Removed ${t} from universe`);
+  };
+
+  return (
+    <Section
+      title="Ticker Universe"
+      description="Symbols to monitor across all tabs. Used for Market Intelligence, Analysis, and order generation."
+    >
+      {/* Current tickers */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {config.tickers.map(t => (
+          <div
+            key={t}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded border"
+            style={{
+              background: 'oklch(0.22 0.010 258)',
+              borderColor: 'oklch(1 0 0 / 12%)',
+            }}
+          >
+            <span className="font-mono-data text-xs font-semibold" style={{ color: 'oklch(0.85 0.005 258)' }}>
+              {t}
+            </span>
+            <button
+              onClick={() => removeTicker(t)}
+              className="hover:opacity-80 transition-opacity"
+              style={{ color: 'oklch(0.55 0.010 258)' }}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+        {config.tickers.length === 0 && (
+          <span className="text-xs" style={{ color: 'oklch(0.50 0.010 258)' }}>
+            No tickers configured
+          </span>
+        )}
+      </div>
+
+      {/* Add ticker */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newTicker}
+          onChange={e => setNewTicker(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === 'Enter' && addTicker()}
+          placeholder="Add ticker (e.g. AAPL)"
+          className="flex-1 px-3 py-2 rounded border text-sm font-mono-data outline-none transition-all focus:border-[oklch(0.80_0.15_200_/_60%)]"
+          style={{
+            background: 'oklch(0.22 0.010 258)',
+            borderColor: 'oklch(1 0 0 / 12%)',
+            color: 'oklch(0.93 0.005 258)',
+          }}
+        />
+        <button
+          onClick={addTicker}
+          className="flex items-center gap-1.5 px-3 py-2 rounded border text-sm transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)]"
+          style={{ color: 'oklch(0.80 0.15 200)', borderColor: 'oklch(0.80 0.15 200 / 30%)' }}
+        >
+          <Plus className="w-4 h-4" />
+          Add
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Strategy Parameters Section ─────────────────────────────────────────────
+
+function StrategySection() {
+  const { config, updateStrategy } = useConfig();
+  const s = config.strategy;
+
+  return (
+    <Section
+      title="Strategy Parameters"
+      description="Thresholds used for position evaluation, alert generation, and order recommendations. Adjust to match your personal strategy rules."
+    >
+      <div className="grid grid-cols-2 gap-5">
+        <Field
+          label="Delta Alert Threshold"
+          hint="Short leg alert when |delta| ≥ this value. Default: 0.40"
+        >
+          <NumberInput
+            value={s.deltaAlertThreshold}
+            onChange={v => updateStrategy({ deltaAlertThreshold: v })}
+            min={0.10}
+            max={0.90}
+            step={0.01}
+            suffix="(0.10 – 0.90)"
+          />
+        </Field>
+
+        <Field
+          label="Roll Window (DTE)"
+          hint="Trigger roll evaluation when DTE ≤ this value. Default: 45"
+        >
+          <NumberInput
+            value={s.rollDteDays}
+            onChange={v => updateStrategy({ rollDteDays: v })}
+            min={7}
+            max={90}
+            step={1}
+            suffix="days"
+          />
+        </Field>
+
+        <Field
+          label="Max Single-Name Concentration"
+          hint="Alert when one ticker exceeds this % of Net Liq. Default: 20%"
+        >
+          <NumberInput
+            value={s.maxSingleNamePct}
+            onChange={v => updateStrategy({ maxSingleNamePct: v })}
+            min={5}
+            max={100}
+            step={1}
+            suffix="% Net Liq"
+          />
+        </Field>
+
+        <Field
+          label="Max Sector Concentration"
+          hint="Alert when one sector exceeds this % of Net Liq. Default: 40%"
+        >
+          <NumberInput
+            value={s.maxSectorPct}
+            onChange={v => updateStrategy({ maxSectorPct: v })}
+            min={10}
+            max={100}
+            step={1}
+            suffix="% Net Liq"
+          />
+        </Field>
+
+        <Field
+          label="Min Premium Credit"
+          hint="Close short leg if remaining credit falls below this. Default: $50"
+        >
+          <NumberInput
+            value={s.minPremiumCredit}
+            onChange={v => updateStrategy({ minPremiumCredit: v })}
+            min={0}
+            max={500}
+            step={10}
+            suffix="USD"
+          />
+        </Field>
+
+        <Field
+          label="Regime Entry Threshold"
+          hint="No new entries when regime score ≤ this value. Default: 0 (neutral)"
+        >
+          <NumberInput
+            value={s.regimeEntryThreshold}
+            onChange={v => updateStrategy({ regimeEntryThreshold: v })}
+            min={-4}
+            max={4}
+            step={1}
+            suffix="(−4 to +4)"
+          />
+        </Field>
+
+        <Field label="Stop-Loss: 200-SMA Breach" hint="Close position if underlying breaks below 200-SMA">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => updateStrategy({ stopLoss200SMA: !s.stopLoss200SMA })}
+              className={cn(
+                'relative w-10 h-5 rounded-full transition-all',
+                s.stopLoss200SMA ? 'bg-[oklch(0.72_0.18_145)]' : 'bg-[oklch(0.30_0.010_258)]'
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all',
+                  s.stopLoss200SMA ? 'left-5' : 'left-0.5'
+                )}
+              />
+            </button>
+            <span className="text-xs" style={{ color: s.stopLoss200SMA ? 'oklch(0.72 0.18 145)' : 'oklch(0.55 0.010 258)' }}>
+              {s.stopLoss200SMA ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+        </Field>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Refresh Settings ─────────────────────────────────────────────────────────
+
+function RefreshSection() {
+  const { config, updateConfig } = useConfig();
+
+  return (
+    <Section
+      title="Data Refresh"
+      description="Auto-refresh settings for live data polling."
+    >
+      <div className="grid grid-cols-2 gap-5">
+        <Field label="Auto-Refresh">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => updateConfig({ autoRefresh: !config.autoRefresh })}
+              className={cn(
+                'relative w-10 h-5 rounded-full transition-all',
+                config.autoRefresh ? 'bg-[oklch(0.72_0.18_145)]' : 'bg-[oklch(0.30_0.010_258)]'
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all',
+                  config.autoRefresh ? 'left-5' : 'left-0.5'
+                )}
+              />
+            </button>
+            <span className="text-xs" style={{ color: config.autoRefresh ? 'oklch(0.72 0.18 145)' : 'oklch(0.55 0.010 258)' }}>
+              {config.autoRefresh ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+        </Field>
+
+        <Field label="Refresh Interval" hint="How often to poll the API when auto-refresh is on">
+          <NumberInput
+            value={config.refreshIntervalSec}
+            onChange={v => updateConfig({ refreshIntervalSec: Math.max(10, v) })}
+            min={10}
+            max={3600}
+            step={10}
+            suffix="seconds"
+          />
+        </Field>
+      </div>
+    </Section>
+  );
+}
+
+// ─── Dashboard Name ───────────────────────────────────────────────────────────
+
+function GeneralSection() {
+  const { config, updateConfig } = useConfig();
+
+  return (
+    <Section title="General" description="Dashboard display settings.">
+      <Field label="Dashboard Name" hint="Shown in the sidebar header">
+        <Input
+          value={config.dashboardName}
+          onChange={v => updateConfig({ dashboardName: v })}
+          placeholder="Fortress v2"
+        />
+      </Field>
+    </Section>
+  );
+}
+
+// ─── Backup / Restore ─────────────────────────────────────────────────────────
+
+function BackupSection() {
+  const { exportConfig, importConfig, resetConfig } = useConfig();
+  const [importText, setImportText] = useState('');
+  const [showImport, setShowImport] = useState(false);
+
+  const handleExport = () => {
+    const json = exportConfig();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fortress-v2-config-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Config exported (token excluded for security)');
+  };
+
+  const handleImport = () => {
+    if (!importText.trim()) return;
+    const ok = importConfig(importText);
+    if (ok) {
+      toast.success('Config imported successfully');
+      setImportText('');
+      setShowImport(false);
+    } else {
+      toast.error('Invalid config JSON');
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm('Reset all settings to defaults? This cannot be undone.')) {
+      resetConfig();
+      toast.info('Settings reset to defaults');
+    }
+  };
+
+  return (
+    <Section
+      title="Backup & Restore"
+      description="Export your configuration (without the API token) for backup or sharing. Import to restore."
+    >
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-4 py-2 rounded border text-sm transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)]"
+          style={{ color: 'oklch(0.80 0.15 200)', borderColor: 'oklch(0.80 0.15 200 / 30%)' }}
+        >
+          <Download className="w-4 h-4" />
+          Export Config
+        </button>
+
+        <button
+          onClick={() => setShowImport(s => !s)}
+          className="flex items-center gap-2 px-4 py-2 rounded border text-sm transition-all hover:bg-[oklch(0.78_0.18_85_/_10%)]"
+          style={{ color: 'oklch(0.78 0.18 85)', borderColor: 'oklch(0.78 0.18 85 / 30%)' }}
+        >
+          <Upload className="w-4 h-4" />
+          Import Config
+        </button>
+
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-2 px-4 py-2 rounded border text-sm transition-all hover:bg-[oklch(0.65_0.22_25_/_10%)]"
+          style={{ color: 'oklch(0.65 0.22 25)', borderColor: 'oklch(0.65 0.22 25 / 30%)' }}
+        >
+          <RotateCcw className="w-4 h-4" />
+          Reset to Defaults
+        </button>
+      </div>
+
+      {showImport && (
+        <div className="mt-4 space-y-2">
+          <textarea
+            value={importText}
+            onChange={e => setImportText(e.target.value)}
+            placeholder="Paste config JSON here…"
+            rows={6}
+            className="w-full px-3 py-2 rounded border text-xs font-mono-data outline-none resize-none"
+            style={{
+              background: 'oklch(0.22 0.010 258)',
+              borderColor: 'oklch(1 0 0 / 12%)',
+              color: 'oklch(0.85 0.005 258)',
+            }}
+          />
+          <button
+            onClick={handleImport}
+            className="flex items-center gap-2 px-4 py-2 rounded border text-sm transition-all hover:bg-[oklch(0.72_0.18_145_/_10%)]"
+            style={{ color: 'oklch(0.72 0.18 145)', borderColor: 'oklch(0.72 0.18 145 / 30%)' }}
+          >
+            <Save className="w-4 h-4" />
+            Apply Import
+          </button>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function SettingsPage() {
+  return (
+    <div className="min-h-screen">
+      <PageHeader
+        title="Settings"
+        subtitle="All configuration — API, tickers, strategy parameters. Stored locally in your browser."
+      />
+
+      <div className="p-6 space-y-4 max-w-3xl">
+        {/* Important notice */}
+        <div
+          className="rounded border p-3 text-xs"
+          style={{ background: 'oklch(0.80 0.15 200 / 8%)', borderColor: 'oklch(0.80 0.15 200 / 25%)' }}
+        >
+          <span className="font-semibold" style={{ color: 'oklch(0.80 0.15 200)' }}>Note: </span>
+          <span style={{ color: 'oklch(0.65 0.010 258)' }}>
+            All settings are stored in your browser's localStorage. They persist across sessions but are
+            specific to this browser. Use Export/Import to transfer settings to another device.
+            The API token is never included in exports.
+          </span>
+        </div>
+
+        <GeneralSection />
+        <ApiSection />
+        <TickerSection />
+        <StrategySection />
+        <RefreshSection />
+        <BackupSection />
+      </div>
+    </div>
+  );
+}
