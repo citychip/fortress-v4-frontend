@@ -14,6 +14,7 @@
  */
 
 import { useState, useMemo } from 'react';
+import { Copy, CheckCircle2, AlertTriangle } from 'lucide-react';
 import {
   useCandidates,
   evaluateCandidate,
@@ -196,6 +197,152 @@ function CandidateRowItem({
   );
 }
 
+// ─── Suggested trade panel ───────────────────────────────────────────────────
+
+interface SuggestedTrade {
+  ticker: string;
+  strategy: string;
+  shortStrike: number;
+  longStrike: number;
+  expiry: string;
+  creditMin: number;
+  creditMax: number;
+  qty: number;
+  rationale: string;
+  warning?: string;
+}
+
+/**
+ * Derives a specific bull-put-spread setup from a candidate row.
+ * Uses price from the candidate row and standard delta targeting:
+ *   short put ≈ 5–7% OTM (delta ~0.20–0.25)
+ *   spread width = $15 for stocks >$200, $10 for stocks <$200
+ */
+function deriveSetup(c: EvaluatedRow): SuggestedTrade | null {
+  if (!c.can_trade) return null;
+  const sig = c._eval?.signal;
+  if (sig !== 'STRONG_SELL' && sig !== 'SELL') return null;
+
+  const price = c.price;
+  // Short put ≈ 5% OTM, rounded to nearest $5
+  const rawShort = price * 0.95;
+  const shortStrike = Math.round(rawShort / 5) * 5;
+  // Spread width
+  const width = price >= 200 ? 15 : 10;
+  const longStrike = shortStrike - width;
+  // Credit estimate: ~20–25% of width for 30–45 DTE
+  const creditMin = parseFloat((width * 0.18).toFixed(2));
+  const creditMax = parseFloat((width * 0.28).toFixed(2));
+
+  // Expiry: next monthly ~30–45 DTE (we use a fixed label since we don't have chain data)
+  const today = new Date();
+  // Find 3rd Friday of next month
+  const target = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  let fridays = 0;
+  while (fridays < 3) {
+    if (target.getDay() === 5) fridays++;
+    if (fridays < 3) target.setDate(target.getDate() + 1);
+  }
+  const expiry = target.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const rationale = `IV rank ${c.ivr?.toFixed(0)} (top decile) · IV ${c.current_iv?.toFixed(1)}% vs HV ${c.hv20?.toFixed(1)}% · spread +${c.spread_pp?.toFixed(1)}pp · earnings ${c.days_to_earnings}d out`;
+
+  const warning = c.concentration_pct > 15
+    ? `Concentration already ${c.concentration_pct.toFixed(1)}% of NL — size carefully`
+    : undefined;
+
+  return { ticker: c.ticker, strategy: 'Bull Put Spread', shortStrike, longStrike, expiry, creditMin, creditMax, qty: 1, rationale, warning };
+}
+
+function SuggestedTradePanel({ trade }: { trade: SuggestedTrade }) {
+  const [copied, setCopied] = useState(false);
+  const orderText = `SELL ${trade.qty}x ${trade.ticker} ${trade.shortStrike}/${trade.longStrike} Put Spread exp ${trade.expiry} · target credit $${trade.creditMin}–$${trade.creditMax}`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(orderText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div
+      className="rounded border p-4 space-y-3"
+      style={{ borderColor: 'oklch(0.78 0.18 85 / 35%)', background: 'oklch(0.78 0.18 85 / 5%)' }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
+            style={{ background: 'oklch(0.78 0.18 85 / 20%)', color: 'oklch(0.88 0.18 85)' }}>
+            Suggested Trade
+          </span>
+          <span className="font-display font-bold text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>
+            {trade.ticker}
+          </span>
+        </div>
+        <button
+          onClick={copy}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all hover:opacity-80"
+          style={{ background: 'oklch(0.80 0.15 200 / 15%)', color: 'oklch(0.85 0.15 200)', border: '1px solid oklch(0.80 0.15 200 / 30%)' }}
+        >
+          {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? 'Copied' : 'Copy Order'}
+        </button>
+      </div>
+
+      {/* Trade details */}
+      <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Strategy</span>
+          <span className="font-semibold" style={{ color: 'oklch(0.85 0.005 258)' }}>{trade.strategy}</span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Expiry</span>
+          <span className="font-mono-data" style={{ color: 'oklch(0.85 0.005 258)' }}>{trade.expiry}</span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Short Put</span>
+          <span className="font-mono-data font-bold" style={{ color: 'oklch(0.65 0.22 25)' }}>${trade.shortStrike}</span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Long Put</span>
+          <span className="font-mono-data" style={{ color: 'oklch(0.72 0.18 145)' }}>${trade.longStrike}</span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Width</span>
+          <span className="font-mono-data" style={{ color: 'oklch(0.85 0.005 258)' }}>${trade.shortStrike - trade.longStrike}</span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Target Credit</span>
+          <span className="font-mono-data font-bold" style={{ color: 'oklch(0.78 0.18 85)' }}>${trade.creditMin}–${trade.creditMax}</span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Qty</span>
+          <span className="font-mono-data" style={{ color: 'oklch(0.85 0.005 258)' }}>{trade.qty} contract{trade.qty > 1 ? 's' : ''}</span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: 'oklch(0.50 0.010 258)' }}>Max Risk</span>
+          <span className="font-mono-data" style={{ color: 'oklch(0.65 0.22 25)' }}>${((trade.shortStrike - trade.longStrike - trade.creditMax) * 100 * trade.qty).toFixed(0)}</span>
+        </div>
+      </div>
+
+      {/* Rationale */}
+      <div className="text-[11px] pt-1 border-t" style={{ borderColor: 'oklch(1 0 0 / 8%)', color: 'oklch(0.58 0.010 258)' }}>
+        {trade.rationale}
+      </div>
+
+      {/* Warning */}
+      {trade.warning && (
+        <div className="flex items-center gap-2 text-[11px]" style={{ color: 'oklch(0.78 0.18 85)' }}>
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          {trade.warning}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Entry criteria panel ─────────────────────────────────────────────────────
 
 function EntryCriteriaPanel({ ivRankThreshold, ivHvSpreadThreshold }: { ivRankThreshold: number; ivHvSpreadThreshold: number }) {
@@ -237,6 +384,9 @@ function EntryCriteriaPanel({ ivRankThreshold, ivHvSpreadThreshold }: { ivRankTh
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Attach _eval to CandidateRow for use in deriveSetup
+type EvaluatedRow = CandidateRow & { _eval: ReturnType<typeof evaluateCandidate> };
+
 type FilterMode = 'all' | 'actionable' | 'watch';
 
 export default function CandidatesPage() {
@@ -257,7 +407,7 @@ export default function CandidatesPage() {
   // Use server rows directly (already filtered to universe)
   const rawRows: CandidateRow[] = data?.rows ?? [];
 
-  const evaluated = useMemo(() => rawRows.map(c => ({
+  const evaluated = useMemo<EvaluatedRow[]>(() => rawRows.map(c => ({
     ...c,
     _eval: evaluateCandidate(c, ivRankThreshold, ivHvSpreadThreshold),
   })), [rawRows, ivRankThreshold, ivHvSpreadThreshold]);
@@ -320,6 +470,23 @@ export default function CandidatesPage() {
             loading={loading}
           />
         </div>
+
+        {/* Suggested trades — shown for actionable tickers */}
+        {!loading && evaluated.filter(c => c._eval.signal === 'STRONG_SELL' || c._eval.signal === 'SELL').length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'oklch(0.50 0.010 258)' }}>
+              Suggested Setups
+            </div>
+            {evaluated
+              .filter(c => c._eval.signal === 'STRONG_SELL' || c._eval.signal === 'SELL')
+              .map(c => deriveSetup(c))
+              .filter((t): t is SuggestedTrade => t !== null)
+              .map(trade => (
+                <SuggestedTradePanel key={trade.ticker} trade={trade} />
+              ))
+            }
+          </div>
+        )}
 
         {/* Entry criteria */}
         <EntryCriteriaPanel ivRankThreshold={ivRankThreshold} ivHvSpreadThreshold={ivHvSpreadThreshold} />
