@@ -15,14 +15,16 @@
  */
 
 import { useState, useMemo, useEffect } from 'react';
-import { Copy, CheckCircle2, AlertTriangle, SendHorizonal, CheckCheck } from 'lucide-react';
+import { Copy, CheckCircle2, AlertTriangle, SendHorizonal, CheckCheck, ShieldOff, ShieldCheck } from 'lucide-react';
 import {
   useCandidates,
   useMarketIntelligence,
+  usePretradeAll,
   evaluateCandidate,
   type CandidateRow,
   type EntrySignal,
   type MarketIntelligence,
+  type PretradeResult,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { usePendingOrders } from '@/contexts/PendingOrdersContext';
@@ -119,13 +121,35 @@ function SortHeader({ label, sortKey, current, dir, onSort }: {
 
 // ─── Candidate row ────────────────────────────────────────────────────────────
 
+function PretradeGateBadge({ result }: { result: PretradeResult | undefined }) {
+  if (!result) return <span className="text-[10px] font-mono-data" style={{ color: 'oklch(0.45 0.010 258)' }}>—</span>;
+  if (result.verdict === 'BLOCKED') {
+    return (
+      <div>
+        <span className="inline-flex items-center gap-1 text-[10px] font-mono-data font-bold px-1.5 py-0.5 rounded" style={{ color: 'oklch(0.65 0.22 25)', background: 'oklch(0.65 0.22 25 / 12%)' }}>
+          <ShieldOff className="w-3 h-3" /> BLOCKED
+        </span>
+        {result.failures.slice(0, 2).map((f, i) => (
+          <div key={i} className="text-[9px] mt-0.5 truncate max-w-[140px]" style={{ color: 'oklch(0.55 0.010 258)' }}>{f}</div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-mono-data font-bold px-1.5 py-0.5 rounded" style={{ color: 'oklch(0.72 0.18 145)', background: 'oklch(0.72 0.18 145 / 10%)' }}>
+      <ShieldCheck className="w-3 h-3" /> PROCEED
+    </span>
+  );
+}
+
 function CandidateRowItem({
-  candidate, ivRankThreshold, ivHvSpreadThreshold,
+  candidate, ivRankThreshold, ivHvSpreadThreshold, pretradeResult,
 }: {
-  candidate: CandidateRow; ivRankThreshold: number; ivHvSpreadThreshold: number;
+  candidate: CandidateRow; ivRankThreshold: number; ivHvSpreadThreshold: number; pretradeResult?: PretradeResult;
 }) {
   const evaluation = evaluateCandidate(candidate, ivRankThreshold, ivHvSpreadThreshold);
-  const isActionable = evaluation.signal === 'STRONG_SELL' || evaluation.signal === 'SELL';
+  const isBlocked = pretradeResult?.verdict === 'BLOCKED';
+  const isActionable = !isBlocked && (evaluation.signal === 'STRONG_SELL' || evaluation.signal === 'SELL');
 
   return (
     <tr
@@ -196,6 +220,10 @@ function CandidateRowItem({
         ) : (
           <span className="text-xs" style={{ color: 'oklch(0.65 0.22 25)' }}>✗</span>
         )}
+      </td>
+      {/* Pre-trade gate */}
+      <td className="px-4 py-3">
+        <PretradeGateBadge result={pretradeResult} />
       </td>
     </tr>
   );
@@ -488,10 +516,18 @@ type FilterMode = 'all' | 'actionable' | 'watch';
 
 export default function CandidatesPage() {
   const { data, loading, error, refresh, lastUpdated } = useCandidates();
+  const { data: pretradeData } = usePretradeAll();
   const { config } = useConfig();
   const [sortKey, setSortKey] = useState<SortKey>('iv_rank');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
+
+  // Build a lookup map: ticker -> PretradeResult
+  const pretradeMap = useMemo(() => {
+    const m: Record<string, PretradeResult> = {};
+    pretradeData?.results.forEach(r => { m[r.ticker] = r; });
+    return m;
+  }, [pretradeData]);
 
   const ivRankThreshold = config.strategy.ivRankThreshold ?? 50;
   const ivHvSpreadThreshold = config.strategy.ivHvSpreadThreshold ?? 5;
@@ -625,6 +661,7 @@ export default function CandidatesPage() {
                     <SortHeader label="IV / HV / Spread" sortKey="spread" current={sortKey} dir={sortDir} onSort={handleSort} />
                     <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-right" style={{ color: 'oklch(0.50 0.010 258)' }}>Price / % NL</th>
                     <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-center" style={{ color: 'oklch(0.50 0.010 258)' }}>Can Trade</th>
+                    <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'oklch(0.50 0.010 258)' }}>Pre-Trade Gate</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -634,6 +671,7 @@ export default function CandidatesPage() {
                       candidate={c}
                       ivRankThreshold={ivRankThreshold}
                       ivHvSpreadThreshold={ivHvSpreadThreshold}
+                      pretradeResult={pretradeMap[c.ticker]}
                     />
                   ))}
                 </tbody>

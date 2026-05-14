@@ -2,6 +2,9 @@
  * FORTRESS V2 — API Hooks
  * All types and endpoints match the actual Fortress REST server responses.
  * Verified against live server at /openapi.json on 2026-05-14.
+ * Extended 2026-05-14 with Tier 1+2 features: trade_report full shape,
+ * pretrade_all, calendar, IBKR preview/status, journal, scripts, server settings,
+ * universe management, chart levels + order flow.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -254,13 +257,226 @@ export interface TradeReportCandidate {
   earnings_state: string;
   concentration_pct: number;
   has_existing_position: boolean;
+  action: string;  // "NEW_ENTRY" | "ADD_TO_POSITION"
+}
+
+export interface TradeReportStopLoss {
+  ticker: string;
+  strategy: string;
+  verdict: string;
+  recommended_action: string;
+  signals: string[];
+  reasons: string[];
+  synthesized_id: string;
   action: string;
+}
+
+export interface TradeReportExitCandidate {
+  ticker: string;
+  strategy: string;
+  expiry: string;
+  short_strike: number | null;
+  net_market_value: number;
+  net_liq_pct: number;
+  synthesized_id: string;
+  action: string;
+  note: string;
 }
 
 export interface TradeReport {
   as_of: string;
   macro: { vix: number; regime: string; vix_state: string };
   entry_candidates: TradeReportCandidate[];
+  roll_candidates: unknown[];
+  stop_loss_alerts: TradeReportStopLoss[];
+  exit_candidates: TradeReportExitCandidate[];
+  post_earnings_candidates: unknown[];
+  summary: {
+    entry_candidates_count: number;
+    roll_candidates_count: number;
+    stop_loss_alerts_count: number;
+    exit_candidates_count: number;
+    post_earnings_count: number;
+    urgent_actions: number;
+  };
+}
+
+// ─── /api/manage/pretrade_all ─────────────────────────────────────────────────
+
+export interface PretradeResult {
+  ticker: string;
+  verdict: 'PROCEED' | 'BLOCKED';
+  failures: string[];
+  days_to_earnings: number;
+  earnings_state: string;
+  concentration_pct: number;
+  vix: number;
+  excluded: boolean;
+  exclusion_reason: string | null;
+  has_leap: boolean;
+}
+
+export interface PretradeAllResponse {
+  as_of: string;
+  tickers_evaluated: number;
+  results: PretradeResult[];
+  summary: { proceed: number; blocked: number; vix: number; vix_regime: string };
+}
+
+// ─── /api/calendar ────────────────────────────────────────────────────────────
+
+export interface EarningsEntry {
+  next_earnings: string;
+  confirmed: boolean;
+  notes: string;
+  days_to_earnings: number;
+  status: 'clear' | 'approaching' | 'blackout' | 'past';
+  _updated_at?: string;
+  _source?: string;
+}
+
+export interface CalendarResponse {
+  as_of: string;
+  tickers: Record<string, EarningsEntry>;
+}
+
+// ─── /api/ibkr/status ────────────────────────────────────────────────────────
+
+export interface IbkrWebApiStatus {
+  configured: boolean;
+  gateway_url: string;
+  session_status: {
+    reachable: boolean;
+    connected: boolean;
+    authenticated: boolean;
+    established: boolean;
+    competing: boolean;
+    ssoExpires_ms: number | null;
+    error: string | null;
+  };
+  account: string | null;
+  opra_subscribed: boolean;
+  opra_test: {
+    opra_subscribed: boolean;
+    method: string;
+    test_conid: number;
+    test_delta: string;
+    test_iv: string;
+    test_at: string;
+  } | null;
+  error: string | null;
+}
+
+export interface IbkrStatus {
+  checked_at: string;
+  tws_gateway: { configured: boolean; reachable: boolean; connected: boolean; account: string | null; error: string | null };
+  web_api: IbkrWebApiStatus;
+  resolution_hint: string;
+  settings_value: string;
+  active_backend: string;
+  fallback_backend: string;
+}
+
+// ─── /api/ibkr/preview ───────────────────────────────────────────────────────
+
+export interface IbkrPreviewPosition {
+  ticker: string;
+  strategy: string | null;
+  qty: number;
+  expiry: string | null;
+  strike: number;
+  right: 'C' | 'P' | null;
+  current_delta: number | null;
+  market_value: number;
+}
+
+export interface IbkrPreview {
+  backend: string;
+  dry_run: boolean;
+  positions_count: number;
+  aggregated_count: number;
+  net_liq: number;
+  excess_liquidity: number;
+  available_funds: number;
+  daily_pnl: number | null;
+  unrealized_pnl: number | null;
+  positions_preview: IbkrPreviewPosition[];
+}
+
+// ─── /api/journal ─────────────────────────────────────────────────────────────
+
+export interface JournalEntry {
+  id: string;
+  ticker: string;
+  strategy: string;
+  action: 'OPEN' | 'CLOSE' | 'ROLL' | 'ADJUST' | 'NOTE';
+  description: string;
+  created_at: string;
+  realized_pnl?: number | null;
+  tags?: string[];
+}
+
+export interface JournalMetrics {
+  total_realized_30d: number;
+  closed_positions_30d: number;
+  pcs_hit_rate_pct: number | null;
+  framework_violations_30d: number;
+}
+
+export interface JournalResponse {
+  as_of: string;
+  entries: JournalEntry[];
+  metrics: JournalMetrics;
+}
+
+export interface JournalSuggestResponse {
+  suggestion: { ticker: string; strategy: string; action: string; description: string };
+  last_sync: string;
+  message: string;
+}
+
+// ─── /api/run/scripts ────────────────────────────────────────────────────────
+
+export interface ScriptInfo {
+  key: string;
+  filename: string;
+}
+
+export interface ScriptsResponse {
+  scripts: ScriptInfo[];
+}
+
+export interface TimeOfDayResponse {
+  time_of_day: string;   // "premarket" | "market" | "afterhours"
+  market_open: boolean;
+  timestamp: string;
+}
+
+// ─── /api/settings ───────────────────────────────────────────────────────────
+
+export interface ServerSettings {
+  trader_profile: {
+    trader_type: string;
+    active_strategies: string[];
+    risk_tolerance: string;
+    primary_objective: string;
+  };
+  strategy: Record<string, number | string | boolean>;
+  [key: string]: unknown;
+}
+
+export interface TraderPreset {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+  strategies: string[];
+  risk_tolerance: string;
+  primary_objective: string;
+}
+
+export interface TraderPresetsResponse {
+  presets: TraderPreset[];
 }
 
 // ─── /api/chart/:ticker ───────────────────────────────────────────────────────
@@ -289,13 +505,53 @@ export interface ChartData {
   levels: ChartLevels;
 }
 
+export interface ChartLevelsResponse {
+  ticker: string;
+  as_of: string;
+  support: number[];
+  resistance: number[];
+  sma200: number | null;
+  sma50: number | null;
+  dp_floors: number[];
+}
+
+export interface OrderFlowBar {
+  time: number;
+  buy_volume: number;
+  sell_volume: number;
+  delta: number;
+  cumulative_delta: number;
+}
+
+export interface OrderFlowResponse {
+  ticker: string;
+  as_of: string;
+  bars: OrderFlowBar[];
+  net_delta: number;
+  buy_pct: number;
+  sell_pct: number;
+}
+
 // ─── /api/universe ────────────────────────────────────────────────────────────
 
 export interface UniverseResponse {
   tier1: string[];
   tier2: string[];
   macro: string[];
-  excluded: { ticker: string; reason: string; until_cleared: boolean }[];
+  excluded: { ticker: string; reason: string; until_cleared: boolean; note?: string }[];
+}
+
+// ─── /api/manage/spy_hedge_coverage ──────────────────────────────────────────
+
+export interface SpyHedgeCoverage {
+  hedge_market_value: number;
+  hedge_net_market_value: number;
+  hedge_pct_of_netliq: number;
+  target_min: number;
+  target_max: number;
+  coverage_ok: boolean;
+  legs_count: number;
+  source: string;
 }
 
 // ─── Legacy compat types (used by some pages) ─────────────────────────────────
@@ -382,7 +638,7 @@ export interface PnLSummary {
 
 // ─── Core fetch helper ────────────────────────────────────────────────────────
 
-async function apiFetch<T>(
+export async function apiFetch<T>(
   baseUrl: string,
   token: string,
   path: string,
@@ -501,6 +757,50 @@ export function useTradeReport() {
   return useApiData<TradeReport>('/api/manage/trade_report');
 }
 
+export function usePretradeAll() {
+  return useApiData<PretradeAllResponse>('/api/manage/pretrade_all');
+}
+
+export function useCalendar() {
+  return useApiData<CalendarResponse>('/api/calendar');
+}
+
+export function useIbkrStatus() {
+  return useApiData<IbkrStatus>('/api/ibkr/status');
+}
+
+export function useIbkrPreview() {
+  return useApiData<IbkrPreview>('/api/ibkr/preview');
+}
+
+export function useJournal() {
+  return useApiData<JournalResponse>('/api/journal');
+}
+
+export function useJournalSuggest() {
+  return useApiData<JournalSuggestResponse>('/api/journal/suggest');
+}
+
+export function useScripts() {
+  return useApiData<ScriptsResponse>('/api/run/scripts');
+}
+
+export function useTimeOfDay() {
+  return useApiData<TimeOfDayResponse>('/api/run/time_of_day');
+}
+
+export function useServerSettings() {
+  return useApiData<ServerSettings>('/api/settings');
+}
+
+export function useTraderPresets() {
+  return useApiData<TraderPresetsResponse>('/api/settings/trader_presets');
+}
+
+export function useSpyHedgeCoverage() {
+  return useApiData<SpyHedgeCoverage>('/api/manage/spy_hedge_coverage');
+}
+
 export function usePnL(period: 'daily' | 'weekly' | 'monthly') {
   return useApiData<PnLSummary>(`/api/pnl?period=${period}`, [period]);
 }
@@ -508,6 +808,20 @@ export function usePnL(period: 'daily' | 'weekly' | 'monthly') {
 export function useChartData(ticker: string | null) {
   return useApiData<ChartData>(
     ticker ? `/api/chart/${ticker}` : null,
+    [ticker],
+  );
+}
+
+export function useChartLevels(ticker: string | null) {
+  return useApiData<ChartLevelsResponse>(
+    ticker ? `/api/chart/${ticker}/levels` : null,
+    [ticker],
+  );
+}
+
+export function useOrderFlow(ticker: string | null) {
+  return useApiData<OrderFlowResponse>(
+    ticker ? `/api/chart/${ticker}/order_flow` : null,
     [ticker],
   );
 }
@@ -542,6 +856,288 @@ export function useIbkrSync() {
   }, [config.apiUrl, config.apiToken]);
 
   return { triggerSync, syncing, error, lastSync };
+}
+
+// ─── Alert management (PATCH/DELETE) ─────────────────────────────────────────
+
+export function useAlertActions() {
+  const { config } = useConfig();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const snoozeAlert = useCallback(async (alertId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/alerts/${alertId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ snoozed: true }),
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to snooze alert');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const dismissAlert = useCallback(async (alertId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/alerts/${alertId}`, {
+        method: 'DELETE',
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to dismiss alert');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const refreshAlerts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, '/api/manage/monitor_alerts', { method: 'POST' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh alerts');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  return { snoozeAlert, dismissAlert, refreshAlerts, loading, error };
+}
+
+// ─── Journal actions (POST/DELETE) ───────────────────────────────────────────
+
+export function useJournalActions() {
+  const { config } = useConfig();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const createEntry = useCallback(async (entry: Partial<JournalEntry>) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiFetch<JournalEntry>(config.apiUrl, config.apiToken, '/api/journal', {
+        method: 'POST',
+        body: JSON.stringify(entry),
+      });
+      return result;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create journal entry');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const deleteEntry = useCallback(async (entryId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/journal/${entryId}`, { method: 'DELETE' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete journal entry');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  return { createEntry, deleteEntry, loading, error };
+}
+
+// ─── Script runner (POST) ────────────────────────────────────────────────────
+
+export function useScriptRunner() {
+  const { config } = useConfig();
+  const [running, setRunning] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, unknown>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const runScript = useCallback(async (scriptKey: string) => {
+    setRunning(scriptKey);
+    setError(null);
+    try {
+      const result = await apiFetch<unknown>(config.apiUrl, config.apiToken, `/api/run/${scriptKey}`, { method: 'POST' });
+      setResults(prev => ({ ...prev, [scriptKey]: result }));
+      return result;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Script failed');
+      throw err;
+    } finally {
+      setRunning(null);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  return { runScript, running, results, error };
+}
+
+// ─── Server settings actions ─────────────────────────────────────────────────
+
+export function useServerSettingsActions() {
+  const { config } = useConfig();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const updateSection = useCallback(async (section: string, data: Record<string, unknown>) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/settings/${section}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update settings');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const applyPreset = useCallback(async (presetId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, '/api/settings/apply_preset', {
+        method: 'POST',
+        body: JSON.stringify({ preset_id: presetId }),
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to apply preset');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  return { updateSection, applyPreset, loading, error };
+}
+
+// ─── Universe management actions ─────────────────────────────────────────────
+
+export function useUniverseActions() {
+  const { config } = useConfig();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const addTicker = useCallback(async (ticker: string, tier: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, '/api/universe/add', {
+        method: 'POST',
+        body: JSON.stringify({ ticker, tier }),
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to add ticker');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const removeTicker = useCallback(async (tier: string, ticker: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/universe/${tier}/${ticker}`, { method: 'DELETE' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to remove ticker');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const excludeTicker = useCallback(async (ticker: string, reason: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, '/api/universe/exclude', {
+        method: 'POST',
+        body: JSON.stringify({ ticker, reason }),
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to exclude ticker');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const unexcludeTicker = useCallback(async (ticker: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/universe/exclude/${ticker}`, { method: 'DELETE' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to un-exclude ticker');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  return { addTicker, removeTicker, excludeTicker, unexcludeTicker, loading, error };
+}
+
+// ─── Calendar actions ─────────────────────────────────────────────────────────
+
+export function useCalendarActions() {
+  const { config } = useConfig();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const updateEarnings = useCallback(async (ticker: string, data: Partial<EarningsEntry>) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/calendar/${ticker}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update earnings');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const confirmEarnings = useCallback(async (ticker: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/calendar/${ticker}/confirm`, { method: 'POST' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to confirm earnings');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  const fetchEarnings = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, '/api/calendar/fetch-earnings', { method: 'POST' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch earnings');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
+
+  return { updateEarnings, confirmEarnings, fetchEarnings, loading, error };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

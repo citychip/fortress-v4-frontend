@@ -4,13 +4,13 @@
  * Built from /api/manage/stop_loss_all + /api/manage/roll_all + /api/alerts.
  */
 
-import { useStopLossAll, useRollAll, useAlerts, calcDte } from '@/hooks/useApi';
+import { useStopLossAll, useRollAll, useAlerts, useAlertActions, calcDte } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { usePendingOrders, type PendingOrder } from '@/contexts/PendingOrdersContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { StatCard } from '@/components/StatCard';
-import { AlertTriangle, Clock, Eye, Copy, CheckCircle2, SendHorizonal, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Clock, Eye, Copy, CheckCircle2, SendHorizonal, Trash2, X, BellOff, Bell, RefreshCw } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 
@@ -283,13 +283,24 @@ function OrderSection({
 export default function OrdersPage() {
   const { data: stopData, loading: stopLoading, error: stopError, refresh: refreshStop, lastUpdated } = useStopLossAll();
   const { data: rollData, loading: rollLoading, refresh: refreshRoll } = useRollAll();
-  const { data: alertData } = useAlerts();
+  const { data: alertData, refresh: refreshAlerts } = useAlerts();
+  const { snoozeAlert, dismissAlert, refreshAlerts: triggerRefresh } = useAlertActions();
   const { config } = useConfig();
 
   const loading = stopLoading || rollLoading;
   const error = stopError;
 
-  const refresh = () => { refreshStop(); refreshRoll(); };
+  const refresh = () => { refreshStop(); refreshRoll(); refreshAlerts(); };
+
+  async function handleSnooze(alertId: string) {
+    try { await snoozeAlert(alertId); refreshAlerts(); toast.success('Alert snoozed'); } catch { toast.error('Failed to snooze'); }
+  }
+  async function handleDismiss(alertId: string) {
+    try { await dismissAlert(alertId); refreshAlerts(); toast.success('Alert dismissed'); } catch { toast.error('Failed to dismiss'); }
+  }
+  async function handleRefreshAlerts() {
+    try { await triggerRefresh(); refreshAlerts(); toast.success('Alerts refreshed'); } catch { toast.error('Failed to refresh alerts'); }
+  }
 
   // Build normalised order list
   const orders = useMemo<NormalisedOrder[]>(() => {
@@ -403,6 +414,54 @@ export default function OrdersPage() {
         {!config.apiToken && !loading && <EmptyState type="no-config" title="API token required" description="Configure your API URL and token in Settings." />}
 
         <PendingOrdersPanel />
+
+        {/* Active Alerts Panel with snooze/dismiss */}
+        {alertData && alertData.alerts.length > 0 && (
+          <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(0.78 0.18 85 / 25%)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4" style={{ color: 'oklch(0.78 0.18 85)' }} />
+                <h2 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>Active Alerts</h2>
+                <span className="font-mono-data text-xs px-2 py-0.5 rounded-full" style={{ background: 'oklch(0.78 0.18 85 / 15%)', color: 'oklch(0.78 0.18 85)' }}>
+                  {alertData.alerts.filter(a => !a.snoozed).length}
+                </span>
+              </div>
+              <button onClick={handleRefreshAlerts} className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border hover:opacity-80" style={{ color: 'oklch(0.80 0.15 200)', borderColor: 'oklch(0.80 0.15 200 / 25%)' }}>
+                <RefreshCw className="w-3 h-3" /> Refresh Alerts
+              </button>
+            </div>
+            <div className="space-y-2">
+              {alertData.alerts.map(alert => (
+                <div key={alert.id} className="flex items-start gap-3 p-3 rounded border" style={{
+                  background: alert.snoozed ? 'oklch(0.15 0.010 258)' : alert.severity === 'critical' ? 'oklch(0.65 0.22 25 / 8%)' : 'oklch(0.78 0.18 85 / 8%)',
+                  borderColor: alert.snoozed ? 'oklch(1 0 0 / 8%)' : alert.severity === 'critical' ? 'oklch(0.65 0.22 25 / 30%)' : 'oklch(0.78 0.18 85 / 30%)',
+                  opacity: alert.snoozed ? 0.5 : 1,
+                }}>
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: alert.severity === 'critical' ? 'oklch(0.65 0.22 25)' : 'oklch(0.78 0.18 85)' }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-data text-xs font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>{alert.ticker}</span>
+                      <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded uppercase" style={{ color: alert.severity === 'critical' ? 'oklch(0.65 0.22 25)' : 'oklch(0.78 0.18 85)', background: alert.severity === 'critical' ? 'oklch(0.65 0.22 25 / 12%)' : 'oklch(0.78 0.18 85 / 12%)' }}>{alert.severity}</span>
+                      {alert.snoozed && <span className="text-[10px] font-mono-data" style={{ color: 'oklch(0.50 0.010 258)' }}>SNOOZED</span>}
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: 'oklch(0.65 0.010 258)' }}>{alert.message}</p>
+                    <p className="text-[10px] mt-0.5 font-mono-data" style={{ color: 'oklch(0.45 0.010 258)' }}>{alert.source} · {new Date(alert.created_at).toLocaleString()}</p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {!alert.snoozed && (
+                      <button onClick={() => handleSnooze(alert.id)} title="Snooze" className="p-1.5 rounded hover:opacity-80" style={{ color: 'oklch(0.78 0.18 85)' }}>
+                        <BellOff className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button onClick={() => handleDismiss(alert.id)} title="Dismiss" className="p-1.5 rounded hover:opacity-80" style={{ color: 'oklch(0.65 0.22 25)' }}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {!loading && (
           <>

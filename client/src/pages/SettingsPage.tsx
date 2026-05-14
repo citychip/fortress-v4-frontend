@@ -8,7 +8,7 @@
 import { useState, useCallback } from 'react';
 import { useConfig, DEFAULT_CONFIG } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
-import { useHealth } from '@/hooks/useApi';
+import { useHealth, useServerSettings, useTraderPresets, type TraderPreset } from '@/hooks/useApi';
 import { toast } from 'sonner';
 import {
   Save,
@@ -22,6 +22,9 @@ import {
   Eye,
   EyeOff,
   Zap,
+  Server,
+  Layers,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -737,6 +740,94 @@ function BackupSection() {
   );
 }
 
+// ─── Server Settings Sync ────────────────────────────────────────────────────
+
+function ServerSettingsSection() {
+  const { data, loading, error, refresh } = useServerSettings();
+  const { data: presetsData } = useTraderPresets();
+  const { config } = useConfig();
+
+  if (!config.apiToken) return null;
+
+  return (
+    <Section
+      title="Server Settings"
+      description="Live view of the Fortress server's active configuration. Read-only — edit via the server config file."
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Server className="w-4 h-4" style={{ color: 'oklch(0.80 0.15 200)' }} />
+          <span className="text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>Fetched from /api/settings</span>
+        </div>
+        <button onClick={refresh} disabled={loading} className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border hover:opacity-80"
+          style={{ color: 'oklch(0.80 0.15 200)', borderColor: 'oklch(0.80 0.15 200 / 25%)' }}>
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
+        </button>
+      </div>
+
+      {error && <p className="text-xs" style={{ color: 'oklch(0.65 0.22 25)' }}>Error: {error}</p>}
+
+      {data && (
+        <div className="space-y-3">
+          {/* Strategy thresholds from server */}
+          {data.strategy && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'oklch(0.50 0.010 258)' }}>Strategy Thresholds (Server)</div>
+              <div className="grid grid-cols-3 gap-2">
+                {Object.entries(data.strategy as Record<string, string | number | boolean>).map(([k, v]) => (
+                  <div key={k} className="rounded p-2" style={{ background: 'oklch(0.22 0.010 258)' }}>
+                    <div className="text-[9px] uppercase tracking-wide" style={{ color: 'oklch(0.50 0.010 258)' }}>{k.replace(/_/g, ' ')}</div>
+                    <div className="font-mono-data text-xs mt-0.5" style={{ color: 'oklch(0.85 0.005 258)' }}>{String(v)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Universe from server */}
+          {Array.isArray(data.universe) && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'oklch(0.50 0.010 258)' }}>Universe (Server)</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(data.universe as string[]).map((t: string) => (
+                  <span key={t} className="font-mono-data text-[10px] px-2 py-0.5 rounded" style={{ background: 'oklch(0.22 0.010 258)', color: 'oklch(0.80 0.15 200)' }}>{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Presets */}
+      {presetsData && (
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Layers className="w-3.5 h-3.5" style={{ color: 'oklch(0.78 0.18 85)' }} />
+            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'oklch(0.50 0.010 258)' }}>Trader Presets</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {presetsData.presets.map((p: TraderPreset) => (
+              <div key={p.id} className="rounded border p-3" style={{ background: 'oklch(0.22 0.010 258)', borderColor: 'oklch(1 0 0 / 10%)' }}>
+                <div className="font-mono-data text-xs font-bold" style={{ color: 'oklch(0.85 0.005 258)' }}>{p.label}</div>
+                {p.description && <div className="text-[10px] mt-0.5" style={{ color: 'oklch(0.55 0.010 258)' }}>{p.description}</div>}
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="flex justify-between text-[9px] font-mono-data">
+                    <span style={{ color: 'oklch(0.50 0.010 258)' }}>risk</span>
+                    <span style={{ color: 'oklch(0.72 0.18 145)' }}>{p.risk_tolerance}</span>
+                  </div>
+                  <div className="flex justify-between text-[9px] font-mono-data">
+                    <span style={{ color: 'oklch(0.50 0.010 258)' }}>objective</span>
+                    <span style={{ color: 'oklch(0.72 0.18 145)' }}>{p.primary_objective}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -766,6 +857,7 @@ export default function SettingsPage() {
         <TickerSection />
         <StrategySection />
         <RefreshSection />
+        <ServerSettingsSection />
         <BackupSection />
       </div>
     </div>

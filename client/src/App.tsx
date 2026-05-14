@@ -26,6 +26,9 @@ import {
   Shield,
   Crosshair,
   DollarSign,
+  CalendarDays,
+  NotebookPen,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +41,9 @@ import AnalysisPage from "./pages/AnalysisPage";
 import CandidatesPage from "./pages/CandidatesPage";
 import PnLPage from "./pages/PnLPage";
 import SettingsPage from "./pages/SettingsPage";
+import EarningsPage from "./pages/EarningsPage";
+import JournalPage from "./pages/JournalPage";
+import ScriptsPage from "./pages/ScriptsPage";
 import NotFound from "./pages/NotFound";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -50,6 +56,9 @@ const NAV_ITEMS = [
   { path: '/candidates',    label: 'Candidates',    icon: Crosshair },
   { path: '/pnl',           label: 'P&L',           icon: DollarSign },
   { path: '/analysis',      label: 'Analysis',      icon: BarChart2 },
+  { path: '/earnings',      label: 'Earnings',      icon: CalendarDays },
+  { path: '/journal',       label: 'Journal',       icon: NotebookPen },
+  { path: '/scripts',       label: 'Scripts',       icon: Zap },
   { path: '/settings',      label: 'Settings',      icon: Settings },
 ];
 
@@ -189,6 +198,9 @@ function Router() {
           <Route path="/analysis"     component={AnalysisPage} />
           <Route path="/candidates"   component={CandidatesPage} />
           <Route path="/pnl"          component={PnLPage} />
+          <Route path="/earnings"     component={EarningsPage} />
+          <Route path="/journal"      component={JournalPage} />
+          <Route path="/scripts"      component={ScriptsPage} />
           <Route path="/settings"     component={SettingsPage} />
           <Route                      component={NotFound} />
         </Switch>

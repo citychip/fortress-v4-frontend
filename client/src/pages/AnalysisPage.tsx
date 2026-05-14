@@ -11,7 +11,10 @@
  */
 
 import { useState } from 'react';
-import { useChartData, useMarketIntelligence, usePositions, calcDte, formatDollar, regimeInfo } from '@/hooks/useApi';
+import {
+  useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow, useSpyHedgeCoverage,
+  calcDte, formatDollar, regimeInfo,
+} from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
@@ -25,7 +28,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
-import { ExternalLink, TrendingUp } from 'lucide-react';
+import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Ticker selector ──────────────────────────────────────────────────────────
@@ -282,6 +285,153 @@ function TickerIntelPanel({ ticker }: { ticker: string }) {
   );
 }
 
+// ─── Chart Levels Table ────────────────────────────────────────────────────
+
+function ChartLevelsPanel({ ticker }: { ticker: string }) {
+  const { data, loading, error } = useChartLevels(ticker);
+
+  if (loading) return <div className="h-32 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  if (error || !data) return null;
+
+  const allLevels: Array<{ price: number; type: string; label: string; notional_m?: number }> = [];
+
+  // dp_floors is number[] per ChartLevelsResponse
+  (data.dp_floors ?? []).forEach((p: number) => {
+    allLevels.push({ price: p, type: 'DP Floor', label: 'Support' });
+  });
+  // support/resistance arrays
+  (data.support ?? []).forEach((p: number) => {
+    allLevels.push({ price: p, type: 'GEX Put', label: 'Support' });
+  });
+  (data.resistance ?? []).forEach((p: number) => {
+    allLevels.push({ price: p, type: 'GEX Call', label: 'Resistance' });
+  });
+
+  allLevels.sort((a, b) => b.price - a.price);
+
+  if (!allLevels.length) return null;
+
+  const typeColor: Record<string, string> = {
+    'DP Floor': 'oklch(0.80 0.15 200)',
+    'GEX Call': 'oklch(0.72 0.18 145)',
+    'GEX Put': 'oklch(0.65 0.22 25)',
+  };
+
+  return (
+    <div className="rounded border overflow-hidden" style={{ borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: 'oklch(0.20 0.010 258)' }}>
+        <Layers className="w-3.5 h-3.5" style={{ color: 'oklch(0.78 0.18 85)' }} />
+        <span className="font-display text-xs font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>Key Levels — {ticker}</span>
+        <span className="font-mono-data text-[10px]" style={{ color: 'oklch(0.50 0.010 258)' }}>{allLevels.length} levels</span>
+      </div>
+      <table className="w-full text-left">
+        <thead>
+          <tr style={{ borderBottom: '1px solid oklch(1 0 0 / 8%)', background: 'oklch(0.15 0.010 258)' }}>
+            {['Price', 'Type', 'Role', 'Notional'].map(h => (
+              <th key={h} className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'oklch(0.50 0.010 258)' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {allLevels.map((l, i) => (
+            <tr key={i} className="border-b hover:bg-[oklch(1_0_0_/_3%)]" style={{ borderColor: 'oklch(1 0 0 / 6%)' }}>
+              <td className="px-4 py-2 font-mono-data text-xs font-bold" style={{ color: typeColor[l.type] ?? 'oklch(0.85 0.005 258)' }}>${l.price.toFixed(2)}</td>
+              <td className="px-4 py-2">
+                <span className="text-[10px] font-mono-data font-semibold px-1.5 py-0.5 rounded" style={{ color: typeColor[l.type], background: `${typeColor[l.type]}15` }}>{l.type}</span>
+              </td>
+              <td className="px-4 py-2 text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>{l.label}</td>
+              <td className="px-4 py-2 font-mono-data text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>
+                {l.notional_m != null ? `$${l.notional_m.toFixed(1)}M` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Order Flow Panel ────────────────────────────────────────────────────
+
+function OrderFlowPanel({ ticker }: { ticker: string }) {
+  const { data, loading } = useOrderFlow(ticker);
+
+  if (loading) return <div className="h-24 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  if (!data) return null;
+
+  // OrderFlowResponse: bars[], net_delta, buy_pct, sell_pct
+  const netDelta = data.net_delta;
+  const buyPct = data.buy_pct;
+  const sellPct = data.sell_pct;
+  const bias = netDelta > 0 ? 'BULLISH' : netDelta < 0 ? 'BEARISH' : 'NEUTRAL';
+  const biasColor = bias === 'BULLISH' ? 'oklch(0.72 0.18 145)' : bias === 'BEARISH' ? 'oklch(0.65 0.22 25)' : 'oklch(0.80 0.15 200)';
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Activity className="w-4 h-4" style={{ color: 'oklch(0.78 0.18 85)' }} />
+        <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>Order Flow — {ticker}</h3>
+        <span className="font-mono-data text-[10px] font-bold px-2 py-0.5 rounded ml-auto" style={{ color: biasColor, background: `${biasColor}15` }}>{bias}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Net Delta', value: `${netDelta > 0 ? '+' : ''}${netDelta.toLocaleString()}`, color: netDelta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' },
+          { label: 'Buy %', value: `${(buyPct * 100).toFixed(1)}%`, color: 'oklch(0.72 0.18 145)' },
+          { label: 'Sell %', value: `${(sellPct * 100).toFixed(1)}%`, color: 'oklch(0.65 0.22 25)' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
+            <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>
+            <div className="font-mono-data text-sm" style={{ color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      {data.bars.length > 0 && (
+        <div className="mt-3 pt-3" style={{ borderTop: '1px solid oklch(1 0 0 / 8%)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{data.bars.length} flow bars loaded</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SPY Levels Panel ────────────────────────────────────────────────────────────────
+
+function SpyHedgePanel() {
+  const { data, loading } = useSpyHedgeCoverage();
+
+  if (loading) return <div className="h-20 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  if (!data) return null;
+
+  const pct = data.hedge_pct_of_netliq;
+  const isAdequate = pct >= data.target_min;
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <ShieldCheck className="w-4 h-4" style={{ color: isAdequate ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }} />
+        <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>SPY Hedge Coverage</h3>
+        <span className="font-mono-data text-[10px] font-bold px-2 py-0.5 rounded ml-auto"
+          style={{ color: isAdequate ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)', background: isAdequate ? 'oklch(0.72 0.18 145 / 12%)' : 'oklch(0.65 0.22 25 / 12%)' }}>
+          {isAdequate ? 'ADEQUATE' : 'UNDER TARGET'}
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'Hedge MV', value: formatDollar(data.hedge_market_value), color: 'oklch(0.80 0.15 200)' },
+          { label: 'Net Hedge MV', value: formatDollar(data.hedge_net_market_value), color: 'oklch(0.80 0.15 200)' },
+          { label: 'Hedge % NLV', value: `${(pct * 100).toFixed(1)}%`, color: isAdequate ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' },
+          { label: 'Target Min', value: `${(data.target_min * 100).toFixed(1)}%`, color: 'oklch(0.65 0.010 258)' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
+            <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>
+            <div className="font-mono-data text-sm" style={{ color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AnalysisPage() {
@@ -307,7 +457,12 @@ export default function AnalysisPage() {
         {selectedTicker && (
           <>
             <PriceChart ticker={selectedTicker} />
+            <div className="grid grid-cols-2 gap-4">
+              <ChartLevelsPanel ticker={selectedTicker} />
+              <OrderFlowPanel ticker={selectedTicker} />
+            </div>
             <TickerIntelPanel ticker={selectedTicker} />
+            <SpyHedgePanel />
             <TickerLegs ticker={selectedTicker} />
           </>
         )}
