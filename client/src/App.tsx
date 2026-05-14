@@ -9,6 +9,7 @@ import { Route, Switch, useLocation, Link } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ConfigProvider, useConfig } from "./contexts/ConfigContext";
+import { PendingOrdersProvider } from "./contexts/PendingOrdersContext";
 import { useHealth, useIbkrSync } from "./hooks/useApi";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -214,6 +215,7 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <ConfigProvider>
+          <PendingOrdersProvider>
           <TooltipProvider>
             <Toaster
               theme="dark"
@@ -227,6 +229,7 @@ export default function App() {
             />
             <AppShell />
           </TooltipProvider>
+          </PendingOrdersProvider>
         </ConfigProvider>
       </ThemeProvider>
     </ErrorBoundary>

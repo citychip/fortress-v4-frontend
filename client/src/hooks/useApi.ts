@@ -123,6 +123,13 @@ export interface RegimeSignal {
   note: string;
 }
 
+export interface DarkPoolFloor {
+  price: number;
+  notional_m: number;
+  contracts: number;
+  trades: number;
+}
+
 export interface MarketIntelligence {
   as_of: string;
   ticker: string;
@@ -139,6 +146,15 @@ export interface MarketIntelligence {
     gex_call_wall?: number;
     gex_put_wall?: number;
   };
+  dark_pool?: {
+    floors: DarkPoolFloor[];
+    current_price: number;
+  };
+  gex?: {
+    call_wall?: number;
+    put_wall?: number;
+    flip_zone?: number;
+  } | null;
 }
 
 // ─── /api/candidates ──────────────────────────────────────────────────────────

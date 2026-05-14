@@ -6,12 +6,127 @@
 
 import { useStopLossAll, useRollAll, useAlerts, calcDte } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
+import { usePendingOrders, type PendingOrder } from '@/contexts/PendingOrdersContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { StatCard } from '@/components/StatCard';
-import { AlertTriangle, Clock, Eye, Copy, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Clock, Eye, Copy, CheckCircle2, SendHorizonal, Trash2, X } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
+
+// ─── Pending Orders Panel ────────────────────────────────────────────────────
+
+function PendingOrderCard({ order, onRemove }: { order: PendingOrder; onRemove: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const orderText = `SELL 1x ${order.ticker} ${order.shortStrike}/${order.longStrike} Put Spread exp ${order.expiry} · target credit $${order.creditMin}–$${order.creditMax}`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(orderText).then(() => {
+      setCopied(true);
+      toast.success('Order copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const addedAgo = useMemo(() => {
+    const diff = Date.now() - new Date(order.addedAt).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.floor(mins / 60)}h ago`;
+  }, [order.addedAt]);
+
+  return (
+    <div
+      className="rounded border p-4 transition-all hover:bg-[oklch(1_0_0_/_2%)]"
+      style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(0.80 0.15 200 / 30%)' }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className="text-[10px] font-bold font-mono-data px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
+          style={{ background: 'oklch(0.80 0.15 200 / 12%)', color: 'oklch(0.85 0.15 200)' }}
+        >
+          PENDING
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono-data text-sm font-bold" style={{ color: 'oklch(0.72 0.18 145)' }}>SELL</span>
+            <span className="font-mono-data text-sm font-semibold" style={{ color: 'oklch(0.93 0.005 258)' }}>{order.ticker}</span>
+            <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'oklch(0.80 0.15 200 / 12%)', color: 'oklch(0.80 0.15 200)' }}>
+              {order.strategy}
+            </span>
+            <span className="font-mono-data text-sm" style={{ color: 'oklch(0.65 0.22 25)' }}>${order.shortStrike}</span>
+            <span className="font-mono-data text-sm" style={{ color: 'oklch(0.55 0.010 258)' }}>/</span>
+            <span className="font-mono-data text-sm" style={{ color: 'oklch(0.72 0.18 145)' }}>${order.longStrike}</span>
+            <span className="font-mono-data text-xs" style={{ color: 'oklch(0.55 0.010 258)' }}>{order.expiry}</span>
+          </div>
+          <p className="text-xs mt-1.5" style={{ color: 'oklch(0.60 0.010 258)' }}>
+            Target credit: <span className="font-mono-data font-semibold" style={{ color: 'oklch(0.78 0.18 85)' }}>${order.creditMin}–${order.creditMax}</span>
+            {order.dpFloorUsed && (
+              <span style={{ color: 'oklch(0.80 0.15 200)' }}> · DP floor ${order.dpFloorUsed.toFixed(0)} anchored</span>
+            )}
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'oklch(0.45 0.010 258)' }}>
+            {order.rationale} · added {addedAgo}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={copy}
+            className="p-1.5 rounded transition-all hover:bg-[oklch(1_0_0_/_8%)]"
+            style={{ color: copied ? 'oklch(0.72 0.18 145)' : 'oklch(0.50 0.010 258)' }}
+            title="Copy order"
+          >
+            {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={onRemove}
+            className="p-1.5 rounded transition-all hover:bg-[oklch(1_0_0_/_8%)]"
+            style={{ color: 'oklch(0.50 0.010 258)' }}
+            title="Remove from pending"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingOrdersPanel() {
+  const { orders, removeOrder, clearAll } = usePendingOrders();
+  if (orders.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <SendHorizonal className="w-4 h-4" style={{ color: 'oklch(0.80 0.15 200)' }} />
+          <h2 className="font-display text-sm font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>Pending — Awaiting Execution</h2>
+          <span
+            className="font-mono-data text-xs px-2 py-0.5 rounded-full"
+            style={{ background: 'oklch(0.80 0.15 200 / 15%)', color: 'oklch(0.80 0.15 200)' }}
+          >
+            {orders.length}
+          </span>
+        </div>
+        <button
+          onClick={clearAll}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all hover:opacity-80"
+          style={{ color: 'oklch(0.55 0.010 258)', border: '1px solid oklch(1 0 0 / 12%)' }}
+        >
+          <Trash2 className="w-3 h-3" /> Clear all
+        </button>
+      </div>
+      <div className="space-y-2">
+        {orders.map(o => (
+          <PendingOrderCard key={o.id} order={o} onRemove={() => removeOrder(o.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ─── Normalised order type ────────────────────────────────────────────────────
 
@@ -286,6 +401,8 @@ export default function OrdersPage() {
         {error && !loading && <EmptyState type="error" title="Failed to load orders" description={error} />}
         {loading && !stopData && <EmptyState type="loading" title="Loading orders…" />}
         {!config.apiToken && !loading && <EmptyState type="no-config" title="API token required" description="Configure your API URL and token in Settings." />}
+
+        <PendingOrdersPanel />
 
         {!loading && (
           <>
