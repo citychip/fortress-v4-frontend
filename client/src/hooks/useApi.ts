@@ -91,11 +91,67 @@ export interface MarketIntelligence {
 
 export interface CandidateData {
   ticker: string;
+  /** Current 30-day implied volatility (0–1 scale, e.g. 0.28 = 28%) */
   iv: number;
+  /** 30-day historical/realised volatility (0–1 scale) */
   hv: number;
+  /** IV rank 0–100: where current IV sits relative to 52-week range */
   iv_rank?: number;
+  /** IV percentile 0–100: % of days in past year where IV was lower */
   iv_percentile?: number;
+  /** 52-week IV high */
+  iv_52w_high?: number;
+  /** 52-week IV low */
+  iv_52w_low?: number;
+  /** Underlying last price */
+  last_price?: number;
+  /** Underlying price change % today */
+  price_change_pct?: number;
+  /** Average daily volume */
+  avg_volume?: number;
+  /** Market cap tier: 'large' | 'mid' | 'small' */
+  market_cap_tier?: string;
+  /** API-provided signal label */
   signal?: string;
+  /** Timestamp of last data update */
+  last_updated?: string;
+}
+
+/** Entry signal derived from IV rank + IV/HV spread */
+export type EntrySignal = 'STRONG_SELL' | 'SELL' | 'NEUTRAL' | 'WATCH' | 'NO_SIGNAL';
+
+export interface CandidateEvaluation {
+  signal: EntrySignal;
+  label: string;
+  reason: string;
+  color: string;
+}
+
+/**
+ * Evaluates a candidate ticker for short-premium entry opportunity.
+ * Logic mirrors the workflow: elevated IV rank + IV > HV = premium selling edge.
+ */
+export function evaluateCandidate(
+  c: CandidateData,
+  ivRankThreshold = 50,
+  ivHvSpreadThreshold = 0.05,
+): CandidateEvaluation {
+  const rank = c.iv_rank ?? c.iv_percentile ?? null;
+  const spread = c.iv - c.hv;
+
+  if (rank !== null && rank >= 80 && spread >= ivHvSpreadThreshold * 2) {
+    return { signal: 'STRONG_SELL', label: 'Strong Sell Premium', reason: `IV rank ${rank.toFixed(0)} + IV/HV spread ${(spread * 100).toFixed(1)}pp`, color: 'oklch(0.65 0.22 25)' };
+  }
+  if (rank !== null && rank >= ivRankThreshold && spread >= ivHvSpreadThreshold) {
+    return { signal: 'SELL', label: 'Sell Premium', reason: `IV rank ${rank.toFixed(0)} ≥ ${ivRankThreshold} + IV > HV by ${(spread * 100).toFixed(1)}pp`, color: 'oklch(0.78 0.18 85)' };
+  }
+  if (rank !== null && rank >= ivRankThreshold && spread < ivHvSpreadThreshold) {
+    return { signal: 'WATCH', label: 'Watch — IV Rank OK', reason: `IV rank ${rank.toFixed(0)} but IV/HV spread thin (${(spread * 100).toFixed(1)}pp)`, color: 'oklch(0.80 0.15 200)' };
+  }
+  if (rank !== null && rank >= 35) {
+    return { signal: 'NEUTRAL', label: 'Neutral', reason: `IV rank ${rank.toFixed(0)} — below entry threshold`, color: 'oklch(0.58 0.010 258)' };
+  }
+  return { signal: 'NO_SIGNAL', label: 'No Signal', reason: rank !== null ? `IV rank ${rank.toFixed(0)} — IV compressed` : 'Insufficient data', color: 'oklch(0.45 0.010 258)' };
 }
 
 export interface ChartData {

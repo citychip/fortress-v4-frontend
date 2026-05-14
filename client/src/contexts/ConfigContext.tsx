@@ -22,6 +22,10 @@ export interface StrategyConfig {
   minPremiumCredit: number;
   /** Macro regime score threshold below which no new entries (default 0) */
   regimeEntryThreshold: number;
+  /** IV rank threshold for Candidates screener entry signal (default 50) */
+  ivRankThreshold: number;
+  /** IV/HV spread threshold in decimal for Candidates screener (default 0.05 = 5pp) */
+  ivHvSpreadThreshold: number;
 }
 
 export interface AppConfig {
@@ -53,6 +57,8 @@ export const DEFAULT_CONFIG: AppConfig = {
     stopLoss200SMA: true,
     minPremiumCredit: 50,
     regimeEntryThreshold: 0,
+    ivRankThreshold: 50,
+    ivHvSpreadThreshold: 0.05,
   },
   autoRefresh: true,
   refreshIntervalSec: 60,

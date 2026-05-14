@@ -23,6 +23,7 @@ import {
   Wifi,
   WifiOff,
   Shield,
+  Crosshair,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,6 +33,7 @@ import PositionsPage from "./pages/PositionsPage";
 import MarketIntelPage from "./pages/MarketIntelPage";
 import OrdersPage from "./pages/OrdersPage";
 import AnalysisPage from "./pages/AnalysisPage";
+import CandidatesPage from "./pages/CandidatesPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
@@ -42,6 +44,7 @@ const NAV_ITEMS = [
   { path: '/positions',     label: 'Positions',     icon: BookOpen },
   { path: '/market-intel',  label: 'Market Intel',  icon: TrendingUp },
   { path: '/orders',        label: 'Orders',        icon: ListOrdered },
+  { path: '/candidates',    label: 'Candidates',    icon: Crosshair },
   { path: '/analysis',      label: 'Analysis',      icon: BarChart2 },
   { path: '/settings',      label: 'Settings',      icon: Settings },
 ];
@@ -180,6 +183,7 @@ function Router() {
           <Route path="/market-intel" component={MarketIntelPage} />
           <Route path="/orders"       component={OrdersPage} />
           <Route path="/analysis"     component={AnalysisPage} />
+          <Route path="/candidates"   component={CandidatesPage} />
           <Route path="/settings"     component={SettingsPage} />
           <Route                      component={NotFound} />
         </Switch>

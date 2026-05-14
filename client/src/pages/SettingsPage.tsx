@@ -402,6 +402,34 @@ function StrategySection() {
           />
         </Field>
 
+        <Field
+          label="IV Rank Entry Threshold"
+          hint="Candidates screener: signal entry when IV rank ≥ this value. Default: 50"
+        >
+          <NumberInput
+            value={s.ivRankThreshold ?? 50}
+            onChange={v => updateStrategy({ ivRankThreshold: v })}
+            min={10}
+            max={95}
+            step={5}
+            suffix="(10 – 95)"
+          />
+        </Field>
+
+        <Field
+          label="IV/HV Spread Threshold"
+          hint="Candidates screener: min IV − HV spread (pp) for SELL signal. Default: 5pp"
+        >
+          <NumberInput
+            value={Math.round((s.ivHvSpreadThreshold ?? 0.05) * 100)}
+            onChange={v => updateStrategy({ ivHvSpreadThreshold: v / 100 })}
+            min={1}
+            max={30}
+            step={1}
+            suffix="pp (1 – 30)"
+          />
+        </Field>
+
         <Field label="Stop-Loss: 200-SMA Breach" hint="Close position if underlying breaks below 200-SMA">
           <div className="flex items-center gap-3">
             <button
