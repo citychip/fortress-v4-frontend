@@ -87,6 +87,15 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+        // Migration: if the stored apiUrl points to the old absolute port-8080 address,
+        // clear it so requests go through the nginx proxy on the same origin instead.
+        const OLD_ABSOLUTE_URLS = [
+          'http://76.13.138.194:8080',
+          'http://localhost:8080',
+        ];
+        if (OLD_ABSOLUTE_URLS.some(u => parsed.apiUrl === u)) {
+          parsed.apiUrl = '';
+        }
         // Deep merge with defaults to handle new fields added in updates
         return {
           ...DEFAULT_CONFIG,
