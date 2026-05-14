@@ -1,580 +1,245 @@
 /**
  * FORTRESS V2 — P&L Page
- * Obsidian Edge design: dark theme, teal/amber/red accent palette.
- *
- * Shows:
- *   - Period selector: Daily / Weekly / Monthly
- *   - Summary stat cards: Total Net, Realised, Unrealised, Win Rate
- *   - Stacked bar chart: Realised + Unrealised per period with cumulative line overlay
- *   - Breakdown by Ticker: horizontal bar chart + table
- *   - Breakdown by Strategy: horizontal bar chart + table
- *
- * API endpoint: GET /api/pnl?period=daily|weekly|monthly
- * All data from configurable API — nothing hardcoded.
+ * Computes unrealised P&L from /api/positions (avg_cost x qty x multiplier vs market_value).
+ * No /api/pnl endpoint exists on the server — all calculations are client-side.
  */
 
-import { useState, useMemo } from 'react';
-import {
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  Cell,
-  BarChart,
-  Legend,
-} from 'recharts';
-import { usePnL, formatDollar, type PnLByTicker, type PnLByStrategy } from '@/hooks/useApi';
-import { useConfig } from '@/contexts/ConfigContext';
+import { usePositions } from '@/hooks/useApi';
 import { PageHeader } from '@/components/PageHeader';
-import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
-import { cn } from '@/lib/utils';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { StatCard } from '@/components/StatCard';
+import { useConfig } from '@/contexts/ConfigContext';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  Cell, ReferenceLine, CartesianGrid,
+} from 'recharts';
+import { useMemo } from 'react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const C_REALISED  = 'oklch(0.72 0.18 145)';   // teal-green
-const C_UNREALISED = 'oklch(0.80 0.15 200)';  // cyan
-const C_CUMULATIVE = 'oklch(0.78 0.18 85)';   // amber
-const C_NEGATIVE  = 'oklch(0.65 0.22 25)';    // red-orange
-const C_GRID      = 'oklch(1 0 0 / 6%)';
-const C_AXIS      = 'oklch(0.50 0.010 258)';
-const C_BG_CARD   = 'oklch(0.17 0.010 258)';
-const C_BG_ROW    = 'oklch(0.22 0.010 258)';
-const C_BORDER    = 'oklch(1 0 0 / 9%)';
+const GREEN  = 'oklch(0.72 0.18 145)';
+const RED    = 'oklch(0.65 0.22 25)';
+const AMBER  = 'oklch(0.78 0.18 85)';
+const CYAN   = 'oklch(0.80 0.15 200)';
+const DIM    = 'oklch(0.55 0.010 258)';
+const BRIGHT = 'oklch(0.93 0.005 258)';
 
-// ─── Period selector ──────────────────────────────────────────────────────────
-
-type Period = 'daily' | 'weekly' | 'monthly';
-
-function PeriodSelector({ period, onChange }: { period: Period; onChange: (p: Period) => void }) {
-  const options: { key: Period; label: string }[] = [
-    { key: 'daily',   label: 'Daily' },
-    { key: 'weekly',  label: 'Weekly' },
-    { key: 'monthly', label: 'Monthly' },
-  ];
-  return (
-    <div className="flex gap-1 rounded border p-0.5" style={{ borderColor: C_BORDER, background: 'oklch(0.15 0.010 258)' }}>
-      {options.map(({ key, label }) => (
-        <button
-          key={key}
-          onClick={() => onChange(key)}
-          className={cn(
-            'px-4 py-1.5 rounded text-xs font-semibold transition-all',
-            period === key ? '' : 'hover:bg-[oklch(1_0_0_/_5%)]',
-          )}
-          style={period === key ? {
-            background: 'oklch(0.80 0.15 200 / 15%)',
-            color: 'oklch(0.80 0.15 200)',
-            border: '1px solid oklch(0.80 0.15 200 / 30%)',
-          } : { color: 'oklch(0.60 0.010 258)' }}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+interface LegPnL {
+  ticker: string;
+  strategy: string;
+  localSymbol: string;
+  qty: number;
+  avgCost: number;
+  marketValue: number;
+  costBasis: number;
+  unrealisedPnL: number;
+  unrealisedPct: number;
+  expiry: string;
+  right: string;
+  strike: number;
 }
 
-// ─── Custom tooltip ───────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computeLegPnL(pos: any): LegPnL {
+  const qty = Number(pos.qty ?? 0);
+  const multiplier = Number(pos.multiplier ?? 100);
+  const avgCost = Number(pos.avg_cost ?? 0);
+  const marketValue = Number(pos.market_value ?? 0);
+  const costBasis = avgCost * Math.abs(qty) * multiplier;
+  const isShort = qty < 0;
+  const unrealisedPnL = isShort ? costBasis + marketValue : marketValue - costBasis;
+  const unrealisedPct = costBasis !== 0 ? (unrealisedPnL / Math.abs(costBasis)) * 100 : 0;
+  return {
+    ticker: pos.ticker ?? '',
+    strategy: pos.strategy ?? 'UNTAGGED',
+    localSymbol: pos.local_symbol ?? '',
+    qty, avgCost, marketValue, costBasis, unrealisedPnL, unrealisedPct,
+    expiry: pos.expiry ?? '',
+    right: pos.right ?? '',
+    strike: Number(pos.strike ?? 0),
+  };
+}
 
-function PnLTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
+function pnlColor(v: number) { return v >= 0 ? GREEN : RED; }
+function fmt(v: number) {
+  const abs = Math.abs(v);
+  const s = abs >= 1000 ? `$${(abs / 1000).toFixed(1)}k` : `$${abs.toFixed(0)}`;
+  return v < 0 ? `-${s}` : `+${s}`;
+}
+function fmtPct(v: number) { return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`; }
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null;
-  const realised   = payload.find((p: any) => p.dataKey === 'realised')?.value ?? 0;
-  const unrealised = payload.find((p: any) => p.dataKey === 'unrealised')?.value ?? 0;
-  const cumulative = payload.find((p: any) => p.dataKey === 'cumulative')?.value ?? null;
-  const total = realised + unrealised;
+  const val = payload[0].value;
+  return (
+    <div className="rounded border px-3 py-2 text-xs font-mono-data" style={{ background: 'oklch(0.15 0.010 258)', borderColor: 'oklch(1 0 0 / 15%)' }}>
+      <div className="font-semibold mb-1" style={{ color: BRIGHT }}>{label}</div>
+      <div style={{ color: pnlColor(val) }}>{fmt(val)} unrealised P&amp;L</div>
+    </div>
+  );
+}
+
+function LegRow({ leg }: { leg: LegPnL }) {
+  const isShort = leg.qty < 0;
+  const dte = useMemo(() => {
+    if (!leg.expiry) return null;
+    const diff = new Date(leg.expiry).getTime() - Date.now();
+    return Math.ceil(diff / 86400000);
+  }, [leg.expiry]);
 
   return (
-    <div
-      className="rounded border p-3 text-xs space-y-1.5 shadow-xl"
-      style={{ background: 'oklch(0.20 0.010 258)', borderColor: C_BORDER, minWidth: 160 }}
-    >
-      <div className="font-semibold mb-2" style={{ color: 'oklch(0.85 0.005 258)' }}>{label}</div>
-      <div className="flex justify-between gap-4">
-        <span style={{ color: C_AXIS }}>Realised</span>
-        <span className="font-mono-data" style={{ color: realised >= 0 ? C_REALISED : C_NEGATIVE }}>
-          {realised >= 0 ? '+' : ''}{formatDollar(realised)}
-        </span>
-      </div>
-      <div className="flex justify-between gap-4">
-        <span style={{ color: C_AXIS }}>Unrealised</span>
-        <span className="font-mono-data" style={{ color: unrealised >= 0 ? C_UNREALISED : C_NEGATIVE }}>
-          {unrealised >= 0 ? '+' : ''}{formatDollar(unrealised)}
-        </span>
-      </div>
-      <div className="border-t pt-1.5 flex justify-between gap-4" style={{ borderColor: C_BORDER }}>
-        <span className="font-semibold" style={{ color: 'oklch(0.75 0.010 258)' }}>Net</span>
-        <span className="font-mono-data font-bold" style={{ color: total >= 0 ? C_REALISED : C_NEGATIVE }}>
-          {total >= 0 ? '+' : ''}{formatDollar(total)}
-        </span>
-      </div>
-      {cumulative !== null && (
-        <div className="flex justify-between gap-4">
-          <span style={{ color: C_AXIS }}>Cumulative</span>
-          <span className="font-mono-data" style={{ color: C_CUMULATIVE }}>
-            {cumulative >= 0 ? '+' : ''}{formatDollar(cumulative)}
+    <div className="grid gap-3 items-center py-3 border-b text-xs" style={{ gridTemplateColumns: '1fr 60px 80px 90px 90px', borderColor: 'oklch(1 0 0 / 6%)' }}>
+      <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono-data font-semibold" style={{ color: BRIGHT }}>{leg.ticker}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: isShort ? 'oklch(0.65 0.22 25 / 12%)' : 'oklch(0.72 0.18 145 / 12%)', color: isShort ? RED : GREEN }}>
+            {isShort ? 'SHORT' : 'LONG'}
           </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Main P&L chart ───────────────────────────────────────────────────────────
-
-function PnLChart({ series, period }: { series: any[]; period: Period }) {
-  const formatDate = (d: string) => {
-    const date = new Date(d);
-    if (period === 'monthly') return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-    if (period === 'weekly')  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const formatY = (v: number) => {
-    if (Math.abs(v) >= 1000) return `$${(v / 1000).toFixed(0)}k`;
-    return `$${v}`;
-  };
-
-  return (
-    <div
-      className="rounded border p-4"
-      style={{ background: C_BG_CARD, borderColor: C_BORDER }}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>
-            P&L Over Time
-          </h2>
-          <p className="text-xs mt-0.5" style={{ color: C_AXIS }}>
-            Bars = Realised + Unrealised · Line = Cumulative
-          </p>
-        </div>
-        <div className="flex items-center gap-4 text-[11px]">
-          {[
-            { color: C_REALISED,   label: 'Realised' },
-            { color: C_UNREALISED, label: 'Unrealised' },
-            { color: C_CUMULATIVE, label: 'Cumulative' },
-          ].map(({ color, label }) => (
-            <div key={label} className="flex items-center gap-1.5">
-              <div className="w-3 h-2 rounded-sm" style={{ background: color }} />
-              <span style={{ color: C_AXIS }}>{label}</span>
-            </div>
-          ))}
+          <span className="font-mono-data" style={{ color: DIM }}>${leg.strike} {leg.right === 'P' ? 'Put' : 'Call'} {leg.expiry}</span>
+          {dte !== null && <span className="font-mono-data" style={{ color: dte <= 7 ? AMBER : DIM }}>{dte}d</span>}
         </div>
       </div>
-
-      <ResponsiveContainer width="100%" height={280}>
-        <ComposedChart data={series} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} vertical={false} />
-          <XAxis
-            dataKey="date"
-            tickFormatter={formatDate}
-            tick={{ fill: C_AXIS, fontSize: 11 }}
-            axisLine={{ stroke: C_GRID }}
-            tickLine={false}
-          />
-          <YAxis
-            tickFormatter={formatY}
-            tick={{ fill: C_AXIS, fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            width={52}
-          />
-          <Tooltip content={<PnLTooltip />} cursor={{ fill: 'oklch(1 0 0 / 4%)' }} />
-          <ReferenceLine y={0} stroke="oklch(1 0 0 / 20%)" strokeDasharray="4 2" />
-          <Bar dataKey="realised" stackId="pnl" fill={C_REALISED} radius={[0, 0, 0, 0]} maxBarSize={40}>
-            {series.map((entry, i) => (
-              <Cell key={i} fill={entry.realised < 0 ? C_NEGATIVE : C_REALISED} fillOpacity={0.85} />
-            ))}
-          </Bar>
-          <Bar dataKey="unrealised" stackId="pnl" fill={C_UNREALISED} radius={[3, 3, 0, 0]} maxBarSize={40}>
-            {series.map((entry, i) => (
-              <Cell key={i} fill={entry.unrealised < 0 ? 'oklch(0.65 0.22 25 / 60%)' : C_UNREALISED} fillOpacity={0.7} />
-            ))}
-          </Bar>
-          <Line
-            type="monotone"
-            dataKey="cumulative"
-            stroke={C_CUMULATIVE}
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: C_CUMULATIVE }}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─── Ticker breakdown ─────────────────────────────────────────────────────────
-
-const TICKER_COLORS = [
-  'oklch(0.80 0.15 200)',
-  'oklch(0.72 0.18 145)',
-  'oklch(0.78 0.18 85)',
-  'oklch(0.65 0.22 25)',
-  'oklch(0.75 0.15 280)',
-  'oklch(0.70 0.18 60)',
-  'oklch(0.68 0.20 320)',
-  'oklch(0.73 0.16 180)',
-];
-
-function TickerBreakdown({ data }: { data: PnLByTicker[] }) {
-  const sorted = [...data].sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-  const maxAbs = Math.max(...sorted.map(d => Math.abs(d.total)), 1);
-
-  return (
-    <div className="rounded border p-4 space-y-4" style={{ background: C_BG_CARD, borderColor: C_BORDER }}>
-      <h2 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>
-        P&L by Ticker
-      </h2>
-
-      <div className="space-y-2">
-        {sorted.map((item, i) => {
-          const color = TICKER_COLORS[i % TICKER_COLORS.length];
-          const barPct = (Math.abs(item.total) / maxAbs) * 100;
-          const isPositive = item.total >= 0;
-
-          return (
-            <div key={item.ticker} className="rounded p-3" style={{ background: C_BG_ROW }}>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-sm font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>
-                    {item.ticker}
-                  </span>
-                  {item.pct_of_net_liq !== undefined && (
-                    <span className="font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${color.replace(')', ' / 15%)')}`, color }}>
-                      {item.pct_of_net_liq.toFixed(1)}% NL
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 font-mono-data text-xs" style={{ color: isPositive ? C_REALISED : C_NEGATIVE }}>
-                  {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {isPositive ? '+' : ''}{formatDollar(item.total)}
-                </div>
-              </div>
-
-              {/* Bar */}
-              <div className="h-1.5 rounded-full overflow-hidden mb-2" style={{ background: 'oklch(1 0 0 / 8%)' }}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${barPct}%`, background: isPositive ? color : C_NEGATIVE }}
-                />
-              </div>
-
-              {/* Realised / Unrealised split */}
-              <div className="flex gap-4 text-[11px]">
-                <span style={{ color: C_AXIS }}>
-                  Realised: <span className="font-mono-data" style={{ color: item.realised >= 0 ? C_REALISED : C_NEGATIVE }}>
-                    {item.realised >= 0 ? '+' : ''}{formatDollar(item.realised)}
-                  </span>
-                </span>
-                <span style={{ color: C_AXIS }}>
-                  Unrealised: <span className="font-mono-data" style={{ color: item.unrealised >= 0 ? C_UNREALISED : C_NEGATIVE }}>
-                    {item.unrealised >= 0 ? '+' : ''}{formatDollar(item.unrealised)}
-                  </span>
-                </span>
-              </div>
-            </div>
-          );
-        })}
+      <div className="font-mono-data text-right" style={{ color: DIM }}>{leg.qty > 0 ? '+' : ''}{leg.qty}</div>
+      <div className="font-mono-data text-right" style={{ color: DIM }}>${Math.abs(leg.costBasis).toFixed(0)}</div>
+      <div className="font-mono-data text-right" style={{ color: DIM }}>${leg.marketValue.toFixed(2)}</div>
+      <div className="text-right">
+        <div className="font-mono-data font-semibold" style={{ color: pnlColor(leg.unrealisedPnL) }}>{fmt(leg.unrealisedPnL)}</div>
+        <div className="font-mono-data text-[10px]" style={{ color: pnlColor(leg.unrealisedPct), opacity: 0.7 }}>{fmtPct(leg.unrealisedPct)}</div>
       </div>
     </div>
   );
 }
 
-// ─── Strategy breakdown ───────────────────────────────────────────────────────
-
-const STRATEGY_COLORS = [
-  'oklch(0.80 0.15 200)',
-  'oklch(0.72 0.18 145)',
-  'oklch(0.78 0.18 85)',
-  'oklch(0.65 0.22 25)',
-  'oklch(0.75 0.15 280)',
-];
-
-function StrategyBreakdown({ data }: { data: PnLByStrategy[] }) {
-  const sorted = [...data].sort((a, b) => b.total - a.total);
-
-  const chartData = sorted.map((s, i) => ({
-    name: s.strategy,
-    realised: s.realised,
-    unrealised: s.unrealised,
-    color: STRATEGY_COLORS[i % STRATEGY_COLORS.length],
-  }));
-
+function TickerGroup({ ticker, legs }: { ticker: string; legs: LegPnL[] }) {
+  const totalPnL = legs.reduce((s, l) => s + l.unrealisedPnL, 0);
+  const totalCost = legs.reduce((s, l) => s + Math.abs(l.costBasis), 0);
+  const totalPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
   return (
-    <div className="rounded border p-4 space-y-4" style={{ background: C_BG_CARD, borderColor: C_BORDER }}>
-      <h2 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>
-        P&L by Strategy
-      </h2>
-
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 60, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} horizontal={false} />
-          <XAxis
-            type="number"
-            tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-            tick={{ fill: C_AXIS, fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <YAxis
-            type="category"
-            dataKey="name"
-            tick={{ fill: 'oklch(0.75 0.005 258)', fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            width={90}
-          />
-          <Tooltip
-            formatter={(value: number, name: string) => [
-              `${value >= 0 ? '+' : ''}${formatDollar(value)}`,
-              name === 'realised' ? 'Realised' : 'Unrealised',
-            ]}
-            contentStyle={{
-              background: 'oklch(0.20 0.010 258)',
-              border: `1px solid ${C_BORDER}`,
-              borderRadius: 4,
-              fontSize: 11,
-              color: 'oklch(0.85 0.005 258)',
-            }}
-          />
-          <ReferenceLine x={0} stroke="oklch(1 0 0 / 20%)" />
-          <Bar dataKey="realised" stackId="s" fill={C_REALISED} fillOpacity={0.85} radius={[0, 0, 0, 0]} />
-          <Bar dataKey="unrealised" stackId="s" fill={C_UNREALISED} fillOpacity={0.7} radius={[0, 3, 3, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-
-      {/* Table */}
-      <div className="space-y-1.5">
-        {sorted.map((item, i) => {
-          const color = STRATEGY_COLORS[i % STRATEGY_COLORS.length];
-          return (
-            <div key={item.strategy} className="flex items-center justify-between rounded px-3 py-2" style={{ background: C_BG_ROW }}>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                <span className="text-xs font-medium" style={{ color: 'oklch(0.85 0.005 258)' }}>{item.strategy}</span>
-              </div>
-              <div className="flex gap-4 text-[11px] font-mono-data">
-                <span style={{ color: item.realised >= 0 ? C_REALISED : C_NEGATIVE }}>
-                  R: {item.realised >= 0 ? '+' : ''}{formatDollar(item.realised)}
-                </span>
-                <span style={{ color: item.unrealised >= 0 ? C_UNREALISED : C_NEGATIVE }}>
-                  U: {item.unrealised >= 0 ? '+' : ''}{formatDollar(item.unrealised)}
-                </span>
-                <span className="font-bold" style={{ color: item.total >= 0 ? C_REALISED : C_NEGATIVE }}>
-                  {item.total >= 0 ? '+' : ''}{formatDollar(item.total)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+    <div className="rounded border overflow-hidden" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+      <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'oklch(1 0 0 / 8%)' }}>
+        <div className="flex items-center gap-3">
+          <span className="font-display font-bold text-sm" style={{ color: BRIGHT }}>{ticker}</span>
+          <span className="text-xs font-mono-data" style={{ color: DIM }}>{legs.length} leg{legs.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="font-mono-data text-sm font-semibold" style={{ color: pnlColor(totalPnL) }}>{fmt(totalPnL)}</span>
+          <span className="font-mono-data text-xs" style={{ color: pnlColor(totalPct), opacity: 0.8 }}>{fmtPct(totalPct)}</span>
+        </div>
       </div>
+      <div className="grid gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider border-b" style={{ gridTemplateColumns: '1fr 60px 80px 90px 90px', borderColor: 'oklch(1 0 0 / 6%)', color: 'oklch(0.42 0.010 258)' }}>
+        <span>Leg</span><span className="text-right">Qty</span><span className="text-right">Cost Basis</span><span className="text-right">Mkt Value</span><span className="text-right">Unrealised P&amp;L</span>
+      </div>
+      <div className="px-4">{legs.map((leg, i) => <LegRow key={i} leg={leg} />)}</div>
     </div>
   );
 }
-
-// ─── Win rate badge ───────────────────────────────────────────────────────────
-
-function WinRateBadge({ rate, period }: { rate: number; period: Period }) {
-  const color = rate >= 60 ? C_REALISED : rate >= 40 ? C_CUMULATIVE : C_NEGATIVE;
-  const label = period === 'daily' ? 'days' : period === 'weekly' ? 'weeks' : 'months';
-  return (
-    <div className="flex items-center gap-1.5">
-      <div
-        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold font-mono-data"
-        style={{ background: `${color.replace(')', ' / 15%)')}`, color, border: `1px solid ${color.replace(')', ' / 30%)')}` }}
-      >
-        {rate.toFixed(0)}%
-      </div>
-      <span className="text-[11px]" style={{ color: C_AXIS }}>positive {label}</span>
-    </div>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PnLPage() {
-  const [period, setPeriod] = useState<Period>('daily');
-  const { data, loading, error, refresh, lastUpdated } = usePnL(period);
+  const { data, loading, error, refresh, lastUpdated } = usePositions();
   const { config } = useConfig();
 
-  // Enrich series with cumulative if not provided by API
-  const enrichedSeries = useMemo(() => {
-    if (!data?.series) return [];
-    let cum = 0;
-    return data.series.map(pt => {
-      cum += pt.total;
-      return {
-        ...pt,
-        cumulative: pt.cumulative ?? cum,
-      };
-    });
+  const legs = useMemo<LegPnL[]>(() => {
+    if (!data?.positions) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data.positions as any[]).map(computeLegPnL);
   }, [data]);
 
-  const totalNet = data?.total_net ?? 0;
-  const totalRealised = data?.total_realised ?? 0;
-  const totalUnrealised = data?.total_unrealised ?? 0;
-  const winRate = data?.win_rate;
+  const totalUnrealised = useMemo(() => legs.reduce((s, l) => s + l.unrealisedPnL, 0), [legs]);
+  const totalCostBasis  = useMemo(() => legs.reduce((s, l) => s + Math.abs(l.costBasis), 0), [legs]);
+  const totalPct        = totalCostBasis > 0 ? (totalUnrealised / totalCostBasis) * 100 : 0;
+  const winners         = legs.filter(l => l.unrealisedPnL > 0).length;
+  const losers          = legs.filter(l => l.unrealisedPnL < 0).length;
+
+  const byTicker = useMemo(() => {
+    const map = new Map<string, LegPnL[]>();
+    legs.forEach(l => { if (!map.has(l.ticker)) map.set(l.ticker, []); map.get(l.ticker)!.push(l); });
+    return Array.from(map.entries())
+      .map(([ticker, legs]) => ({ ticker, legs, total: legs.reduce((s, l) => s + l.unrealisedPnL, 0) }))
+      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+  }, [legs]);
+
+  const chartData = useMemo(() => byTicker.map(({ ticker, total }) => ({ ticker, pnl: Math.round(total) })), [byTicker]);
+  const best  = byTicker.length ? byTicker.reduce((a, b) => b.total > a.total ? b : a) : null;
+  const worst = byTicker.length ? byTicker.reduce((a, b) => b.total < a.total ? b : a) : null;
 
   return (
     <div className="min-h-screen">
-      <PageHeader
-        title="P&L"
-        subtitle="Realised vs unrealised profit & loss — broken down by period, ticker, and strategy"
-        lastUpdated={lastUpdated}
-        onRefresh={refresh}
-        refreshing={loading}
-      >
-        <PeriodSelector period={period} onChange={setPeriod} />
-      </PageHeader>
-
-      <div className="p-6 space-y-4">
-        {/* No config state */}
-        {!config.apiToken && !loading && (
-          <EmptyState
-            type="no-config"
-            title="API token required"
-            description="Configure your API URL and token in Settings to load P&L data."
-          />
-        )}
-        {config.apiToken && error && !loading && (
-          <EmptyState type="error" title="Failed to load P&L data" description={error} />
-        )}
-
-        {/* Summary stat cards */}
+      <PageHeader title="P&L" subtitle="Unrealised profit &amp; loss — computed from avg_cost vs market_value per leg" lastUpdated={lastUpdated} onRefresh={refresh} refreshing={loading} />
+      <div className="p-6 space-y-6">
         <div className="grid grid-cols-4 gap-3">
-          <StatCard
-            label="Total Net P&L"
-            value={data ? formatDollar(totalNet) : '—'}
-            subValue={period === 'daily' ? 'this period' : `this ${period.replace('ly', '')}`}
-            signal={totalNet > 0 ? 'green' : totalNet < 0 ? 'red' : 'default'}
-            loading={loading}
-          />
-          <StatCard
-            label="Realised P&L"
-            value={data ? formatDollar(totalRealised) : '—'}
-            subValue="closed positions"
-            signal={totalRealised > 0 ? 'green' : totalRealised < 0 ? 'red' : 'default'}
-            loading={loading}
-          />
-          <StatCard
-            label="Unrealised P&L"
-            value={data ? formatDollar(totalUnrealised) : '—'}
-            subValue="open positions"
-            signal={totalUnrealised > 0 ? 'cyan' : totalUnrealised < 0 ? 'amber' : 'default'}
-            loading={loading}
-          />
-          <div
-            className="rounded border p-4 flex flex-col justify-between"
-            style={{ background: C_BG_CARD, borderColor: C_BORDER }}
-          >
-            <div className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: C_AXIS }}>
-              Win Rate
-            </div>
-            {winRate !== undefined && data ? (
-              <WinRateBadge rate={winRate} period={period} />
-            ) : (
-              <div className="font-mono-data text-lg" style={{ color: 'oklch(0.50 0.010 258)' }}>
-                {loading ? <span className="animate-pulse">…</span> : '—'}
-              </div>
-            )}
-            {data?.best_day && (
-              <div className="text-[10px] mt-2" style={{ color: C_AXIS }}>
-                Best: <span className="font-mono-data" style={{ color: C_REALISED }}>+{formatDollar(data.best_day.total)}</span>
-              </div>
-            )}
-          </div>
+          <StatCard label="Total Unrealised P&L" value={loading ? '—' : fmt(totalUnrealised)} signal={totalUnrealised >= 0 ? 'green' : 'red'} loading={loading} />
+          <StatCard label="Return on Premium" value={loading ? '—' : fmtPct(totalPct)} signal={totalPct >= 0 ? 'green' : 'red'} loading={loading} />
+          <StatCard label="Winners / Losers" value={loading ? '—' : `${winners} / ${losers}`} signal={winners >= losers ? 'green' : 'red'} loading={loading} />
+          <StatCard label="Total Legs" value={loading ? '—' : legs.length.toString()} signal="cyan" loading={loading} />
         </div>
 
-        {/* Main chart — only show when data is available */}
-        {enrichedSeries.length > 0 && (
-          <PnLChart series={enrichedSeries} period={period} />
-        )}
+        {error && !loading && <EmptyState type="error" title="Failed to load positions" description={error} />}
+        {loading && !data && <EmptyState type="loading" title="Loading positions…" />}
+        {!config.apiToken && !loading && <EmptyState type="no-config" title="API token required" description="Configure your token in Settings." />}
 
-        {/* Empty chart placeholder when no data */}
-        {enrichedSeries.length === 0 && !loading && config.apiToken && !error && (
-          <div
-            className="rounded border p-10 text-center"
-            style={{ background: C_BG_CARD, borderColor: C_BORDER }}
-          >
-            <div className="text-sm" style={{ color: 'oklch(0.50 0.010 258)' }}>
-              No P&L data available for this period
+        {!loading && legs.length > 0 && (
+          <>
+            <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-sm font-bold" style={{ color: BRIGHT }}>Unrealised P&amp;L by Ticker</h2>
+                <div className="flex items-center gap-4 text-xs font-mono-data">
+                  <span style={{ color: GREEN }}>&#9632; Profit</span>
+                  <span style={{ color: RED }}>&#9632; Loss</span>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke="oklch(1 0 0 / 5%)" />
+                  <XAxis dataKey="ticker" tick={{ fill: 'oklch(0.55 0.010 258)', fontSize: 11, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: 'oklch(0.45 0.010 258)', fontSize: 10, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${Math.abs(v) >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'oklch(1 0 0 / 4%)' }} />
+                  <ReferenceLine y={0} stroke="oklch(1 0 0 / 20%)" />
+                  <Bar dataKey="pnl" radius={[3, 3, 0, 0]}>
+                    {chartData.map((entry, i) => <Cell key={i} fill={entry.pnl >= 0 ? GREEN : RED} fillOpacity={0.85} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        )}
 
-        {/* Breakdown row */}
-        {data && (data.by_ticker.length > 0 || data.by_strategy.length > 0) && (
-          <div className="grid grid-cols-2 gap-4">
-            {data.by_ticker.length > 0 && (
-              <TickerBreakdown data={data.by_ticker} />
-            )}
-            {data.by_strategy.length > 0 && (
-              <StrategyBreakdown data={data.by_strategy} />
-            )}
-          </div>
-        )}
-
-        {/* Best / worst day callout */}
-        {data && (data.best_day || data.worst_day) && (
-          <div className="grid grid-cols-2 gap-4">
-            {data.best_day && (
-              <div
-                className="rounded border p-4"
-                style={{ background: 'oklch(0.72 0.18 145 / 8%)', borderColor: 'oklch(0.72 0.18 145 / 25%)' }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4" style={{ color: C_REALISED }} />
-                  <span className="text-xs font-semibold" style={{ color: C_REALISED }}>Best Period</span>
+            {best && worst && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded border p-4 flex items-center gap-3" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(0.72 0.18 145 / 20%)' }}>
+                  <TrendingUp className="w-5 h-5 flex-shrink-0" style={{ color: GREEN }} />
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: DIM }}>Best Position</div>
+                    <div className="font-display font-bold text-sm" style={{ color: BRIGHT }}>{best.ticker}</div>
+                    <div className="font-mono-data text-sm font-semibold" style={{ color: GREEN }}>{fmt(best.total)}</div>
+                  </div>
                 </div>
-                <div className="font-mono-data text-lg font-bold" style={{ color: C_REALISED }}>
-                  +{formatDollar(data.best_day.total)}
-                </div>
-                <div className="text-[11px] mt-0.5" style={{ color: C_AXIS }}>
-                  {new Date(data.best_day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                <div className="rounded border p-4 flex items-center gap-3" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(0.65 0.22 25 / 20%)' }}>
+                  <TrendingDown className="w-5 h-5 flex-shrink-0" style={{ color: RED }} />
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: DIM }}>Worst Position</div>
+                    <div className="font-display font-bold text-sm" style={{ color: BRIGHT }}>{worst.ticker}</div>
+                    <div className="font-mono-data text-sm font-semibold" style={{ color: RED }}>{fmt(worst.total)}</div>
+                  </div>
                 </div>
               </div>
             )}
-            {data.worst_day && (
-              <div
-                className="rounded border p-4"
-                style={{ background: 'oklch(0.65 0.22 25 / 8%)', borderColor: 'oklch(0.65 0.22 25 / 25%)' }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingDown className="w-4 h-4" style={{ color: C_NEGATIVE }} />
-                  <span className="text-xs font-semibold" style={{ color: C_NEGATIVE }}>Worst Period</span>
-                </div>
-                <div className="font-mono-data text-lg font-bold" style={{ color: C_NEGATIVE }}>
-                  {formatDollar(data.worst_day.total)}
-                </div>
-                <div className="text-[11px] mt-0.5" style={{ color: C_AXIS }}>
-                  {new Date(data.worst_day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                </div>
-              </div>
-            )}
-          </div>
+
+            <div className="rounded p-3 text-xs" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 8%)' }}>
+              <span className="font-semibold" style={{ color: CYAN }}>Data source: </span>
+              <span style={{ color: DIM }}>
+                Unrealised P&amp;L = (avg_cost x |qty| x multiplier) + market_value for short legs, or market_value - cost_basis for long legs.
+                Computed from <code className="font-mono-data" style={{ color: 'oklch(0.70 0.010 258)' }}>/api/positions</code>.
+                Realised P&amp;L (closed trades) is not yet available via the API.
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="font-display text-sm font-bold" style={{ color: BRIGHT }}>Position Detail</h2>
+              {byTicker.map(({ ticker, legs }) => <TickerGroup key={ticker} ticker={ticker} legs={legs} />)}
+            </div>
+          </>
         )}
 
-        {/* API endpoint note */}
-        <div
-          className="rounded p-3 text-[11px]"
-          style={{ background: 'oklch(0.17 0.010 258)', border: `1px solid ${C_BORDER}` }}
-        >
-          <span className="font-semibold" style={{ color: 'oklch(0.65 0.010 258)' }}>API endpoint: </span>
-          <span className="font-mono-data" style={{ color: 'oklch(0.55 0.010 258)' }}>
-            GET {config.apiUrl || '<API URL>'}/api/pnl?period={period}
-          </span>
-          <span className="ml-2" style={{ color: 'oklch(0.50 0.010 258)' }}>
-            — Returns <code>PnLSummary</code> with <code>series</code>, <code>by_ticker</code>, <code>by_strategy</code> fields
-          </span>
-        </div>
+        {!loading && legs.length === 0 && data && (
+          <EmptyState type="empty" title="No positions" description="No open positions found." />
+        )}
       </div>
     </div>
   );
