@@ -5,7 +5,7 @@
  * Supports export (without token) and import for backup/restore.
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useConfig, DEFAULT_CONFIG } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { useHealth } from '@/hooks/useApi';
@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -136,12 +137,60 @@ function NumberInput({
 
 // ─── API Connection Section ───────────────────────────────────────────────────
 
+type TestResult = {
+  ok: boolean;
+  status?: string;
+  version?: string;
+  latencyMs?: number;
+  error?: string;
+};
+
 function ApiSection() {
   const { config, updateConfig } = useConfig();
-  const { data: health, error: healthError, loading } = useHealth();
+  const { data: health, error: healthError, loading: autoLoading } = useHealth();
   const [showToken, setShowToken] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   const isConnected = !!health && !healthError;
+
+  const runTest = useCallback(async () => {
+    if (!config.apiToken) {
+      toast.error('Enter a bearer token first');
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    const base = config.apiUrl || '';
+    const url = `${base}/api/health`;
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${config.apiToken}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      const latencyMs = Math.round(performance.now() - t0);
+      if (!res.ok) {
+        setTestResult({ ok: false, latencyMs, error: `HTTP ${res.status} ${res.statusText}` });
+        return;
+      }
+      const json = await res.json().catch(() => ({}));
+      setTestResult({
+        ok: true,
+        status: json.status ?? 'ok',
+        version: json.version,
+        latencyMs,
+      });
+      toast.success(`Connection OK — ${latencyMs}ms`);
+    } catch (err: unknown) {
+      const latencyMs = Math.round(performance.now() - t0);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setTestResult({ ok: false, latencyMs, error: msg });
+      toast.error(`Connection failed: ${msg}`);
+    } finally {
+      setTesting(false);
+    }
+  }, [config.apiUrl, config.apiToken]);
 
   return (
     <Section
@@ -149,11 +198,11 @@ function ApiSection() {
       description="Fortress Dashboard REST API endpoint and authentication token."
     >
       <div className="space-y-4">
-        <Field label="API Base URL" hint="e.g. http://76.13.138.194:8080 — no trailing slash">
+        <Field label="API Base URL" hint="Leave empty to use the nginx proxy on the same host. Set an absolute URL only if the API is on a different server.">
           <Input
             value={config.apiUrl}
             onChange={v => updateConfig({ apiUrl: v })}
-            placeholder="http://your-server:8080"
+            placeholder="(empty = same-origin proxy)"
           />
         </Field>
 
@@ -197,23 +246,89 @@ function ApiSection() {
           </div>
         )}
 
-        {/* Connection status */}
-        <div
-          className="flex items-center gap-2 px-3 py-2 rounded border text-xs"
-          style={{
-            background: isConnected ? 'oklch(0.72 0.18 145 / 8%)' : 'oklch(0.65 0.22 25 / 8%)',
-            borderColor: isConnected ? 'oklch(0.72 0.18 145 / 30%)' : 'oklch(0.65 0.22 25 / 30%)',
-            color: isConnected ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
-          }}
-        >
-          {loading ? (
-            <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-          ) : isConnected ? (
-            <CheckCircle2 className="w-3.5 h-3.5" />
-          ) : (
-            <AlertCircle className="w-3.5 h-3.5" />
+        {/* Connection Test button + result */}
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={runTest}
+            disabled={testing || !config.apiToken}
+            className="flex items-center gap-2 px-4 py-2 rounded border text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[oklch(0.80_0.15_200_/_10%)]"
+            style={{
+              background: 'oklch(0.80 0.15 200 / 8%)',
+              borderColor: 'oklch(0.80 0.15 200 / 30%)',
+              color: 'oklch(0.80 0.15 200)',
+            }}
+          >
+            {testing ? (
+              <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+            ) : (
+              <Zap className="w-3.5 h-3.5" />
+            )}
+            {testing ? 'Testing…' : 'Test Connection'}
+          </button>
+
+          {/* Manual test result */}
+          {testResult && (
+            <div
+              className="flex items-start gap-2.5 px-3 py-2.5 rounded border text-xs"
+              style={{
+                background: testResult.ok ? 'oklch(0.72 0.18 145 / 8%)' : 'oklch(0.65 0.22 25 / 8%)',
+                borderColor: testResult.ok ? 'oklch(0.72 0.18 145 / 30%)' : 'oklch(0.65 0.22 25 / 30%)',
+              }}
+            >
+              {testResult.ok ? (
+                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: 'oklch(0.72 0.18 145)' }} />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: 'oklch(0.65 0.22 25)' }} />
+              )}
+              <div className="space-y-0.5">
+                {testResult.ok ? (
+                  <>
+                    <div className="font-semibold" style={{ color: 'oklch(0.72 0.18 145)' }}>
+                      Connection successful
+                    </div>
+                    <div style={{ color: 'oklch(0.65 0.010 258)' }}>
+                      Status: <span className="font-mono-data">{testResult.status}</span>
+                      {testResult.version && (
+                        <> · Version: <span className="font-mono-data">{testResult.version}</span></>
+                      )}
+                      {' '}· Latency: <span className="font-mono-data">{testResult.latencyMs}ms</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-semibold" style={{ color: 'oklch(0.65 0.22 25)' }}>
+                      Connection failed
+                    </div>
+                    <div className="font-mono-data" style={{ color: 'oklch(0.65 0.010 258)' }}>
+                      {testResult.error}
+                      {testResult.latencyMs !== undefined && ` (${testResult.latencyMs}ms)`}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           )}
-          {loading ? 'Checking connection…' : isConnected ? `Connected — ${health?.status ?? 'OK'}` : `Disconnected${healthError ? ` — ${healthError}` : ''}`}
+
+          {/* Auto-poll status (passive indicator) */}
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded text-[11px]"
+            style={{ color: isConnected ? 'oklch(0.55 0.010 258)' : 'oklch(0.50 0.010 258)' }}
+          >
+            {autoLoading ? (
+              <div className="w-2.5 h-2.5 rounded-full border border-current border-t-transparent animate-spin" />
+            ) : isConnected ? (
+              <div className="w-2 h-2 rounded-full" style={{ background: 'oklch(0.72 0.18 145)' }} />
+            ) : (
+              <div className="w-2 h-2 rounded-full" style={{ background: 'oklch(0.65 0.22 25)' }} />
+            )}
+            {autoLoading
+              ? 'Auto-checking…'
+              : isConnected
+              ? `Auto-poll: connected — ${health?.status ?? 'ok'}${health?.version ? ` v${health.version}` : ''}`
+              : `Auto-poll: ${healthError ? healthError : 'no token'}`
+            }
+          </div>
         </div>
       </div>
     </Section>
