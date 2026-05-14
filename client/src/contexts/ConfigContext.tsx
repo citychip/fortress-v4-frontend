@@ -46,9 +46,9 @@ export interface AppConfig {
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
-  apiUrl: '',
+  apiUrl: 'http://76.13.138.194:8080',
   apiToken: '',
-  tickers: ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA'],
+  tickers: ['MSFT', 'AVGO', 'NFLX', 'SPY', 'AMD', 'GOOGL', 'UNH', 'NVDA'],
   strategy: {
     deltaAlertThreshold: 0.40,
     rollDteDays: 45,

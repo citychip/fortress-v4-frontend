@@ -12,7 +12,7 @@ import { RegimeBadge } from '@/components/RegimeBadge';
 import { UrgencyBadge } from '@/components/UrgencyBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { Link } from 'wouter';
-import { ArrowRight, AlertTriangle, TrendingUp, BookOpen } from 'lucide-react';
+import { ArrowRight, AlertTriangle, TrendingUp, BookOpen, Crosshair } from 'lucide-react';
 
 // ─── Account Summary Cards ────────────────────────────────────────────────────
 
@@ -20,12 +20,12 @@ function AccountSummary() {
   const { data, loading, error, refresh, lastUpdated } = useBriefing();
   const { config } = useConfig();
 
-  if (!config.apiToken && !config.apiUrl) {
+  if (!config.apiToken) {
     return (
       <EmptyState
         type="no-config"
-        title="API not configured"
-        description="Add your API URL and token in Settings to connect to the Fortress Dashboard."
+        title="API token required"
+        description="Add your bearer token in Settings → API Connection to connect to the Fortress Dashboard."
       />
     );
   }
@@ -274,13 +274,14 @@ function PositionAlertsSummary() {
 
 function QuickNav() {
   const links = [
-    { href: '/positions', label: 'View Positions', sub: 'Per-leg evaluation', icon: BookOpen, color: 'oklch(0.80 0.15 200)' },
-    { href: '/market-intel', label: 'Market Intel', sub: 'GEX / DP / Drift', icon: TrendingUp, color: 'oklch(0.72 0.18 145)' },
-    { href: '/orders', label: 'All Orders', sub: 'URGENT / THIS WEEK / WATCH', icon: AlertTriangle, color: 'oklch(0.78 0.18 85)' },
+    { href: '/positions',    label: 'View Positions', sub: 'Per-leg evaluation',          icon: BookOpen,     color: 'oklch(0.80 0.15 200)' },
+    { href: '/market-intel', label: 'Market Intel',   sub: 'GEX / DP / Drift',            icon: TrendingUp,   color: 'oklch(0.72 0.18 145)' },
+    { href: '/candidates',   label: 'Candidates',     sub: 'IV rank screener',             icon: Crosshair,    color: 'oklch(0.78 0.18 85)' },
+    { href: '/orders',       label: 'All Orders',     sub: 'URGENT / THIS WEEK / WATCH',  icon: AlertTriangle, color: 'oklch(0.65 0.22 25)' },
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-4 gap-3">
       {links.map(({ href, label, sub, icon: Icon, color }) => (
         <Link key={href} href={href}>
           <div

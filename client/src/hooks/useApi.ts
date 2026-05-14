@@ -154,6 +154,45 @@ export function evaluateCandidate(
   return { signal: 'NO_SIGNAL', label: 'No Signal', reason: rank !== null ? `IV rank ${rank.toFixed(0)} — IV compressed` : 'Insufficient data', color: 'oklch(0.45 0.010 258)' };
 }
 
+// ─── P&L types ───────────────────────────────────────────────────────────────
+
+export interface PnLDataPoint {
+  date: string;           // ISO date string e.g. "2026-05-14"
+  realised: number;       // Realised P&L for this period (USD)
+  unrealised: number;     // Unrealised P&L for this period (USD)
+  total: number;          // realised + unrealised
+  cumulative?: number;    // Running cumulative total
+}
+
+export interface PnLByTicker {
+  ticker: string;
+  realised: number;
+  unrealised: number;
+  total: number;
+  pct_of_net_liq?: number;
+}
+
+export interface PnLByStrategy {
+  strategy: string;       // e.g. "LEAPS", "Covered Call", "Put Spread", "Hedge"
+  realised: number;
+  unrealised: number;
+  total: number;
+}
+
+export interface PnLSummary {
+  period: 'daily' | 'weekly' | 'monthly';
+  series: PnLDataPoint[];
+  by_ticker: PnLByTicker[];
+  by_strategy: PnLByStrategy[];
+  total_realised: number;
+  total_unrealised: number;
+  total_net: number;
+  best_day?: PnLDataPoint;
+  worst_day?: PnLDataPoint;
+  win_rate?: number;      // % of days/weeks/months with positive P&L
+  last_updated?: string;
+}
+
 export interface ChartData {
   ticker: string;
   prices: { date: string; close: number; volume?: number }[];
@@ -266,6 +305,10 @@ export function useMarketIntelligence(ticker: string | null) {
 
 export function useCandidates() {
   return useApiData<{ candidates: CandidateData[] }>('/api/candidates');
+}
+
+export function usePnL(period: 'daily' | 'weekly' | 'monthly') {
+  return useApiData<PnLSummary>(`/api/pnl?period=${period}`, [period]);
 }
 
 export function useChartData(ticker: string | null) {
