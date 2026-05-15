@@ -376,6 +376,21 @@ export interface CalendarResponse {
   tickers: Record<string, EarningsEntry>;
 }
 
+// ─── /api/calendar/{ticker}/history ─────────────────────────────────────────
+
+export interface EarningsHistoryEntry {
+  date: string;                  // YYYY-MM-DD
+  type: 'past' | 'upcoming';
+  eps_estimate: number | null;
+  reported_eps: number | null;
+  surprise_pct: number | null;
+}
+
+export interface EarningsHistoryResponse {
+  ticker: string;
+  dates: EarningsHistoryEntry[];
+}
+
 // ─── /api/ibkr/status ────────────────────────────────────────────────────────
 
 export interface IbkrWebApiStatus {
@@ -799,6 +814,10 @@ export function usePretradeAll() {
 
 export function useCalendar() {
   return useApiData<CalendarResponse>('/api/calendar');
+}
+
+export function useEarningsHistory(ticker: string) {
+  return useApiData<EarningsHistoryResponse>(`/api/calendar/${ticker}/history?limit=8`);
 }
 
 export function useIbkrStatus() {

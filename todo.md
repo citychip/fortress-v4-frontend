@@ -13,5 +13,5 @@
 - [x] Earnings date overlay on AnalysisPage price chart — vertical dashed markers at past/upcoming earnings dates
 - [x] Deep-link navigation from DashboardPage post-earnings rows to AnalysisPage with ticker pre-selected
 - [x] Deep-link navigation from DashboardPage roll candidate rows to AnalysisPage with ticker pre-selected
-- [ ] Historical earnings overlay on chart — backend only stores next_earnings; add a /api/calendar/{ticker}/history endpoint using yfinance earnings_dates to return past earnings dates for multi-marker chart overlay
+- [x] Historical earnings overlay on chart — backend only stores next_earnings; add a /api/calendar/{ticker}/history endpoint using yfinance earnings_dates to return past earnings dates for multi-marker chart overlay
 - [x] Connection Health panel in Settings — live ping tests for IBKR sync and QuantData with latency, last-seen, and status badges

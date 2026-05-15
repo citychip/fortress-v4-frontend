@@ -10,10 +10,10 @@
  *   Position             → { current_delta, market_value, local_symbol, expiry, right, strike, qty }
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow, useSpyHedgeCoverage,
-  useCalendar, calcDte, formatDollar, regimeInfo,
+  useCalendar, useEarningsHistory, calcDte, formatDollar, regimeInfo,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -148,6 +148,7 @@ function GreeksSummaryPanel({ ticker }: { ticker: string }) {
 function PriceChart({ ticker }: { ticker: string }) {
   const { data, loading, error } = useChartData(ticker);
   const { data: calendarData } = useCalendar();
+  const { data: earningsHistory } = useEarningsHistory(ticker);
 
   if (loading) return <div className="h-64 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
 
@@ -181,26 +182,42 @@ function PriceChart({ ticker }: { ticker: string }) {
   const gexCalls = data.levels?.gex_calls ?? [];
   const gexPuts = data.levels?.gex_puts ?? [];
 
-  // Earnings overlay: vertical marker at the next_earnings date if it falls within chart range
-  const earningsMarkers: Array<{ date: string; label: string; isPast: boolean }> = [];
-  const tickerEntry = calendarData?.tickers?.[ticker];
-  if (tickerEntry?.next_earnings && chartData.length > 0) {
+  // Earnings overlay: multi-marker from history endpoint, fallback to calendar next_earnings
+  const earningsMarkers: Array<{ date: string; label: string; isPast: boolean; surprisePct: number | null }> = useMemo(() => {
+    if (!chartData.length) return [];
     const firstDate = chartData[0].rawDate;
     const lastDate = chartData[chartData.length - 1].rawDate;
-    const earningsDate = tickerEntry.next_earnings;
-    if (earningsDate >= firstDate) {
-      const isPast = earningsDate <= lastDate;
+
+    // Prefer history endpoint (past + upcoming)
+    const historyDates = earningsHistory?.dates ?? [];
+    const sourceDates = historyDates.length > 0
+      ? historyDates
+      : (calendarData?.tickers?.[ticker]?.next_earnings
+          ? [{ date: calendarData.tickers[ticker].next_earnings, type: 'upcoming', eps_estimate: null, reported_eps: null, surprise_pct: null }]
+          : []);
+
+    const markers: typeof earningsMarkers = [];
+    for (const entry of sourceDates) {
+      const earningsDate = entry.date;
+      // Include dates within chart range OR upcoming dates beyond chart end
+      if (earningsDate < firstDate && entry.type === 'past') continue; // before chart window
       const closest = chartData.reduce((best, d) =>
         Math.abs(new Date(d.rawDate).getTime() - new Date(earningsDate).getTime()) <
         Math.abs(new Date(best.rawDate).getTime() - new Date(earningsDate).getTime()) ? d : best
       );
-      earningsMarkers.push({
+      const isPast = entry.type === 'past';
+      const surprise = entry.surprise_pct;
+      const surpriseTag = surprise != null ? (surprise >= 0 ? ` +${surprise.toFixed(1)}%` : ` ${surprise.toFixed(1)}%`) : '';
+      markers.push({
         date: closest.date,
-        label: isPast ? `EPS ${earningsDate.slice(5)}` : `EPS ${earningsDate.slice(5)} →`,
+        label: isPast ? `EPS ${earningsDate.slice(5)}${surpriseTag}` : `EPS ${earningsDate.slice(5)} →`,
         isPast,
+        surprisePct: surprise ?? null,
       });
     }
-  }
+    return markers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartData, earningsHistory, calendarData, ticker]);
 
   return (
     <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
@@ -225,13 +242,24 @@ function PriceChart({ ticker }: { ticker: string }) {
             borderRadius: '4px', fontSize: '11px', fontFamily: 'JetBrains Mono', color: 'oklch(0.93 0.005 258)',
           }} formatter={(value: number) => [`$${value.toFixed(2)}`]} />
 
-          {/* Earnings date overlays */}
-          {earningsMarkers.map((m, i) => (
-            <ReferenceLine key={`eps-${i}`} x={m.date}
-              stroke={m.isPast ? 'oklch(0.78 0.18 85 / 60%)' : 'oklch(0.78 0.18 85)'}
-              strokeDasharray={m.isPast ? '3 3' : '6 2'} strokeWidth={m.isPast ? 1 : 1.5}
-              label={{ value: m.label, fontSize: 9, fill: 'oklch(0.78 0.18 85)', position: 'insideTopLeft', offset: 4 }} />
-          ))}
+          {/* Earnings date overlays — multi-marker from history */}
+          {earningsMarkers.map((m, i) => {
+            // Colour: upcoming = amber, past beat = green, past miss = red, past neutral = amber dim
+            const beatColor = 'oklch(0.72 0.18 145 / 70%)';
+            const missColor = 'oklch(0.65 0.22 25 / 70%)';
+            const upcomingColor = 'oklch(0.78 0.18 85)';
+            const pastNeutralColor = 'oklch(0.78 0.18 85 / 50%)';
+            let stroke = pastNeutralColor;
+            if (!m.isPast) stroke = upcomingColor;
+            else if (m.surprisePct != null && m.surprisePct > 0) stroke = beatColor;
+            else if (m.surprisePct != null && m.surprisePct < 0) stroke = missColor;
+            return (
+              <ReferenceLine key={`eps-${i}`} x={m.date}
+                stroke={stroke}
+                strokeDasharray={m.isPast ? '3 3' : '6 2'} strokeWidth={m.isPast ? 1 : 1.5}
+                label={{ value: m.label, fontSize: 9, fill: stroke.replace(/ \/.*/, ')'), position: 'insideTopLeft', offset: 4 }} />
+            );
+          })}
 
           {/* DP floors (support) */}
           {dpFloors.map((level, i) => (
