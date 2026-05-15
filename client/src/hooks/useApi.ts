@@ -133,6 +133,16 @@ export interface DarkPoolFloor {
   trades: number;
 }
 
+export interface TradeSetup {
+  name: string;
+  type: string;        // 'bullish' | 'bearish' | 'neutral'
+  confidence: string;  // 'high' | 'medium' | 'low'
+  description: string;
+  entry?: string;
+  target?: string;
+  stop?: string;
+}
+
 export interface MarketIntelligence {
   as_of: string;
   ticker: string;
@@ -148,6 +158,8 @@ export interface MarketIntelligence {
     net_drift?: number;
     gex_call_wall?: number;
     gex_put_wall?: number;
+    gamma_regime?: string;
+    flip_zone?: number;
   };
   dark_pool?: {
     floors: DarkPoolFloor[];
@@ -158,6 +170,7 @@ export interface MarketIntelligence {
     put_wall?: number;
     flip_zone?: number;
   } | null;
+  trade_setups?: TradeSetup[];
 }
 
 // ─── /api/candidates ──────────────────────────────────────────────────────────

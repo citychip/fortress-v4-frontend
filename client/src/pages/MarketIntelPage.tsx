@@ -9,7 +9,7 @@ import { useMarketIntelligence, regimeInfo, type MarketIntelligence } from '@/ho
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, ShieldAlert, ArrowUpRight } from 'lucide-react';
 
 // ─── Metric box ───────────────────────────────────────────────────────────────
 
@@ -200,6 +200,75 @@ function TickerIntelCard({ ticker }: { ticker: string }) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Trade Setups */}
+          {data.trade_setups && data.trade_setups.length > 0 && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'oklch(0.50 0.010 258)' }}>
+                Trade Setups
+              </div>
+              <div className="space-y-2">
+                {data.trade_setups.map((setup, i) => {
+                  const isBull = setup.type === 'bullish';
+                  const isBear = setup.type === 'bearish';
+                  const setupColor = isBull ? 'oklch(0.72 0.18 145)' : isBear ? 'oklch(0.65 0.22 25)' : 'oklch(0.78 0.18 85)';
+                  const setupBg = isBull ? 'oklch(0.72 0.18 145 / 8%)' : isBear ? 'oklch(0.65 0.22 25 / 8%)' : 'oklch(0.78 0.18 85 / 8%)';
+                  const confColor = setup.confidence === 'high' ? 'oklch(0.72 0.18 145)' : setup.confidence === 'medium' ? 'oklch(0.78 0.18 85)' : 'oklch(0.55 0.010 258)';
+                  const SetupIcon = isBull ? TrendingUp : isBear ? TrendingDown : Minus;
+                  return (
+                    <div key={i} className="rounded border px-3 py-2.5 space-y-1.5" style={{ background: setupBg, borderColor: `${setupColor.replace(')', ' / 20%)')}` }}>
+                      <div className="flex items-center gap-2">
+                        <SetupIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: setupColor }} />
+                        <span className="text-xs font-semibold" style={{ color: 'oklch(0.93 0.005 258)' }}>{setup.name}</span>
+                        <span className="ml-auto font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${confColor.replace(')', ' / 15%)')}`, color: confColor }}>
+                          {setup.confidence}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed" style={{ color: 'oklch(0.65 0.010 258)' }}>{setup.description}</p>
+                      {(setup.entry || setup.target || setup.stop) && (
+                        <div className="flex items-center gap-4 pt-0.5">
+                          {setup.entry && (
+                            <span className="flex items-center gap-1 font-mono-data text-[10px]" style={{ color: 'oklch(0.65 0.010 258)' }}>
+                              <ArrowUpRight className="w-3 h-3" />
+                              Entry: <span style={{ color: 'oklch(0.85 0.010 258)' }}>{setup.entry}</span>
+                            </span>
+                          )}
+                          {setup.target && (
+                            <span className="flex items-center gap-1 font-mono-data text-[10px]" style={{ color: 'oklch(0.65 0.010 258)' }}>
+                              <Target className="w-3 h-3" />
+                              Target: <span style={{ color: 'oklch(0.72 0.18 145)' }}>{setup.target}</span>
+                            </span>
+                          )}
+                          {setup.stop && (
+                            <span className="flex items-center gap-1 font-mono-data text-[10px]" style={{ color: 'oklch(0.65 0.010 258)' }}>
+                              <ShieldAlert className="w-3 h-3" />
+                              Stop: <span style={{ color: 'oklch(0.65 0.22 25)' }}>{setup.stop}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Gamma flip zone */}
+          {regime?.flip_zone !== undefined && regime.flip_zone !== null && (
+            <div className="flex items-center gap-3 text-xs px-3 py-2 rounded border" style={{ background: 'oklch(0.22 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'oklch(0.50 0.010 258)' }}>GEX Flip Zone</span>
+              <span className="font-mono-data font-semibold" style={{ color: 'oklch(0.78 0.18 85)' }}>${regime.flip_zone.toFixed(2)}</span>
+              {regime.gamma_regime && (
+                <span className="ml-auto font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{
+                  background: regime.gamma_regime === 'positive' ? 'oklch(0.72 0.18 145 / 15%)' : 'oklch(0.65 0.22 25 / 15%)',
+                  color: regime.gamma_regime === 'positive' ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)'
+                }}>
+                  {regime.gamma_regime} gamma
+                </span>
+              )}
             </div>
           )}
 
