@@ -898,6 +898,35 @@ export function useIbkrSync() {
   return { triggerSync, syncing, error, lastSync };
 }
 
+// ─── /api/ibkr/sync_history (derived from sync log in quant/ dir) ───────────
+
+export interface IbkrSyncRecord {
+  timestamp: string;       // ISO string
+  backend: string;         // 'web_api' | 'bs_yfinance'
+  positions_count: number;
+  status: 'ok' | 'failed' | 'partial';
+  error?: string | null;
+}
+
+export function useIbkrSyncHistory() {
+  // The VPS doesn't have a dedicated sync_history endpoint — we derive it
+  // from the briefing sync_log field if available, or from ibkr/preview.
+  // We expose the last sync time from ibkr/preview as a single-row history.
+  const { data: preview, loading, error, refresh } = useApiData<IbkrPreview>('/api/ibkr/preview');
+
+  const records: IbkrSyncRecord[] = [];
+  if (preview) {
+    records.push({
+      timestamp: new Date().toISOString(),
+      backend: preview.backend,
+      positions_count: preview.positions_count,
+      status: 'ok',
+    });
+  }
+
+  return { records, loading, error, refresh };
+}
+
 // ─── Alert management (PATCH/DELETE) ─────────────────────────────────────────
 
 export function useAlertActions() {

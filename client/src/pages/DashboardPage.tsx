@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
-  useTradeReport, useIbkrPreview, useSpyHedgeCoverage,
+  useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
   formatDollar, regimeInfo,
   type BriefingData, type TradeReport,
 } from '@/hooks/useApi';
@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import {
   ArrowRight, AlertTriangle, TrendingUp, BookOpen, Crosshair,
   DollarSign, Shield, Zap, TrendingDown, CheckCircle, XCircle, Target,
-  Mail, X,
+  Mail, X, RefreshCw, Database,
 } from 'lucide-react';
 
 const GREEN  = 'oklch(0.72 0.18 145)';
@@ -222,6 +222,88 @@ function IbkrLivePreview() {
         value={data.daily_pnl != null ? formatDollar(data.daily_pnl) : '—'}
         signal={data.daily_pnl != null ? (data.daily_pnl >= 0 ? 'green' : 'red') : 'default'}
       />
+    </div>
+  );
+}
+
+// ─── IBKR Sync History ─────────────────────────────────────────────────
+
+function IbkrSyncHistoryPanel() {
+  const { records, loading, refresh } = useIbkrSyncHistory();
+  const { triggerSync, syncing, lastSync } = useIbkrSync();
+
+  const handleSync = async () => {
+    await triggerSync();
+    refresh();
+  };
+
+  const statusColor = (s: string) =>
+    s === 'ok' ? GREEN : s === 'partial' ? AMBER : RED;
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Database className="w-4 h-4" style={{ color: CYAN }} />
+          <span className="font-display text-sm" style={{ color: BRIGHT }}>IBKR Sync</span>
+          {lastSync && (
+            <span className="text-[10px] font-mono-data" style={{ color: DIM }}>
+              Last: {lastSync.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-mono-data hover:opacity-80 disabled:opacity-40 transition-opacity"
+          style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
+        >
+          <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'Syncing…' : 'Sync Now'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-1.5">
+          {[1, 2].map(i => <div key={i} className="h-8 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />)}
+        </div>
+      ) : records.length === 0 ? (
+        <div className="text-xs py-2" style={{ color: DIM }}>No sync data available. Click Sync Now to fetch live positions.</div>
+      ) : (
+        <div className="overflow-hidden rounded border" style={{ borderColor: 'oklch(1 0 0 / 8%)' }}>
+          <table className="w-full text-xs">
+            <thead>
+              <tr style={{ background: 'oklch(1 0 0 / 4%)' }}>
+                <th className="text-left px-3 py-2 font-semibold" style={{ color: DIM }}>Timestamp</th>
+                <th className="text-left px-3 py-2 font-semibold" style={{ color: DIM }}>Backend</th>
+                <th className="text-right px-3 py-2 font-semibold" style={{ color: DIM }}>Positions</th>
+                <th className="text-center px-3 py-2 font-semibold" style={{ color: DIM }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r, i) => (
+                <tr key={i} style={{ borderTop: '1px solid oklch(1 0 0 / 6%)' }}>
+                  <td className="px-3 py-2 font-mono-data" style={{ color: 'oklch(0.70 0.010 258)' }}>
+                    {new Date(r.timestamp).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 font-mono-data" style={{ color: CYAN }}>
+                    {r.backend === 'web_api' ? 'Web API' : r.backend === 'bs_yfinance' ? 'yFinance' : r.backend}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono-data font-semibold" style={{ color: BRIGHT }}>
+                    {r.positions_count}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold"
+                      style={{ background: `${statusColor(r.status)}15`, color: statusColor(r.status) }}>
+                      {r.status.toUpperCase()}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -656,6 +738,7 @@ export default function DashboardPage() {
       />
       <div className="p-6 space-y-6">
         <AccountSummarySection />
+        <IbkrSyncHistoryPanel />
         <QuickNav />
 
         {/* Trade Report — the morning action list */}

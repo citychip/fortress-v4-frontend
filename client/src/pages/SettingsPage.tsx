@@ -8,7 +8,7 @@
 import { useState, useCallback } from 'react';
 import { useConfig, DEFAULT_CONFIG } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
-import { useHealth, useServerSettings, useTraderPresets, type TraderPreset } from '@/hooks/useApi';
+import { useHealth, useServerSettings, useTraderPresets, useUniverse, useUniverseActions, type TraderPreset } from '@/hooks/useApi';
 import { toast } from 'sonner';
 import {
   Save,
@@ -25,6 +25,10 @@ import {
   Server,
   Layers,
   RefreshCw,
+  Shield,
+  TrendingUp,
+  Star,
+  Ban,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -340,84 +344,191 @@ function ApiSection() {
 
 // ─── Ticker Universe Section ──────────────────────────────────────────────────
 
-function TickerSection() {
-  const { config, updateConfig } = useConfig();
-  const [newTicker, setNewTicker] = useState('');
+const TIER_META: Record<string, { label: string; color: string; icon: React.ElementType; description: string }> = {
+  tier1: { label: 'Tier 1', color: 'oklch(0.80 0.15 200)', icon: Star,      description: 'High IV — primary candidates' },
+  tier2: { label: 'Tier 2', color: 'oklch(0.78 0.18 85)',  icon: TrendingUp, description: 'Moderate IV — secondary candidates' },
+  macro: { label: 'Macro / Index', color: 'oklch(0.72 0.18 145)', icon: Shield, description: 'Benchmark & hedge instruments' },
+};
 
-  const addTicker = () => {
+function TierBadge({ tier }: { tier: string }) {
+  const meta = TIER_META[tier];
+  if (!meta) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded"
+      style={{ background: `${meta.color}18`, color: meta.color, border: `1px solid ${meta.color}35` }}>
+      {meta.label}
+    </span>
+  );
+}
+
+function TickerSection() {
+  const { data: universe, loading: univLoading, refresh: univRefresh } = useUniverse();
+  const { addTicker, removeTicker, excludeTicker, unexcludeTicker, loading: actionLoading } = useUniverseActions();
+  const [newTicker, setNewTicker] = useState('');
+  const [newTier, setNewTier] = useState('tier1');
+  const [excludeReason, setExcludeReason] = useState('');
+  const [excludingTicker, setExcludingTicker] = useState<string | null>(null);
+
+  const handleAdd = async () => {
     const t = newTicker.trim().toUpperCase();
     if (!t) return;
-    if (config.tickers.includes(t)) {
-      toast.error(`${t} is already in your universe`);
-      return;
+    try {
+      await addTicker(t, newTier);
+      setNewTicker('');
+      univRefresh();
+      toast.success(`Added ${t} to ${TIER_META[newTier]?.label ?? newTier}`);
+    } catch {
+      toast.error('Failed to add ticker');
     }
-    updateConfig({ tickers: [...config.tickers, t] });
-    setNewTicker('');
-    toast.success(`Added ${t} to universe`);
   };
 
-  const removeTicker = (t: string) => {
-    updateConfig({ tickers: config.tickers.filter(x => x !== t) });
-    toast.info(`Removed ${t} from universe`);
+  const handleRemove = async (tier: string, ticker: string) => {
+    try {
+      await removeTicker(tier, ticker);
+      univRefresh();
+      toast.info(`Removed ${ticker} from ${TIER_META[tier]?.label ?? tier}`);
+    } catch {
+      toast.error('Failed to remove ticker');
+    }
+  };
+
+  const handleExclude = async (ticker: string, reason: string) => {
+    try {
+      await excludeTicker(ticker, reason);
+      univRefresh();
+      setExcludingTicker(null);
+      setExcludeReason('');
+      toast.info(`${ticker} excluded`);
+    } catch {
+      toast.error('Failed to exclude ticker');
+    }
+  };
+
+  const handleUnexclude = async (ticker: string) => {
+    try {
+      await unexcludeTicker(ticker);
+      univRefresh();
+      toast.success(`${ticker} restored to universe`);
+    } catch {
+      toast.error('Failed to restore ticker');
+    }
   };
 
   return (
     <Section
       title="Ticker Universe"
-      description="Symbols to monitor across all tabs. Used for Market Intelligence, Analysis, and order generation."
+      description="Managed via ticker_universe.json on the VPS. Tiers control priority and workflow inclusion."
     >
-      {/* Current tickers */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {config.tickers.map(t => (
-          <div
-            key={t}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded border"
-            style={{
-              background: 'oklch(0.22 0.010 258)',
-              borderColor: 'oklch(1 0 0 / 12%)',
-            }}
-          >
-            <span className="font-mono-data text-xs font-semibold" style={{ color: 'oklch(0.85 0.005 258)' }}>
-              {t}
-            </span>
-            <button
-              onClick={() => removeTicker(t)}
-              className="hover:opacity-80 transition-opacity"
-              style={{ color: 'oklch(0.55 0.010 258)' }}
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
-        {config.tickers.length === 0 && (
-          <span className="text-xs" style={{ color: 'oklch(0.50 0.010 258)' }}>
-            No tickers configured
-          </span>
-        )}
-      </div>
+      {univLoading && (
+        <div className="text-xs py-4 text-center" style={{ color: 'oklch(0.55 0.010 258)' }}>Loading universe…</div>
+      )}
+
+      {universe && (
+        <div className="space-y-4">
+          {/* Tier 1, Tier 2, Macro */}
+          {(['tier1', 'tier2', 'macro'] as const).map(tier => {
+            const meta = TIER_META[tier];
+            const tickers = universe[tier] ?? [];
+            const Icon = meta.icon;
+            return (
+              <div key={tier}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="w-3.5 h-3.5" style={{ color: meta.color }} />
+                  <span className="text-xs font-semibold" style={{ color: meta.color }}>{meta.label}</span>
+                  <span className="text-[10px]" style={{ color: 'oklch(0.50 0.010 258)' }}>— {meta.description}</span>
+                  <span className="ml-auto text-[10px] font-mono-data px-1.5 py-0.5 rounded"
+                    style={{ background: `${meta.color}15`, color: meta.color }}>
+                    {tickers.length} tickers
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {tickers.map(t => (
+                    <div key={t} className="flex items-center gap-1 px-2 py-0.5 rounded border"
+                      style={{ background: 'oklch(0.20 0.010 258)', borderColor: `${meta.color}30` }}>
+                      <span className="font-mono-data text-xs font-semibold" style={{ color: meta.color }}>{t}</span>
+                      <button onClick={() => handleRemove(tier, t)} disabled={actionLoading}
+                        className="hover:opacity-80 ml-0.5" style={{ color: 'oklch(0.50 0.010 258)' }}>
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {tickers.length === 0 && (
+                    <span className="text-[11px]" style={{ color: 'oklch(0.45 0.010 258)' }}>No tickers in this tier</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Excluded */}
+          {universe.excluded && universe.excluded.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Ban className="w-3.5 h-3.5" style={{ color: 'oklch(0.65 0.22 25)' }} />
+                <span className="text-xs font-semibold" style={{ color: 'oklch(0.65 0.22 25)' }}>Excluded</span>
+                <span className="text-[10px]" style={{ color: 'oklch(0.50 0.010 258)' }}>— Regulatory, ignored, or suspended</span>
+              </div>
+              <div className="space-y-1">
+                {universe.excluded.map(ex => (
+                  <div key={ex.ticker} className="flex items-center gap-2 px-3 py-1.5 rounded border"
+                    style={{ background: 'oklch(0.65 0.22 25 / 6%)', borderColor: 'oklch(0.65 0.22 25 / 25%)' }}>
+                    <span className="font-mono-data text-xs font-semibold" style={{ color: 'oklch(0.75 0.22 25)' }}>{ex.ticker}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'oklch(0.65 0.22 25 / 15%)', color: 'oklch(0.70 0.18 25)' }}>
+                      {ex.reason}
+                    </span>
+                    {ex.note && (
+                      <span className="text-[10px] truncate flex-1" style={{ color: 'oklch(0.55 0.010 258)' }}>{ex.note}</span>
+                    )}
+                    <button onClick={() => handleUnexclude(ex.ticker)} disabled={actionLoading}
+                      className="ml-auto text-[10px] px-2 py-0.5 rounded border hover:opacity-80"
+                      style={{ color: 'oklch(0.72 0.18 145)', borderColor: 'oklch(0.72 0.18 145 / 30%)' }}>
+                      Restore
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add ticker */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: 'oklch(1 0 0 / 8%)' }}>
         <input
           type="text"
           value={newTicker}
           onChange={e => setNewTicker(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === 'Enter' && addTicker()}
-          placeholder="Add ticker (e.g. AAPL)"
+          onKeyDown={e => e.key === 'Enter' && handleAdd()}
+          placeholder="Ticker (e.g. AAPL)"
           className="flex-1 px-3 py-2 rounded border text-sm font-mono-data outline-none transition-all focus:border-[oklch(0.80_0.15_200_/_60%)]"
-          style={{
-            background: 'oklch(0.22 0.010 258)',
-            borderColor: 'oklch(1 0 0 / 12%)',
-            color: 'oklch(0.93 0.005 258)',
-          }}
+          style={{ background: 'oklch(0.22 0.010 258)', borderColor: 'oklch(1 0 0 / 12%)', color: 'oklch(0.93 0.005 258)' }}
         />
+        <select
+          value={newTier}
+          onChange={e => setNewTier(e.target.value)}
+          className="px-3 py-2 rounded border text-sm outline-none"
+          style={{ background: 'oklch(0.22 0.010 258)', borderColor: 'oklch(1 0 0 / 12%)', color: 'oklch(0.85 0.005 258)' }}
+        >
+          <option value="tier1">Tier 1</option>
+          <option value="tier2">Tier 2</option>
+          <option value="macro">Macro</option>
+        </select>
         <button
-          onClick={addTicker}
-          className="flex items-center gap-1.5 px-3 py-2 rounded border text-sm transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)]"
+          onClick={handleAdd}
+          disabled={actionLoading || !newTicker.trim()}
+          className="flex items-center gap-1.5 px-3 py-2 rounded border text-sm transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)] disabled:opacity-40"
           style={{ color: 'oklch(0.80 0.15 200)', borderColor: 'oklch(0.80 0.15 200 / 30%)' }}
         >
           <Plus className="w-4 h-4" />
           Add
+        </button>
+        <button
+          onClick={univRefresh}
+          disabled={univLoading}
+          className="flex items-center gap-1.5 px-3 py-2 rounded border text-sm transition-all hover:opacity-80 disabled:opacity-40"
+          style={{ color: 'oklch(0.55 0.010 258)', borderColor: 'oklch(1 0 0 / 12%)' }}
+        >
+          <RefreshCw className={`w-4 h-4 ${univLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
     </Section>
