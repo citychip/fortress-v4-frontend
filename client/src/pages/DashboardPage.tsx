@@ -125,11 +125,18 @@ function TradeReportPanel() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-mono-data text-xs font-bold" style={{ color: BRIGHT }}>{c.ticker}</span>
-              <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: GREEN, background: 'oklch(0.72 0.18 145 / 12%)' }}>
-                IVR {c.iv_rank.toFixed(0)}
-              </span>
+              {c.iv_rank != null && (
+                <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: GREEN, background: 'oklch(0.72 0.18 145 / 12%)' }}>
+                  IVR {c.iv_rank.toFixed(0)}
+                </span>
+              )}
+              {c.iv_rank == null && (
+                <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: DIM, background: 'oklch(1 0 0 / 5%)' }}>
+                  IVR —
+                </span>
+              )}
               <span className="text-[10px] font-mono-data" style={{ color: DIM }}>
-                {c.concentration_pct.toFixed(1)}% conc
+                {c.concentration_pct != null ? `${c.concentration_pct.toFixed(1)}% conc` : '—'}
               </span>
               {c.has_existing_position && (
                 <span className="text-[9px] font-mono-data px-1 py-0.5 rounded" style={{ color: CYAN, background: 'oklch(0.80 0.15 200 / 10%)' }}>HAS POS</span>
@@ -241,7 +248,7 @@ function TradeReportPanel() {
               <div className="flex items-center gap-2">
                 <span className="font-mono-data text-xs font-bold" style={{ color: BRIGHT }}>{e.ticker}</span>
                 <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: AMBER, background: 'oklch(0.78 0.18 85 / 12%)' }}>
-                  {e.net_liq_pct.toFixed(1)}% net liq
+                  {e.net_liq_pct != null ? `${e.net_liq_pct.toFixed(1)}% net liq` : '— net liq'}
                 </span>
                 {dte != null && dte <= 7 && (
                   <span className="text-[9px] font-mono-data px-1 py-0.5 rounded animate-pulse" style={{ color: RED, background: 'oklch(0.65 0.22 25 / 15%)' }}>EXPIRING</span>
@@ -470,7 +477,7 @@ function SpyHedgeWidget() {
           </div>
           <div className="flex justify-between text-[10px] font-mono-data mt-1" style={{ color: DIM }}>
             <span>0%</span>
-            <span style={{ color }}>{pct.toFixed(1)}% of Net Liq</span>
+            <span style={{ color }}>{pct != null ? `${pct.toFixed(1)}% of Net Liq` : '—'}</span>
             <span>Target: {data.target_min}–{data.target_max}%</span>
           </div>
         </div>
@@ -764,7 +771,7 @@ function SendBriefingModal({
     if (r.entry_candidates?.length) {
       lines.push('TOP ENTRY CANDIDATES (by IV Rank):');
       r.entry_candidates.slice(0, 5).forEach((c, i) => {
-        lines.push(`  ${i + 1}. ${c.ticker}  IVR ${c.iv_rank.toFixed(0)}  ${c.concentration_pct.toFixed(1)}% conc  ${c.action}`);
+        lines.push(`  ${i + 1}. ${c.ticker}  IVR ${c.iv_rank != null ? c.iv_rank.toFixed(0) : '—'}  ${c.concentration_pct != null ? c.concentration_pct.toFixed(1) : '—'}% conc  ${c.action}`);
       });
       lines.push('');
     }
@@ -772,7 +779,7 @@ function SendBriefingModal({
     if (r.exit_candidates?.length) {
       lines.push('EXIT CANDIDATES (near profit target):');
       r.exit_candidates.slice(0, 3).forEach(e => {
-        lines.push(`  • ${e.ticker}  ${e.net_liq_pct.toFixed(1)}% net liq  ${e.action}`);
+        lines.push(`  • ${e.ticker}  ${e.net_liq_pct != null ? e.net_liq_pct.toFixed(1) : '—'}% net liq  ${e.action}`);
       });
       lines.push('');
     }
