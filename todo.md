@@ -9,3 +9,8 @@
 - [x] Roll candidates DTE ring — added DTE countdown ring SVG + urgency badge + EXPIRING pulse to roll candidates section on DashboardPage (cyan ring, URGENT/THIS_WEEK/WATCH urgency chip)
 - [x] Settings sync indicator — added SyncBadge component to SettingsPage header showing Saving…/Saved ✓/Sync failed based on prefsSaveStatus from ConfigContext
 - [x] Post-earnings candidates section in Trade Report — add TradeReportPostEarningsCandidate type and render a dedicated section on DashboardPage with days-since-earnings badge, IV rank post, price, and playbook action
+- [x] Greeks summary section on AnalysisPage — aggregate delta/gamma/theta/vega across all open positions for the selected ticker
+- [x] Earnings date overlay on AnalysisPage price chart — vertical dashed markers at past/upcoming earnings dates
+- [x] Deep-link navigation from DashboardPage post-earnings rows to AnalysisPage with ticker pre-selected
+- [x] Deep-link navigation from DashboardPage roll candidate rows to AnalysisPage with ticker pre-selected
+- [ ] Historical earnings overlay on chart — backend only stores next_earnings; add a /api/calendar/{ticker}/history endpoint using yfinance earnings_dates to return past earnings dates for multi-marker chart overlay

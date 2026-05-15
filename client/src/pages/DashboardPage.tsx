@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { useLocation } from 'wouter';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
   useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
@@ -28,6 +29,12 @@ const GREEN  = 'oklch(0.72 0.18 145)';
 const RED    = 'oklch(0.65 0.22 25)';
 const AMBER  = 'oklch(0.78 0.18 85)';
 const CYAN   = 'oklch(0.80 0.15 200)';
+
+/** Navigate to Analysis page with the given ticker pre-selected */
+function navigateToAnalysis(ticker: string, navigate: (path: string) => void) {
+  sessionStorage.setItem('fortress_analysis_ticker', ticker);
+  navigate('/analysis');
+}
 const DIM    = 'oklch(0.55 0.010 258)';
 const BRIGHT = 'oklch(0.93 0.005 258)';
 
@@ -54,6 +61,7 @@ function RegimePill({ regime }: { regime: string }) {
 
 function TradeReportPanel() {
   const { data, loading, error } = useTradeReport();
+  const [, navigate] = useLocation();
 
   if (loading) {
     return (
@@ -145,8 +153,12 @@ function TradeReportPanel() {
         const ringColor = dte == null ? DIM : dte <= 7 ? RED : dte <= 21 ? AMBER : CYAN;
         const urgencyColor = rc.urgency === 'URGENT' ? RED : rc.urgency === 'THIS_WEEK' ? AMBER : DIM;
         return (
-          <div key={i} className="flex items-center gap-3 p-3 rounded border"
-            style={{ background: 'oklch(0.80 0.15 200 / 5%)', borderColor: 'oklch(0.80 0.15 200 / 20%)' }}>
+          <div key={i}
+            className="flex items-center gap-3 p-3 rounded border cursor-pointer transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)]"
+            style={{ background: 'oklch(0.80 0.15 200 / 5%)', borderColor: 'oklch(0.80 0.15 200 / 20%)' }}
+            onClick={() => navigateToAnalysis(rc.ticker, navigate)}
+            title={`Open ${rc.ticker} in Analysis`}
+          >
             {/* DTE countdown ring */}
             <div className="flex-shrink-0 relative" style={{ width: 36, height: 36 }}>
               <svg width="36" height="36" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
@@ -263,8 +275,12 @@ function TradeReportPanel() {
               : pe.iv_rank_post >= 25 ? GREEN    // moderate — normal
               : DIM;                             // crushed — watch only
             return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded border"
-                style={{ background: 'oklch(0.72 0.18 145 / 5%)', borderColor: 'oklch(0.72 0.18 145 / 20%)' }}>
+              <div key={i}
+                className="flex items-center gap-3 p-3 rounded border cursor-pointer transition-all hover:bg-[oklch(0.72_0.18_145_/_12%)]"
+                style={{ background: 'oklch(0.72 0.18 145 / 5%)', borderColor: 'oklch(0.72 0.18 145 / 20%)' }}
+                onClick={() => navigateToAnalysis(pe.ticker, navigate)}
+                title={`Open ${pe.ticker} in Analysis`}
+              >
                 {/* Days-since badge */}
                 <div className="flex-shrink-0 flex items-center justify-center rounded"
                   style={{ width: 36, height: 36, background: `${freshnessColor}18`, border: `1px solid ${freshnessColor}40` }}>

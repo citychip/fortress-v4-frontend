@@ -13,7 +13,7 @@
 import { useState, useEffect } from 'react';
 import {
   useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow, useSpyHedgeCoverage,
-  calcDte, formatDollar, regimeInfo,
+  useCalendar, calcDte, formatDollar, regimeInfo,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -28,7 +28,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
-import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck } from 'lucide-react';
+import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck, Sigma } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Ticker selector ──────────────────────────────────────────────────────────
@@ -56,10 +56,98 @@ function TickerSelector({ tickers, selected, onSelect }: {
   );
 }
 
-// ─── Price chart (uses candles + levels) ─────────────────────────────────────
+// ─── Greeks summary panel ────────────────────────────────────────────────────
+
+function GreeksSummaryPanel({ ticker }: { ticker: string }) {
+  const { data } = usePositions();
+  const legs = (data?.positions ?? []).filter(p => p.ticker === ticker && p.sec_type === 'OPT');
+
+  if (!legs.length) return null;
+
+  // Aggregate per-leg Greeks x qty x multiplier
+  let totalDelta = 0, totalGamma = 0, totalTheta = 0, totalVega = 0;
+  const ivValues: number[] = [];
+
+  legs.forEach(leg => {
+    const mult = Number(leg.multiplier ?? 100);
+    const qty = leg.qty ?? 0;
+    totalDelta += (leg.current_delta ?? 0) * qty * mult;
+    totalGamma += (leg.current_gamma ?? 0) * qty * mult;
+    totalTheta += (leg.current_theta ?? 0) * qty * mult;
+    totalVega  += (leg.current_vega  ?? 0) * qty * mult;
+    if (leg.current_iv != null) ivValues.push(leg.current_iv);
+  });
+
+  const avgIv = ivValues.length ? ivValues.reduce((a, b) => a + b, 0) / ivValues.length : null;
+  const fmt = (v: number, decimals = 2) => `${v > 0 ? '+' : ''}${v.toFixed(decimals)}`;
+
+  const greeks = [
+    {
+      label: 'Net Delta',
+      value: fmt(totalDelta, 2),
+      hint: 'delta x qty x 100',
+      color: totalDelta > 0 ? 'oklch(0.72 0.18 145)' : totalDelta < 0 ? 'oklch(0.65 0.22 25)' : 'oklch(0.80 0.15 200)',
+    },
+    {
+      label: 'Net Gamma',
+      value: fmt(totalGamma, 3),
+      hint: 'gamma x qty x 100',
+      color: totalGamma > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
+    },
+    {
+      label: 'Net Theta',
+      value: fmt(totalTheta, 2),
+      hint: 'daily P&L from decay',
+      color: totalTheta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
+    },
+    {
+      label: 'Net Vega',
+      value: fmt(totalVega, 2),
+      hint: 'P&L per 1pp IV move',
+      color: totalVega > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
+    },
+    {
+      label: 'Avg IV',
+      value: avgIv != null ? `${avgIv.toFixed(1)}%` : '—',
+      hint: 'mean IV across legs',
+      color: avgIv == null ? 'oklch(0.65 0.010 258)'
+        : avgIv >= 60 ? 'oklch(0.65 0.22 25)'
+        : avgIv >= 35 ? 'oklch(0.78 0.18 85)'
+        : 'oklch(0.72 0.18 145)',
+    },
+    {
+      label: 'Legs',
+      value: `${legs.length}`,
+      hint: 'open option legs',
+      color: 'oklch(0.80 0.15 200)',
+    },
+  ];
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Sigma className="w-4 h-4" style={{ color: 'oklch(0.78 0.18 85)' }} />
+        <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>Greeks Summary — {ticker}</h3>
+        <span className="font-mono-data text-[10px] ml-auto" style={{ color: 'oklch(0.50 0.010 258)' }}>position-weighted aggregates</span>
+      </div>
+      <div className="grid grid-cols-6 gap-3">
+        {greeks.map(g => (
+          <div key={g.label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
+            <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{g.label}</div>
+            <div className="font-mono-data text-sm font-bold" style={{ color: g.color }}>{g.value}</div>
+            <div className="text-[9px] mt-0.5 leading-tight" style={{ color: 'oklch(0.42 0.010 258)' }}>{g.hint}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Price chart (uses candles + levels + earnings overlay) ───────────────────
 
 function PriceChart({ ticker }: { ticker: string }) {
   const { data, loading, error } = useChartData(ticker);
+  const { data: calendarData } = useCalendar();
 
   if (loading) return <div className="h-64 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
 
@@ -81,6 +169,7 @@ function PriceChart({ ticker }: { ticker: string }) {
   // Map candles to recharts format
   const chartData = (data.candles ?? []).map(c => ({
     date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    rawDate: new Date(c.time * 1000).toISOString().slice(0, 10),
     close: c.close,
   }));
 
@@ -91,6 +180,27 @@ function PriceChart({ ticker }: { ticker: string }) {
   const dpFloors = data.levels?.dp_floors ?? [];
   const gexCalls = data.levels?.gex_calls ?? [];
   const gexPuts = data.levels?.gex_puts ?? [];
+
+  // Earnings overlay: vertical marker at the next_earnings date if it falls within chart range
+  const earningsMarkers: Array<{ date: string; label: string; isPast: boolean }> = [];
+  const tickerEntry = calendarData?.tickers?.[ticker];
+  if (tickerEntry?.next_earnings && chartData.length > 0) {
+    const firstDate = chartData[0].rawDate;
+    const lastDate = chartData[chartData.length - 1].rawDate;
+    const earningsDate = tickerEntry.next_earnings;
+    if (earningsDate >= firstDate) {
+      const isPast = earningsDate <= lastDate;
+      const closest = chartData.reduce((best, d) =>
+        Math.abs(new Date(d.rawDate).getTime() - new Date(earningsDate).getTime()) <
+        Math.abs(new Date(best.rawDate).getTime() - new Date(earningsDate).getTime()) ? d : best
+      );
+      earningsMarkers.push({
+        date: closest.date,
+        label: isPast ? `EPS ${earningsDate.slice(5)}` : `EPS ${earningsDate.slice(5)} →`,
+        isPast,
+      });
+    }
+  }
 
   return (
     <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
@@ -114,6 +224,14 @@ function PriceChart({ ticker }: { ticker: string }) {
             background: 'oklch(0.22 0.010 258)', border: '1px solid oklch(1 0 0 / 12%)',
             borderRadius: '4px', fontSize: '11px', fontFamily: 'JetBrains Mono', color: 'oklch(0.93 0.005 258)',
           }} formatter={(value: number) => [`$${value.toFixed(2)}`]} />
+
+          {/* Earnings date overlays */}
+          {earningsMarkers.map((m, i) => (
+            <ReferenceLine key={`eps-${i}`} x={m.date}
+              stroke={m.isPast ? 'oklch(0.78 0.18 85 / 60%)' : 'oklch(0.78 0.18 85)'}
+              strokeDasharray={m.isPast ? '3 3' : '6 2'} strokeWidth={m.isPast ? 1 : 1.5}
+              label={{ value: m.label, fontSize: 9, fill: 'oklch(0.78 0.18 85)', position: 'insideTopLeft', offset: 4 }} />
+          ))}
 
           {/* DP floors (support) */}
           {dpFloors.map((level, i) => (
@@ -142,6 +260,7 @@ function PriceChart({ ticker }: { ticker: string }) {
           dpFloors.length > 0 ? { color: 'oklch(0.80 0.15 200)', label: 'DP Floor' } : null,
           gexCalls.length > 0 ? { color: 'oklch(0.72 0.18 145)', label: 'GEX Call' } : null,
           gexPuts.length > 0 ? { color: 'oklch(0.65 0.22 25)', label: 'GEX Put' } : null,
+          earningsMarkers.length > 0 ? { color: 'oklch(0.78 0.18 85)', label: 'Earnings' } : null,
         ].filter(Boolean).map((item, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <div className="w-4 h-0.5 rounded" style={{ background: item!.color }} />
@@ -444,6 +563,12 @@ export default function AnalysisPage() {
       sessionStorage.removeItem('fortress_triage_ticker');
       return triage;
     }
+    // Check for deep-link ticker from Dashboard post-earnings / roll candidate navigation
+    const deepLink = sessionStorage.getItem('fortress_analysis_ticker');
+    if (deepLink) {
+      sessionStorage.removeItem('fortress_analysis_ticker');
+      return deepLink;
+    }
     return config.tickers[0] ?? '';
   });
 
@@ -453,6 +578,12 @@ export default function AnalysisPage() {
     if (triage && config.tickers.includes(triage)) {
       sessionStorage.removeItem('fortress_triage_ticker');
       setSelectedTicker(triage);
+      return;
+    }
+    const deepLink = sessionStorage.getItem('fortress_analysis_ticker');
+    if (deepLink) {
+      sessionStorage.removeItem('fortress_analysis_ticker');
+      setSelectedTicker(deepLink);
     }
   }, [config.tickers]);
 
@@ -475,6 +606,7 @@ export default function AnalysisPage() {
         {selectedTicker && (
           <>
             <PriceChart ticker={selectedTicker} />
+            <GreeksSummaryPanel ticker={selectedTicker} />
             <div className="grid grid-cols-2 gap-4">
               <ChartLevelsPanel ticker={selectedTicker} />
               <OrderFlowPanel ticker={selectedTicker} />
