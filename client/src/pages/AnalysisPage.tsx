@@ -26,6 +26,7 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
+  ReferenceArea,
   ResponsiveContainer,
 } from 'recharts';
 import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck, Sigma } from 'lucide-react';
@@ -178,6 +179,31 @@ function PriceChart({ ticker }: { ticker: string }) {
   const minPrice = closes.length ? Math.min(...closes) * 0.98 : 0;
   const maxPrice = closes.length ? Math.max(...closes) * 1.02 : 100;
 
+  // ── Pine Script indicators ────────────────────────────────────────────────
+  // 50-day SMA (blue)
+  const sma50Data = chartData.map((d, i) => {
+    if (i < 49) return { ...d, sma50: null };
+    const slice = closes.slice(i - 49, i + 1);
+    return { ...d, sma50: slice.reduce((a, b) => a + b, 0) / 50 };
+  });
+
+  // 200-day SMA (red) — merged into same data array
+  const chartDataWithIndicators = sma50Data.map((d, i) => {
+    if (i < 199) return { ...d, sma200: null };
+    const slice = closes.slice(i - 199, i + 1);
+    return { ...d, sma200: slice.reduce((a, b) => a + b, 0) / 200 };
+  });
+
+  // 52-week high (highest of last 252 daily closes)
+  const hi52w = closes.length >= 252
+    ? Math.max(...closes.slice(-252))
+    : closes.length > 0 ? Math.max(...closes) : null;
+
+  // Thesis Broken Zone: current price < 200 SMA
+  const lastSma200 = chartDataWithIndicators.filter(d => d.sma200 != null).slice(-1)[0]?.sma200 ?? null;
+  const currentClose = closes[closes.length - 1] ?? null;
+  const thesisBroken = lastSma200 != null && currentClose != null && currentClose < lastSma200;
+
   const dpFloors = data.levels?.dp_floors ?? [];
   const gexCalls = data.levels?.gex_calls ?? [];
   const gexPuts = data.levels?.gex_puts ?? [];
@@ -229,8 +255,8 @@ function PriceChart({ ticker }: { ticker: string }) {
         </a>
       </div>
 
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+      <ResponsiveContainer width="100%" height={260}>
+        <LineChart data={chartDataWithIndicators} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 6%)" />
           <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'oklch(0.50 0.010 258)', fontFamily: 'JetBrains Mono' }}
             tickLine={false} axisLine={false} interval="preserveStartEnd" />
@@ -241,6 +267,27 @@ function PriceChart({ ticker }: { ticker: string }) {
             background: 'oklch(0.22 0.010 258)', border: '1px solid oklch(1 0 0 / 12%)',
             borderRadius: '4px', fontSize: '11px', fontFamily: 'JetBrains Mono', color: 'oklch(0.93 0.005 258)',
           }} formatter={(value: number) => [`$${value.toFixed(2)}`]} />
+
+          {/* Thesis Broken Zone — red background when price < 200 SMA */}
+          {thesisBroken && (
+            <ReferenceArea
+              x1={chartDataWithIndicators[0]?.date}
+              x2={chartDataWithIndicators[chartDataWithIndicators.length - 1]?.date}
+              fill="oklch(0.65 0.22 25 / 8%)"
+              ifOverflow="visible"
+            />
+          )}
+
+          {/* 52-Week High horizontal line */}
+          {hi52w != null && (
+            <ReferenceLine
+              y={hi52w}
+              stroke="oklch(0.65 0.22 25 / 80%)"
+              strokeDasharray="6 3"
+              strokeWidth={1}
+              label={{ value: `52W High $${hi52w.toFixed(2)}`, fontSize: 9, fill: 'oklch(0.65 0.22 25)', position: 'insideTopRight', offset: 4 }}
+            />
+          )}
 
           {/* Earnings date overlays — multi-marker from history */}
           {earningsMarkers.map((m, i) => {
@@ -277,15 +324,31 @@ function PriceChart({ ticker }: { ticker: string }) {
               label={{ value: `GEX P $${level.toFixed(0)}`, fontSize: 9, fill: 'oklch(0.65 0.22 25)', position: 'right' }} />
           ))}
 
+          {/* 50-day SMA — blue */}
+          <Line type="monotone" dataKey="sma50" stroke="oklch(0.60 0.18 250)" strokeWidth={1.5} dot={false} connectNulls />
+          {/* 200-day SMA — red (Thesis Stop) */}
+          <Line type="monotone" dataKey="sma200" stroke="oklch(0.65 0.22 25)" strokeWidth={2} dot={false} connectNulls />
+          {/* Price — cyan, on top */}
           <Line type="monotone" dataKey="close" stroke="oklch(0.80 0.15 200)" strokeWidth={1.5} dot={false} />
         </LineChart>
       </ResponsiveContainer>
 
+      {/* Thesis Broken Zone badge */}
+      {thesisBroken && (
+        <div className="flex items-center gap-2 mt-2 mb-1 px-2.5 py-1.5 rounded text-xs" style={{ background: 'oklch(0.65 0.22 25 / 12%)', border: '1px solid oklch(0.65 0.22 25 / 30%)', color: 'oklch(0.65 0.22 25)' }}>
+          <span className="font-bold">⚠ THESIS BROKEN</span>
+          <span style={{ color: 'oklch(0.55 0.010 258)' }}>Price is below 200 SMA — trend-following regime, reduce size</span>
+        </div>
+      )}
+
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-2">
+      <div className="flex items-center gap-4 mt-2 flex-wrap">
         {[
           { color: 'oklch(0.80 0.15 200)', label: 'Price' },
-          dpFloors.length > 0 ? { color: 'oklch(0.80 0.15 200)', label: 'DP Floor' } : null,
+          { color: 'oklch(0.60 0.18 250)', label: '50 SMA' },
+          { color: 'oklch(0.65 0.22 25)', label: '200 SMA (Thesis Stop)' },
+          hi52w != null ? { color: 'oklch(0.65 0.22 25 / 80%)', label: '52W High' } : null,
+          dpFloors.length > 0 ? { color: 'oklch(0.80 0.15 200 / 70%)', label: 'DP Floor' } : null,
           gexCalls.length > 0 ? { color: 'oklch(0.72 0.18 145)', label: 'GEX Call' } : null,
           gexPuts.length > 0 ? { color: 'oklch(0.65 0.22 25)', label: 'GEX Put' } : null,
           earningsMarkers.length > 0 ? { color: 'oklch(0.78 0.18 85)', label: 'Earnings' } : null,

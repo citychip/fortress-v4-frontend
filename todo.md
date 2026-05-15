@@ -15,3 +15,22 @@
 - [x] Deep-link navigation from DashboardPage roll candidate rows to AnalysisPage with ticker pre-selected
 - [x] Historical earnings overlay on chart — backend only stores next_earnings; add a /api/calendar/{ticker}/history endpoint using yfinance earnings_dates to return past earnings dates for multi-marker chart overlay
 - [x] Connection Health panel in Settings — live ping tests for IBKR sync and QuantData with latency, last-seen, and status badges
+
+## Fortress v3 Rebuild
+
+- [ ] Audit all v3.6 settings sections and catalogue every configurable field for migration
+- [ ] Audit IBKR Web API order placement endpoints (place, preview, cancel, status)
+- [ ] Rationalise and update all documentation (fortress_docs, fortress_docs_vps, README, CHANGELOG)
+- [ ] Rename project to Fortress v3 (app title, sidebar, page title, package.json)
+- [ ] Persistent 5px status bar: IBKR status, QuantData status, VIX, SPY price, market hours clock
+- [ ] Collapsed sidebar (icon-only default, expand on hover/click)
+- [ ] Morning Brief landing page (trade report full-width, portfolio snapshot strip below)
+- [ ] Migrate all v3.6 settings into Fortress v3 Settings page (strategy, universe, security, notifications, backup/restore)
+- [ ] Trade Builder page: live option chain from IBKR, GEX regime, strategy suggester, PoP calculator
+- [ ] IBKR order submission flow in Trade Builder (preview ticket, confirm dialog, submit to IBKR, status tracking)
+- [ ] Portfolio page rebuild: positions grouped by ticker, Greeks bar, P&L sparkline
+- [ ] Retire v3.6 HTML dashboard at port 8080 (keep Python backend, remove HTML frontend dependency)
+- [ ] Morning Brief indicator charts: VIX 30d sparkline, SPY price + 20/50/200 SMA, portfolio delta/theta/vega bar chart, IV rank heatmap across universe, macro regime gauge
+- [ ] Dashboard mini sparklines: per-ticker price sparkline vs key GEX levels in trade report rows
+- [ ] Analysis page indicator panel: RSI, MACD, Bollinger Bands, ATR overlaid on price chart
+- [x] Pine Script indicators on Analysis chart: 50-day SMA (blue), 200-day SMA (red), 52-week high line (red dashed), Thesis Broken Zone background (red tint when price < 200 SMA)
