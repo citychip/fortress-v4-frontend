@@ -9,7 +9,7 @@ import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
   useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
   formatDollar, regimeInfo,
-  type BriefingData, type TradeReport,
+  type BriefingData, type TradeReport, type TradeReportRollCandidate,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -132,6 +132,62 @@ function TradeReportPanel() {
           </div>
         </div>
       ))}
+
+      {/* Roll candidates */}
+      {report.roll_candidates?.slice(0, 3).map((rc: TradeReportRollCandidate, i) => {
+        const maxDte = 45;
+        const dte = rc.current_dte ?? null;
+        const dtePct = dte != null ? Math.max(0, Math.min(1, dte / maxDte)) : null;
+        const R = 14;
+        const circumference = 2 * Math.PI * R;
+        const dashOffset = dtePct != null ? circumference * (1 - dtePct) : circumference;
+        const ringColor = dte == null ? DIM : dte <= 7 ? RED : dte <= 21 ? AMBER : CYAN;
+        const urgencyColor = rc.urgency === 'URGENT' ? RED : rc.urgency === 'THIS_WEEK' ? AMBER : DIM;
+        return (
+          <div key={i} className="flex items-center gap-3 p-3 rounded border"
+            style={{ background: 'oklch(0.80 0.15 200 / 5%)', borderColor: 'oklch(0.80 0.15 200 / 20%)' }}>
+            {/* DTE countdown ring */}
+            <div className="flex-shrink-0 relative" style={{ width: 36, height: 36 }}>
+              <svg width="36" height="36" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="18" cy="18" r={R} fill="none" stroke="oklch(1 0 0 / 8%)" strokeWidth="3" />
+                {dtePct != null && (
+                  <circle cx="18" cy="18" r={R} fill="none" stroke={ringColor} strokeWidth="3"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashOffset}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+                  />
+                )}
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="font-mono-data font-bold" style={{ fontSize: 9, color: ringColor, lineHeight: 1 }}>
+                  {dte != null ? dte : '—'}
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-mono-data text-xs font-bold" style={{ color: BRIGHT }}>{rc.ticker}</span>
+                <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded"
+                  style={{ color: urgencyColor, background: `${urgencyColor}18` }}>
+                  {rc.urgency}
+                </span>
+                {rc.short_strike != null && (
+                  <span className="text-[10px] font-mono-data" style={{ color: DIM }}>@{rc.short_strike}</span>
+                )}
+                {dte != null && dte <= 7 && (
+                  <span className="text-[9px] font-mono-data px-1 py-0.5 rounded animate-pulse"
+                    style={{ color: RED, background: 'oklch(0.65 0.22 25 / 15%)' }}>EXPIRING</span>
+                )}
+              </div>
+              <div className="text-[10px] mt-0.5 truncate" style={{ color: DIM }}>
+                {rc.strategy} · {rc.expiry ?? '—'}
+                {rc.reasons?.length > 0 && ` · ${rc.reasons[0]}`}
+              </div>
+            </div>
+          </div>
+        );
+      })}
 
       {/* Exit candidates */}
       {report.exit_candidates?.slice(0, 3).map((e, i) => {

@@ -74,6 +74,8 @@ export const DEFAULT_CONFIG: AppConfig = {
 
 const STORAGE_KEY = 'fortress_v2_config';
 
+export type PrefsSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 interface ConfigContextValue {
   config: AppConfig;
   updateConfig: (patch: Partial<AppConfig>) => void;
@@ -81,6 +83,8 @@ interface ConfigContextValue {
   resetConfig: () => void;
   exportConfig: () => string;
   importConfig: (json: string) => boolean;
+  /** Server-side prefs save status — use in Settings to show sync indicator */
+  prefsSaveStatus: PrefsSaveStatus;
 }
 
 const ConfigContext = createContext<ConfigContextValue | null>(null);
@@ -193,8 +197,14 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const prefsSaveStatus: PrefsSaveStatus =
+    savePrefs.isPending ? 'saving'
+    : savePrefs.isSuccess ? 'saved'
+    : savePrefs.isError ? 'error'
+    : 'idle';
+
   return (
-    <ConfigContext.Provider value={{ config, updateConfig, updateStrategy, resetConfig, exportConfig, importConfig }}>
+    <ConfigContext.Provider value={{ config, updateConfig, updateStrategy, resetConfig, exportConfig, importConfig, prefsSaveStatus }}>
       {children}
     </ConfigContext.Provider>
   );

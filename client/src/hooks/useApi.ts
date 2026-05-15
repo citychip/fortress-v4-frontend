@@ -297,11 +297,24 @@ export interface TradeReportExitCandidate {
   note: string;
 }
 
+export interface TradeReportRollCandidate {
+  ticker: string;
+  strategy: string | null;
+  expiry: string | null;
+  short_strike: number | null;
+  current_dte: number | null;   // days to expiry for the roll window
+  current_delta: number | null;
+  urgency: string;              // "URGENT" | "THIS_WEEK" | "WATCH"
+  reasons: string[];
+  synthesized_id: string;
+  action: string;
+}
+
 export interface TradeReport {
   as_of: string;
   macro: { vix: number; regime: string; vix_state: string };
   entry_candidates: TradeReportCandidate[];
-  roll_candidates: unknown[];
+  roll_candidates: TradeReportRollCandidate[];
   stop_loss_alerts: TradeReportStopLoss[];
   exit_candidates: TradeReportExitCandidate[];
   post_earnings_candidates: unknown[];

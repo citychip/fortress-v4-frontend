@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useConfig, DEFAULT_CONFIG } from '@/contexts/ConfigContext';
+import { useConfig, DEFAULT_CONFIG, type PrefsSaveStatus } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { useHealth, useServerSettings, useTraderPresets, useUniverse, useUniverseActions, type TraderPreset } from '@/hooks/useApi';
 import { toast } from 'sonner';
@@ -997,13 +997,38 @@ function ServerSettingsSection() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+function SyncBadge({ status }: { status: PrefsSaveStatus }) {
+  if (status === 'idle') return null;
+  const styles: Record<PrefsSaveStatus, { text: string; color: string; bg: string; border: string }> = {
+    idle:   { text: '',           color: '',                          bg: '',                            border: '' },
+    saving: { text: 'Saving…',   color: 'oklch(0.80 0.15 200)',      bg: 'oklch(0.80 0.15 200 / 10%)',  border: 'oklch(0.80 0.15 200 / 30%)' },
+    saved:  { text: 'Saved ✓',    color: 'oklch(0.72 0.18 145)',      bg: 'oklch(0.72 0.18 145 / 10%)',  border: 'oklch(0.72 0.18 145 / 30%)' },
+    error:  { text: 'Sync failed', color: 'oklch(0.65 0.22 25)',      bg: 'oklch(0.65 0.22 25 / 10%)',   border: 'oklch(0.65 0.22 25 / 30%)' },
+  };
+  const s = styles[status];
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono-data font-semibold"
+      style={{ color: s.color, background: s.bg, border: `1px solid ${s.border}` }}
+    >
+      {status === 'saving' && (
+        <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: s.color }} />
+      )}
+      {s.text}
+    </span>
+  );
+}
+
 export default function SettingsPage() {
+  const { prefsSaveStatus } = useConfig();
   return (
     <div className="min-h-screen">
       <PageHeader
         title="Settings"
         subtitle="All configuration — API, tickers, strategy parameters. Stored locally in your browser."
-      />
+      >
+        <SyncBadge status={prefsSaveStatus} />
+      </PageHeader>
 
       <div className="p-6 space-y-4 max-w-3xl">
         {/* Important notice */}
