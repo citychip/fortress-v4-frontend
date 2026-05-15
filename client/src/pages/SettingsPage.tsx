@@ -5,10 +5,10 @@
  * Supports export (without token) and import for backup/restore.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useConfig, DEFAULT_CONFIG, type PrefsSaveStatus } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
-import { useHealth, useServerSettings, useTraderPresets, useUniverse, useUniverseActions, type TraderPreset } from '@/hooks/useApi';
+import { useHealth, useServerSettings, useTraderPresets, useUniverse, useUniverseActions, apiFetch, type TraderPreset, type IbkrStatus } from '@/hooks/useApi';
 import { toast } from 'sonner';
 import {
   Save,
@@ -29,6 +29,11 @@ import {
   TrendingUp,
   Star,
   Ban,
+  Activity,
+  Wifi,
+  WifiOff,
+  Clock,
+  Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -993,9 +998,224 @@ function ServerSettingsSection() {
       )}
     </Section>
   );
+}// ─── Connection Health Section ──────────────────────────────────────────────
+
+type IbkrCheckResult = {
+  ok: boolean;
+  latencyMs: number | null;
+  backend: string | null;
+  account: string | null;
+  opra: boolean | null;
+  webApiConnected: boolean | null;
+  error: string | null;
+  checkedAt: string | null;
+};
+
+type QuantDataCheckResult = {
+  ok: boolean;
+  latencyMs: number | null;
+  message: string | null;
+  ivRank: number | null;
+  error: string | null;
+  checkedAt: string | null;
+};
+
+function StatusDot({ ok, pending }: { ok: boolean | null; pending: boolean }) {
+  if (pending) return <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: 'oklch(0.78 0.18 85)' }} />;
+  if (ok === null) return <span className="inline-block w-2 h-2 rounded-full" style={{ background: 'oklch(0.45 0.010 258)' }} />;
+  return <span className="inline-block w-2 h-2 rounded-full" style={{ background: ok ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }} />;
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function ConnectionHealthSection() {
+  const { config } = useConfig();
+  const [ibkrResult, setIbkrResult] = useState<IbkrCheckResult | null>(null);
+  const [ibkrPending, setIbkrPending] = useState(false);
+  const [qdResult, setQdResult] = useState<QuantDataCheckResult | null>(null);
+  const [qdPending, setQdPending] = useState(false);
+  const ibkrAbort = useRef<AbortController | null>(null);
+  const qdAbort = useRef<AbortController | null>(null);
+
+  async function testIbkr() {
+    if (!config.apiToken) { toast.error('Set your API token first'); return; }
+    ibkrAbort.current?.abort();
+    ibkrAbort.current = new AbortController();
+    setIbkrPending(true);
+    setIbkrResult(null);
+    const t0 = Date.now();
+    try {
+      const data = await apiFetch<IbkrStatus>(config.apiUrl, config.apiToken, '/api/ibkr/capability?refresh=1');
+      const latencyMs = Date.now() - t0;
+      const wa = data.web_api;
+      setIbkrResult({
+        ok: wa?.session_status?.established === true,
+        latencyMs,
+        backend: data.active_backend ?? null,
+        account: wa?.account ?? null,
+        opra: wa?.opra_subscribed ?? null,
+        webApiConnected: wa?.session_status?.connected ?? null,
+        error: wa?.error ?? null,
+        checkedAt: data.checked_at ?? null,
+      });
+    } catch (e) {
+      setIbkrResult({ ok: false, latencyMs: Date.now() - t0, backend: null, account: null, opra: null, webApiConnected: null, error: String(e), checkedAt: null });
+    } finally {
+      setIbkrPending(false);
+    }
+  }
+
+  async function testQuantData() {
+    if (!config.apiToken) { toast.error('Set your API token first'); return; }
+    qdAbort.current?.abort();
+    qdAbort.current = new AbortController();
+    setQdPending(true);
+    setQdResult(null);
+    const t0 = Date.now();
+    try {
+      const data = await apiFetch<{ ok: boolean; message: string; iv_rank: number | null; error?: string }>(
+        config.apiUrl, config.apiToken, '/api/settings/test_quantdata', { method: 'POST' }
+      );
+      const latencyMs = Date.now() - t0;
+      setQdResult({ ok: data.ok, latencyMs, message: data.message ?? null, ivRank: data.iv_rank ?? null, error: data.error ?? null, checkedAt: new Date().toISOString() });
+    } catch (e) {
+      setQdResult({ ok: false, latencyMs: Date.now() - t0, message: null, ivRank: null, error: String(e), checkedAt: new Date().toISOString() });
+    } finally {
+      setQdPending(false);
+    }
+  }
+
+  const GREEN  = 'oklch(0.72 0.18 145)';
+  const RED    = 'oklch(0.65 0.22 25)';
+  const AMBER  = 'oklch(0.78 0.18 85)';
+  const CYAN   = 'oklch(0.80 0.15 200)';
+  const DIM    = 'oklch(0.55 0.010 258)';
+  const BRIGHT = 'oklch(0.93 0.005 258)';
+
+  return (
+    <Section title="Connection Health" description="Live ping tests for IBKR Web API and QuantData. Results are not cached.">
+      <div className="space-y-4">
+
+        {/* IBKR Web API */}
+        <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <StatusDot ok={ibkrResult?.ok ?? null} pending={ibkrPending} />
+              <Wifi className="w-4 h-4" style={{ color: CYAN }} />
+              <span className="font-display text-sm" style={{ color: BRIGHT }}>IBKR Web API</span>
+              {ibkrResult?.latencyMs != null && (
+                <span className="font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{ color: DIM, background: 'oklch(1 0 0 / 5%)' }}>
+                  {ibkrResult.latencyMs}ms
+                </span>
+              )}
+            </div>
+            <button
+              onClick={testIbkr}
+              disabled={ibkrPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono-data transition-all disabled:opacity-50"
+              style={{ background: 'oklch(0.80 0.15 200 / 12%)', color: CYAN, border: '1px solid oklch(0.80 0.15 200 / 30%)' }}
+            >
+              <Activity className="w-3 h-3" />
+              {ibkrPending ? 'Testing…' : 'Run Test'}
+            </button>
+          </div>
+
+          {ibkrResult && (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {[
+                { label: 'Status', value: ibkrResult.ok ? 'CONNECTED' : 'DISCONNECTED', color: ibkrResult.ok ? GREEN : RED },
+                { label: 'Backend', value: ibkrResult.backend ?? '—', color: CYAN },
+                { label: 'Account', value: ibkrResult.account ?? '—', color: BRIGHT },
+                { label: 'OPRA', value: ibkrResult.opra === true ? 'Subscribed' : ibkrResult.opra === false ? 'Not subscribed' : '—', color: ibkrResult.opra ? GREEN : AMBER },
+              ].map(item => (
+                <div key={item.label} className="rounded p-2" style={{ background: 'oklch(0.22 0.010 258)' }}>
+                  <div className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: DIM }}>{item.label}</div>
+                  <div className="font-mono-data text-xs font-semibold" style={{ color: item.color }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {ibkrResult?.error && (
+            <div className="mt-2 text-[10px] font-mono-data px-2 py-1.5 rounded" style={{ color: RED, background: 'oklch(0.65 0.22 25 / 10%)' }}>
+              {ibkrResult.error}
+            </div>
+          )}
+
+          {ibkrResult?.checkedAt && (
+            <div className="flex items-center gap-1 mt-2 text-[9px]" style={{ color: DIM }}>
+              <Clock className="w-3 h-3" />
+              Checked at {new Date(ibkrResult.checkedAt).toLocaleTimeString()}
+            </div>
+          )}
+
+          {!ibkrResult && !ibkrPending && (
+            <p className="text-[11px]" style={{ color: DIM }}>Click Run Test to check IBKR Web API connectivity.</p>
+          )}
+        </div>
+
+        {/* QuantData */}
+        <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <StatusDot ok={qdResult?.ok ?? null} pending={qdPending} />
+              <Database className="w-4 h-4" style={{ color: AMBER }} />
+              <span className="font-display text-sm" style={{ color: BRIGHT }}>QuantData API</span>
+              {qdResult?.latencyMs != null && (
+                <span className="font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{ color: DIM, background: 'oklch(1 0 0 / 5%)' }}>
+                  {qdResult.latencyMs}ms
+                </span>
+              )}
+            </div>
+            <button
+              onClick={testQuantData}
+              disabled={qdPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono-data transition-all disabled:opacity-50"
+              style={{ background: 'oklch(0.78 0.18 85 / 12%)', color: AMBER, border: '1px solid oklch(0.78 0.18 85 / 30%)' }}
+            >
+              <Activity className="w-3 h-3" />
+              {qdPending ? 'Testing…' : 'Run Test'}
+            </button>
+          </div>
+
+          {qdResult && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Status', value: qdResult.ok ? 'OK' : 'FAILED', color: qdResult.ok ? GREEN : RED },
+                  { label: 'SPY IV Rank', value: qdResult.ivRank != null ? `${qdResult.ivRank.toFixed(1)}` : '—', color: qdResult.ok ? CYAN : DIM },
+                ].map(item => (
+                  <div key={item.label} className="rounded p-2" style={{ background: 'oklch(0.22 0.010 258)' }}>
+                    <div className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: DIM }}>{item.label}</div>
+                    <div className="font-mono-data text-xs font-semibold" style={{ color: item.color }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              {qdResult.message && (
+                <div className="text-[10px] font-mono-data px-2 py-1.5 rounded"
+                  style={{ color: qdResult.ok ? GREEN : RED, background: qdResult.ok ? 'oklch(0.72 0.18 145 / 8%)' : 'oklch(0.65 0.22 25 / 10%)' }}>
+                  {qdResult.message}
+                </div>
+              )}
+            </div>
+          )}
+
+          {qdResult?.checkedAt && (
+            <div className="flex items-center gap-1 mt-2 text-[9px]" style={{ color: DIM }}>
+              <Clock className="w-3 h-3" />
+              Checked at {new Date(qdResult.checkedAt).toLocaleTimeString()}
+            </div>
+          )}
+
+          {!qdResult && !qdPending && (
+            <p className="text-[11px]" style={{ color: DIM }}>Click Run Test to verify QuantData credentials (Settings &gt; Security must be configured).</p>
+          )}
+        </div>
+
+      </div>
+    </Section>
+  );
+}
+
+// ─── Sync badge ─────────────────────────────────────────────────────────────────
 
 function SyncBadge({ status }: { status: PrefsSaveStatus }) {
   if (status === 'idle') return null;
@@ -1046,6 +1266,7 @@ export default function SettingsPage() {
 
         <GeneralSection />
         <ApiSection />
+        <ConnectionHealthSection />
         <TickerSection />
         <StrategySection />
         <RefreshSection />
