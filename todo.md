@@ -69,3 +69,6 @@
 - [x] Morning Brief: fix "PREV LIQ" label — renamed to "MACRO REGIME" with proper color coding
 - [x] Morning Brief: add market status pill (PRE / OPEN / AH / CLOSED) to page header
 - [x] Morning Brief: make trade report row action links more prominent (larger click targets, Analyse → button per entry row)
+
+## Deploy Hardening
+- [x] Create deploy.sh script (always uses dist/public/) and add pnpm deploy command to package.json
