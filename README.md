@@ -1,6 +1,6 @@
-# Fortress v2 — Options Trading Dashboard
+# Fortress v3 — Options Trading Dashboard
 
-A fully configurable, browser-based dashboard for managing an options portfolio against live market data. Built with React 19, Tailwind CSS 4, and Recharts. Connects to the Fortress REST API server (FastAPI/Python, port 8080) via an nginx same-origin proxy on port 3000.
+A fully configurable, browser-based options portfolio management terminal. Built with React 19, Tailwind CSS 4, tRPC 11, Drizzle ORM, and Recharts. Connects to the Fortress REST API server (FastAPI/Python, port 8080) via an nginx same-origin proxy on port 3000. Includes Manus OAuth authentication, a MySQL/TiDB database layer, and a full server-side Express/tRPC backend.
 
 **Live instance:** http://76.13.138.194:3000
 
@@ -8,7 +8,7 @@ A fully configurable, browser-based dashboard for managing an options portfolio 
 
 ## Overview
 
-Fortress v2 implements the four-layer morning workflow for options portfolio management:
+Fortress v3 implements the four-layer morning workflow for options portfolio management:
 
 | Layer | Tab | What it does |
 |---|---|---|
@@ -17,7 +17,7 @@ Fortress v2 implements the four-layer morning workflow for options portfolio man
 | 3 — Position Evaluation | **Positions** | Per-leg evaluation: delta breach, DTE roll window, stop-loss, concentration alerts |
 | 4 — Order Execution | **Orders** | Prioritised order list: URGENT → THIS WEEK → WATCH; alert snooze/dismiss; pending orders panel |
 
-Additional tabs: **Candidates** (IV rank screener with pre-trade gate), **P&L** (sortable/filterable position P&L), **Analysis** (per-ticker chart + levels + order flow), **Earnings** (calendar with Outlook sync), **Journal** (trade log with realised P&L), **Scripts** (workflow script runner), **Settings** (full server + local config).
+Additional tabs: **Candidates** (IV rank screener with pre-trade gate), **Trade Builder** (GEX context, strategy suggester, PoP calculator, pending-order queue), **P&L** (sortable/filterable position P&L), **Analysis** (per-ticker chart + levels + order flow + Pine Script indicators), **Morning Brief** (daily trade report with regime context, IV heatmap, Greeks panel), **Strategy Workspace** (trader persona, regime playbook, strategy parameters, payoff sandbox), **Earnings** (calendar with Outlook sync), **Journal** (trade log with realised P&L), **Scripts** (workflow script runner), **Settings** (full server + local config).
 
 ---
 
@@ -279,14 +279,17 @@ client/
     pages/
       DashboardPage.tsx     ← Layer 1: Trade Report, regime gate, account metrics, hedge coverage
       PositionsPage.tsx     ← Layer 3: Per-leg evaluation with delta/DTE/concentration alerts
-      MarketIntelPage.tsx   ← Layer 2: Per-ticker GEX/DP/Drift
+      MarketIntelPage.tsx   ← Layer 2: Per-ticker GEX/DP/Drift with hydration cache overlay
       OrdersPage.tsx        ← Layer 4: URGENT/THIS WEEK/WATCH + alert management + pending orders
       CandidatesPage.tsx    ← IV rank screener with pre-trade gate overlay
+      TradeBuilderPage.tsx  ← GEX/market context, strategy suggester, PoP calculator, order queue
       PnLPage.tsx           ← Sortable/filterable unrealised P&L from /api/positions
-      AnalysisPage.tsx      ← Per-ticker chart + levels + order flow + TradingView link
+      AnalysisPage.tsx      ← Per-ticker chart + levels + order flow + Pine Script indicators (SMA/BB/RSI/MACD)
+      MorningBriefPage.tsx  ← Daily trade report, IV heatmap, SPY chart, portfolio Greeks panel
+      StrategyPage.tsx      ← Strategy Workspace: persona, regime playbook, parameters, payoff sandbox
       EarningsPage.tsx      ← Earnings calendar with countdown, CRUD, Outlook Calendar sync
       JournalPage.tsx       ← Trade journal with realised P&L metrics and auto-suggest
-      ScriptsPage.tsx       ← Workflow script runner (10 scripts)
+      ScriptsPage.tsx       ← Workflow script runner (10 scripts, terminal output)
       SettingsPage.tsx      ← Server settings sync, trader presets, universe manager, IBKR status
     components/
       PageHeader.tsx        ← Shared page header with refresh button
@@ -295,13 +298,20 @@ client/
       UrgencyBadge.tsx      ← Order urgency badge (URGENT/THIS WEEK/WATCH)
       EmptyState.tsx        ← No-data / no-config / error states
       PendingOrdersPanel.tsx ← Queued trade setups (localStorage)
+      DashboardLayout.tsx   ← Sidebar layout with collapsed icon-only mode
     contexts/
-      ConfigContext.tsx     ← Local settings + localStorage persistence + migration
+      ConfigContext.tsx     ← Full strategy config: persona, strategies, risk, signal mode, backup/restore
       PendingOrdersContext.tsx ← Pending trade setups (localStorage)
     hooks/
       useApi.ts             ← All API hooks + TypeScript types
     lib/
       utils.ts              ← cn() and shared helpers
+server/
+  routers.ts              ← tRPC procedures (auth + features)
+  db.ts                   ← Drizzle query helpers
+  sandbox.payoff.test.ts  ← 23 vitest unit tests for payoff math helpers
+drizzle/
+  schema.ts               ← Database tables & types
 ```
 
 ---
@@ -338,6 +348,15 @@ client/
 | v2.7 | 2026-05-13 | Fixed AnalysisPage DP floor/ceiling derivation from dark_pool.floors[] array |
 | v2.8 | 2026-05-14 | P&L tab: full sorting (ticker/P&L/pct/DTE/qty/marketValue) and filtering (ticker/side/right/P&L sign) |
 | v2.9 | 2026-05-14 | Tier 1+2: Trade Report, Pre-Trade Gate, Alert CRUD, Earnings Calendar, IBKR Live Preview, Server Settings, Universe Manager, Script Runner, Trade Journal, Chart Levels + Order Flow, SPY Hedge widget |
+| v3.0 | 2026-05-14 | Fortress v3 rebuild: tRPC + Drizzle ORM + Manus OAuth backend; persistent 5px status bar; collapsed icon-only sidebar; Morning Brief landing page; full Settings migration |
+| v3.1 | 2026-05-14 | Morning Brief: IV heatmap fallback, enriched trade report rows (IVR/GEX/bias badges), regime strip with gamma flip price, beta-weighted delta, theta efficiency, taller SPY chart, market status pill |
+| v3.2 | 2026-05-14 | Dashboard: hydrated Macro Regime Gate (GEX/DP/drift from SPY intel), concentration-locked entry rows, hedge coverage target fix, Send Briefing owner notification |
+| v3.3 | 2026-05-14 | Trade Builder: ticker asset regime label, GEX/DP metric hydration, pre-trade advisory banner, expiry dates on suggested setups. Dashboard: Macro Regime Gate data-pipe fixes |
+| v3.4 | 2026-05-14 | Analysis page: Net Drift NaN fix, GEX Call Wall blank fix, Order Flow empty-state, SPY Hedge → per-ticker Position Risk Context panel |
+| v3.5 | 2026-05-15 | Portfolio view: theta sign fix, alert badge counts, Auto-Roll button. Orders: JSON copy button on URGENT rows. Script Runner: terminal output, exit code badge, duration. Morning Brief: suppress stop-loss tickers from entry candidates. Regime labels standardized to title-case |
+| v3.6 | 2026-05-15 | Hydration pipeline: Python scripts POST GEX/DP/drift to /api/manage/hydrate-asset after execution; Market Intel overlays cached values with "Cached" badge |
+| v3.7 | 2026-05-15 | Strategy Workspace: Trader Persona cards (5), Volatility Regime Playbook matrix (IV×GEX), full strategy parameters grid, signal mode (Strict/Advisory/Sandbox), backup/restore. Trade Builder: signal mode advisory banner wired in |
+| v3.7.1 | 2026-05-16 | Strategy Sandbox (Zone 3): interactive DTE slider (7–120d) + Delta slider (0.05–0.50Δ), Recharts payoff diagram with GEX Call/Put Wall + DP Floor/Ceiling reference lines, breakeven proximity warning badge, 6-metric panel (PoP, Max Profit, Max Loss, θ/day, Gamma Risk score, θ Efficiency). Export to Trade Builder passes sandbox params as query params. 23 vitest unit tests for normalCDF/calcPoP/buildPayoffData |
 
 ---
 
