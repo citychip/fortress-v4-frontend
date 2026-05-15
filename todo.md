@@ -129,9 +129,9 @@
 - [ ] StrategyPage Zone 2: Volatility Regime Playbook matrix (IV×GEX grid), parameter override sliders (delta buffer, DTE, profit target, stop loss)
 - [ ] StrategyPage Zone 2b: Full Strategy Parameters collapsible grid (Entry Rules, Sizing, Income, Volatility, Directional, Protection, Other)
 - [ ] StrategyPage Zone 3: Live candidate screener table filtered by active strategy rules
-- [ ] StrategyPage Zone 3b: Theoretical payoff curve with GEX wall overlays and breakeven warning badge
-- [ ] StrategyPage Zone 3c: Sandbox metrics card (PoP%, theta/margin efficiency, gamma risk score)
-- [ ] StrategyPage Zone 3d: Export to Trade Builder button
+  - [x] StrategyPage Zone 3b: Theoretical payoff curve with GEX wall overlays and breakeven warning badge
+  - [x] StrategyPage Zone 3c: Sandbox metrics card (PoP%, theta/margin efficiency, gamma risk score)
+  - [x] StrategyPage Zone 3d: Export to Trade Builder button (now passes sandbox ticker/strategy/DTE/delta as query params)
 - [ ] Backup/Restore: export strategy profile as JSON download, import from JSON file, reset to defaults
 - [ ] Wire signal mode into TradeBuilderPage (advisory warning vs hard block vs sandbox)
 - [ ] Register /strategy route in App.tsx and add sidebar nav item

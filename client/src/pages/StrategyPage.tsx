@@ -15,7 +15,14 @@ import {
   DEFAULT_STRATEGY, DEFAULT_TRADER_PROFILE,
   downloadStrategyProfile,
 } from '@/contexts/ConfigContext';
-import { useMarketIntelligence } from '@/hooks/useApi';
+import { useMarketIntelligence, useCandidates } from '@/hooks/useApi';
+import {
+  ResponsiveContainer, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
+} from 'recharts';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -262,6 +269,132 @@ function generateNarrative(
     }.`;
 }
 
+// ─── Color constants (sandbox) ──────────────────────────────────────────────
+const SB_CYAN   = 'oklch(0.80 0.15 200)';
+const SB_GREEN  = 'oklch(0.72 0.18 145)';
+const SB_AMBER  = 'oklch(0.78 0.18 85)';
+const SB_RED    = 'oklch(0.65 0.22 25)';
+const SB_DIM    = 'oklch(0.55 0.010 258)';
+const SB_BRIGHT = 'oklch(0.93 0.005 258)';
+const SB_CARD   = 'oklch(0.17 0.010 258)';
+const SB_BORDER = 'oklch(1 0 0 / 9%)';
+
+// ─── Payoff math helpers ──────────────────────────────────────────────────────
+function normalCDF(x: number): number {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  const t = 1 / (1 + p * Math.abs(x));
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return 0.5 * (1 + sign * y);
+}
+
+function calcPoP(price: number, strike: number, iv: number, dte: number): number {
+  if (price <= 0 || strike <= 0 || iv <= 0 || dte <= 0) return 0;
+  const T = dte / 365;
+  const d2 = (Math.log(price / strike) - 0.5 * iv * iv * T) / (iv * Math.sqrt(T));
+  return Math.max(0, Math.min(1, normalCDF(d2)));
+}
+
+/**
+ * Build payoff curve data points for a short put strategy.
+ * x-axis: underlying price at expiry (±3σ range)
+ * y-axis: P&L in $ per contract (credit received minus intrinsic loss)
+ */
+function buildPayoffData(
+  spot: number,
+  delta: number,   // target short delta (0.05–0.50)
+  dte: number,     // days to expiry
+  iv: number,      // decimal IV, e.g. 0.30
+  strategyId: string,
+): { price: number; pnl: number }[] {
+  if (spot <= 0 || iv <= 0 || dte <= 0) return [];
+
+  const T = dte / 365;
+  const sigma = iv;
+  // Strike approximation from delta using Black-Scholes inverse
+  // For a short put at target delta: K ≈ S * exp(N^{-1}(delta) * σ√T - 0.5σ²T)
+  // We use a numerical approach: find K such that N(-d1) ≈ delta
+  // Simple approximation: K = S * exp(z * sigma * sqrt(T)) where z = N^{-1}(delta)
+  // Using a simple z-score table approximation for delta
+  const zTable: [number, number][] = [
+    [0.05, -1.645], [0.10, -1.282], [0.15, -1.036], [0.16, -0.994],
+    [0.20, -0.842], [0.25, -0.674], [0.30, -0.524], [0.35, -0.385],
+    [0.40, -0.253], [0.45, -0.126], [0.50, 0.0],
+  ];
+  let z = -0.842; // default 0.20 delta
+  for (let i = 0; i < zTable.length - 1; i++) {
+    const [d1, z1] = zTable[i];
+    const [d2, z2] = zTable[i + 1];
+    if (delta >= d1 && delta <= d2) {
+      const t = (delta - d1) / (d2 - d1);
+      z = z1 + t * (z2 - z1);
+      break;
+    }
+    if (delta > zTable[zTable.length - 1][0]) z = 0;
+    if (delta < zTable[0][0]) z = -2.0;
+  }
+
+  const strike = spot * Math.exp(z * sigma * Math.sqrt(T) - 0.5 * sigma * sigma * T);
+  // Estimated credit: roughly IV * sqrt(T/365) * spot * delta (simplified)
+  const credit = Math.max(0.5, spot * sigma * Math.sqrt(T) * 0.4 * delta * 100) / 100;
+  const creditPerContract = Math.round(credit * 100) / 100;
+
+  // Price range: spot ± 3σ
+  const rangeWidth = spot * sigma * Math.sqrt(T) * 3;
+  const priceMin = Math.max(1, spot - rangeWidth);
+  const priceMax = spot + rangeWidth;
+  const steps = 60;
+  const stepSize = (priceMax - priceMin) / steps;
+
+  const isSpread = ['IRON_CONDOR', 'BULL_PUT_SPREAD', 'BEAR_CALL_SPREAD', 'BULL_CALL_SPREAD', 'BEAR_PUT_SPREAD', 'IRON_BUTTERFLY', 'JADE_LIZARD'].includes(strategyId);
+  const wingWidth = spot * 0.04; // ~4% wing width
+
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const price = priceMin + i * stepSize;
+    let pnl: number;
+
+    if (strategyId === 'IRON_CONDOR' || strategyId === 'IRON_BUTTERFLY') {
+      // Short put + short call, both with wings
+      const callStrike = spot * Math.exp(-z * sigma * Math.sqrt(T) - 0.5 * sigma * sigma * T);
+      const putLoss = Math.max(0, strike - price) * 100;
+      const callLoss = Math.max(0, price - callStrike) * 100;
+      const maxLoss = wingWidth * 100;
+      pnl = creditPerContract * 2 * 100 - Math.min(putLoss + callLoss, maxLoss);
+    } else if (strategyId === 'SHORT_STRANGLE' || strategyId === 'SHORT_STRADDLE') {
+      const callStrike = spot * Math.exp(-z * sigma * Math.sqrt(T) - 0.5 * sigma * sigma * T);
+      const putLoss = Math.max(0, strike - price) * 100;
+      const callLoss = Math.max(0, price - callStrike) * 100;
+      pnl = creditPerContract * 2 * 100 - putLoss - callLoss;
+    } else if (strategyId === 'BULL_PUT_SPREAD') {
+      const longStrike = strike - wingWidth;
+      const putLoss = Math.max(0, strike - price) * 100;
+      const longGain = Math.max(0, longStrike - price) * 100;
+      pnl = creditPerContract * 100 - putLoss + longGain;
+    } else if (strategyId === 'COVERED_CALL') {
+      const callStrike = spot * Math.exp(-z * sigma * Math.sqrt(T) - 0.5 * sigma * sigma * T);
+      const callLoss = Math.max(0, price - callStrike) * 100;
+      pnl = creditPerContract * 100 - callLoss;
+    } else if (strategyId === 'COLLAR') {
+      const callStrike = spot * Math.exp(-z * sigma * Math.sqrt(T) - 0.5 * sigma * sigma * T);
+      const putGain = Math.max(0, strike - price) * 100;
+      const callLoss = Math.max(0, price - callStrike) * 100;
+      pnl = creditPerContract * 100 + putGain - callLoss;
+    } else {
+      // Default: short put (CSP, PMCC, JADE_LIZARD, etc.)
+      const putLoss = Math.max(0, strike - price) * 100;
+      if (isSpread) {
+        const longStrike = strike - wingWidth;
+        const longGain = Math.max(0, longStrike - price) * 100;
+        pnl = creditPerContract * 100 - putLoss + longGain;
+      } else {
+        pnl = creditPerContract * 100 - putLoss;
+      }
+    }
+    return { price: Math.round(price * 100) / 100, pnl: Math.round(pnl * 100) / 100 };
+  });
+}
+
 // ─── Parameter Row Component ──────────────────────────────────────────────────
 function ParamRow({
   label, tooltip, value, onChange, min, max, step, format,
@@ -390,14 +523,77 @@ export default function StrategyPage() {
     toast.success('Strategy reset to defaults');
   }, [resetStrategyToDefaults]);
 
-  // Export to Trade Builder
-  const handleExportToTradeBuilder = useCallback(() => {
-    const cell = REGIME_CELLS.find(c => c.id === effectiveRegimeCell);
-    const firstStrategy = cell?.strategies[0] ?? traderProfile.activeStrategies[0] ?? 'CSP';
-    navigate(`/trade-builder?strategy=${encodeURIComponent(firstStrategy)}&mode=${traderProfile.signalMode}`);
-  }, [effectiveRegimeCell, traderProfile, navigate]);
-
   const currentSignalMode = SIGNAL_MODES.find(m => m.id === traderProfile.signalMode) ?? SIGNAL_MODES[1];
+
+  // ── Zone 3: Sandbox state ─────────────────────────────────────────────────
+  const { data: candidatesData } = useCandidates();
+  const candidateTickers = useMemo(() =>
+    (candidatesData?.rows ?? []).filter(r => r.can_trade).map(r => r.ticker).slice(0, 20),
+    [candidatesData],
+  );
+  const [sandboxTicker, setSandboxTicker] = useState<string>('');
+  const [sandboxStrategy, setSandboxStrategy] = useState<string>(
+    traderProfile.activeStrategies[0] ?? 'CSP',
+  );
+  const [sandboxDte, setSandboxDte] = useState<number>(strategy.targetDte ?? 45);
+  const [sandboxDelta, setSandboxDelta] = useState<number>(strategy.deltaAlertThreshold ?? 0.30);
+
+  // Effective ticker: user pick or first candidate or fallback 'SPY'
+  const effectiveTicker = sandboxTicker || candidateTickers[0] || 'SPY';
+
+  // Export to Trade Builder — passes sandbox selections as query params
+  const handleExportToTradeBuilder = useCallback(() => {
+    const params = new URLSearchParams({
+      strategy: sandboxStrategy || traderProfile.activeStrategies[0] || 'CSP',
+      mode: traderProfile.signalMode,
+      ticker: effectiveTicker,
+      dte: String(sandboxDte),
+      delta: String(sandboxDelta),
+    });
+    navigate(`/trade-builder?${params.toString()}`);
+  }, [sandboxStrategy, sandboxDte, sandboxDelta, effectiveTicker, traderProfile, navigate]);
+
+  // Market intel for the sandbox ticker
+  const { data: sbIntel, loading: sbLoading } = useMarketIntelligence(effectiveTicker);
+  const sbSpot = sbIntel?.current_price ?? 0;
+  const sbIv = useMemo(() => {
+    const candidate = candidatesData?.rows?.find(r => r.ticker === effectiveTicker);
+    return candidate ? candidate.current_iv / 100 : 0.30;
+  }, [candidatesData, effectiveTicker]);
+  const sbGexCall = sbIntel?.regime?.gex_call_wall ?? sbIntel?.gex?.call_wall ?? null;
+  const sbGexPut  = sbIntel?.regime?.gex_put_wall  ?? sbIntel?.gex?.put_wall  ?? null;
+  const sbDpFloor = sbIntel?.regime?.dp_floor ?? null;
+  const sbDpCeil  = sbIntel?.regime?.dp_ceiling ?? null;
+
+  // Payoff curve
+  const payoffData = useMemo(() =>
+    buildPayoffData(sbSpot, sandboxDelta, sandboxDte, sbIv, sandboxStrategy),
+    [sbSpot, sandboxDelta, sandboxDte, sbIv, sandboxStrategy],
+  );
+
+  // Derived sandbox metrics
+  const sandboxMetrics = useMemo(() => {
+    if (!payoffData.length || sbSpot <= 0) return null;
+    const maxPnl = Math.max(...payoffData.map(d => d.pnl));
+    const minPnl = Math.min(...payoffData.map(d => d.pnl));
+    // Breakeven: price where pnl crosses 0
+    let breakeven: number | null = null;
+    for (let i = 1; i < payoffData.length; i++) {
+      if (payoffData[i - 1].pnl >= 0 && payoffData[i].pnl < 0) {
+        const ratio = payoffData[i - 1].pnl / (payoffData[i - 1].pnl - payoffData[i].pnl);
+        breakeven = payoffData[i - 1].price + ratio * (payoffData[i].price - payoffData[i - 1].price);
+        break;
+      }
+    }
+    // PoP: probability that price > breakeven at expiry
+    const pop = breakeven != null ? calcPoP(sbSpot, breakeven, sbIv, sandboxDte) : null;
+    // Theta estimate: max credit / DTE
+    const thetaEst = maxPnl > 0 ? -(maxPnl / sandboxDte) : null;
+    return { maxPnl, minPnl, breakeven, pop, thetaEst };
+  }, [payoffData, sbSpot, sbIv, sandboxDte]);
+
+  // All strategy options for sandbox selector
+  const allStrategyOptions = STRATEGY_GROUPS.flatMap(g => g.items);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -771,44 +967,322 @@ export default function StrategyPage() {
             );
           })()}
 
-          {/* Sandbox Metrics */}
-          <div className="bg-zinc-900 border border-white/10 rounded-xl p-4">
-            <h3 className="text-xs font-semibold text-zinc-300 mb-3">Sandbox Metrics</h3>
+          {/* ─── Interactive Strategy Sandbox ─────────────────────────── */}
+          <div className="rounded-xl border p-4 space-y-4" style={{ background: SB_CARD, borderColor: SB_BORDER }}>
+            {/* Header */}
+            <div className="flex items-center gap-2">
+              <BarChart2 className="w-4 h-4" style={{ color: SB_CYAN }} />
+              <h3 className="font-display text-sm" style={{ color: SB_BRIGHT }}>Payoff Sandbox</h3>
+              <span className="font-mono-data text-[10px] ml-auto" style={{ color: SB_DIM }}>theoretical — not financial advice</span>
+            </div>
+
+            {/* Controls row */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-zinc-800/50 rounded-lg p-3">
-                <p className="text-[10px] text-zinc-500 mb-1">Target PoP</p>
-                <p className="text-lg font-mono text-emerald-400">
-                  {strategy.deltaAlertThreshold < 0.20 ? '≥85%' :
-                   strategy.deltaAlertThreshold < 0.30 ? '≥80%' :
-                   strategy.deltaAlertThreshold < 0.40 ? '≥75%' : '≥70%'}
-                </p>
-                <p className="text-[10px] text-zinc-500">at {strategy.deltaAlertThreshold.toFixed(2)}Δ short</p>
+              {/* Ticker selector */}
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: SB_DIM }}>Ticker</p>
+                <Select
+                  value={effectiveTicker}
+                  onValueChange={(v) => setSandboxTicker(v)}
+                >
+                  <SelectTrigger size="sm" className="h-8 text-xs font-mono-data" style={{ background: 'oklch(0.22 0.010 258)', borderColor: SB_BORDER, color: SB_BRIGHT }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {candidateTickers.length > 0 ? (
+                      candidateTickers.map(t => (
+                        <SelectItem key={t} value={t} className="text-xs font-mono-data">{t}</SelectItem>
+                      ))
+                    ) : (
+                      ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA'].map(t => (
+                        <SelectItem key={t} value={t} className="text-xs font-mono-data">{t}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="bg-zinc-800/50 rounded-lg p-3">
-                <p className="text-[10px] text-zinc-500 mb-1">Theta Target</p>
-                <p className="text-lg font-mono text-cyan-400">
-                  {(strategy.portfolioThetaTarget * 100).toFixed(2)}%/d
-                </p>
-                <p className="text-[10px] text-zinc-500">of Net Liq</p>
-              </div>
-              <div className="bg-zinc-800/50 rounded-lg p-3">
-                <p className="text-[10px] text-zinc-500 mb-1">Gamma Risk</p>
-                <p className={`text-sm font-semibold ${
-                  strategy.deltaAlertThreshold > 0.35 ? 'text-red-400' :
-                  strategy.deltaAlertThreshold > 0.25 ? 'text-amber-400' : 'text-emerald-400'
-                }`}>
-                  {strategy.deltaAlertThreshold > 0.35 ? 'HIGH / DIRECTIONAL' :
-                   strategy.deltaAlertThreshold > 0.25 ? 'MODERATE' : 'LOW / PINNED'}
-                </p>
-              </div>
-              <div className="bg-zinc-800/50 rounded-lg p-3">
-                <p className="text-[10px] text-zinc-500 mb-1">Profit Target</p>
-                <p className="text-lg font-mono text-violet-400">
-                  {Math.round(strategy.profitTargetPct * 100)}%
-                </p>
-                <p className="text-[10px] text-zinc-500">of max profit</p>
+
+              {/* Strategy selector */}
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: SB_DIM }}>Strategy</p>
+                <Select
+                  value={sandboxStrategy}
+                  onValueChange={(v) => setSandboxStrategy(v)}
+                >
+                  <SelectTrigger size="sm" className="h-8 text-xs" style={{ background: 'oklch(0.22 0.010 258)', borderColor: SB_BORDER, color: SB_BRIGHT }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allStrategyOptions.map(s => (
+                      <SelectItem key={s.id} value={s.id} className="text-xs">{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {/* DTE slider */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: SB_DIM }}>Days to Expiry (DTE)</p>
+                <span className="font-mono-data text-xs font-bold" style={{ color: SB_CYAN }}>{sandboxDte}d</span>
+              </div>
+              <Slider
+                min={7} max={120} step={1}
+                value={[sandboxDte]}
+                onValueChange={([v]) => setSandboxDte(v)}
+                className="w-full"
+              />
+              <div className="flex justify-between mt-0.5">
+                <span className="font-mono-data text-[9px]" style={{ color: SB_DIM }}>7d</span>
+                <span className="font-mono-data text-[9px]" style={{ color: SB_DIM }}>120d</span>
+              </div>
+            </div>
+
+            {/* Delta slider */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: SB_DIM }}>Short Delta</p>
+                <span className="font-mono-data text-xs font-bold" style={{ color: SB_AMBER }}>{sandboxDelta.toFixed(2)}Δ</span>
+              </div>
+              <Slider
+                min={0.05} max={0.50} step={0.01}
+                value={[sandboxDelta]}
+                onValueChange={([v]) => setSandboxDelta(v)}
+                className="w-full"
+              />
+              <div className="flex justify-between mt-0.5">
+                <span className="font-mono-data text-[9px]" style={{ color: SB_DIM }}>0.05Δ (far OTM)</span>
+                <span className="font-mono-data text-[9px]" style={{ color: SB_DIM }}>0.50Δ (ATM)</span>
+              </div>
+            </div>
+
+            {/* Spot + IV info row */}
+            <div className="flex items-center gap-4 flex-wrap">
+              {sbLoading ? (
+                <div className="h-4 w-32 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 8%)' }} />
+              ) : sbSpot > 0 ? (
+                <>
+                  <span className="font-mono-data text-xs" style={{ color: SB_DIM }}>
+                    Spot: <span style={{ color: SB_BRIGHT }}>${sbSpot.toFixed(2)}</span>
+                  </span>
+                  <span className="font-mono-data text-xs" style={{ color: SB_DIM }}>
+                    IV: <span style={{ color: SB_AMBER }}>{(sbIv * 100).toFixed(1)}%</span>
+                  </span>
+                  {sbGexCall != null && (
+                    <span className="font-mono-data text-xs" style={{ color: SB_DIM }}>
+                      GEX Call: <span style={{ color: SB_GREEN }}>${sbGexCall.toFixed(0)}</span>
+                    </span>
+                  )}
+                  {sbGexPut != null && (
+                    <span className="font-mono-data text-xs" style={{ color: SB_DIM }}>
+                      GEX Put: <span style={{ color: SB_RED }}>${sbGexPut.toFixed(0)}</span>
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="font-mono-data text-xs" style={{ color: SB_DIM }}>Loading market data…</span>
+              )}
+            </div>
+
+            {/* Payoff chart */}
+            {payoffData.length > 0 ? (
+              <div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={payoffData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 6%)" />
+                    <XAxis
+                      dataKey="price"
+                      type="number"
+                      domain={['dataMin', 'dataMax']}
+                      tick={{ fontSize: 9, fill: 'oklch(0.45 0.010 258)', fontFamily: 'JetBrains Mono' }}
+                      tickLine={false} axisLine={false}
+                      tickFormatter={v => `$${(v as number).toFixed(0)}`}
+                      tickCount={6}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 9, fill: 'oklch(0.45 0.010 258)', fontFamily: 'JetBrains Mono' }}
+                      tickLine={false} axisLine={false}
+                      tickFormatter={v => `$${(v as number).toFixed(0)}`}
+                      width={52}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'oklch(0.22 0.010 258)',
+                        border: '1px solid oklch(1 0 0 / 12%)',
+                        borderRadius: '4px', fontSize: '11px',
+                        fontFamily: 'JetBrains Mono', color: SB_BRIGHT,
+                      }}
+                      formatter={(value: number) => [`$${value.toFixed(2)}`, 'P&L']}
+                      labelFormatter={(label: number) => `Price: $${Number(label).toFixed(2)}`}
+                    />
+                    {/* Zero line */}
+                    <ReferenceLine y={0} stroke="oklch(1 0 0 / 20%)" strokeWidth={1} />
+                    {/* Spot price */}
+                    {sbSpot > 0 && (
+                      <ReferenceLine
+                        x={sbSpot}
+                        stroke={`${SB_CYAN.replace(')', ' / 70%)')}`}
+                        strokeDasharray="5 3" strokeWidth={1.5}
+                        label={{ value: `Spot $${sbSpot.toFixed(0)}`, fontSize: 8, fill: SB_CYAN, position: 'insideTopLeft', offset: 4 }}
+                      />
+                    )}
+                    {/* GEX Call Wall */}
+                    {sbGexCall != null && (
+                      <ReferenceLine
+                        x={sbGexCall}
+                        stroke="oklch(0.72 0.18 145 / 60%)"
+                        strokeDasharray="4 4" strokeWidth={1}
+                        label={{ value: `GEX C $${sbGexCall.toFixed(0)}`, fontSize: 8, fill: SB_GREEN, position: 'insideTopRight', offset: 4 }}
+                      />
+                    )}
+                    {/* GEX Put Wall */}
+                    {sbGexPut != null && (
+                      <ReferenceLine
+                        x={sbGexPut}
+                        stroke="oklch(0.65 0.22 25 / 60%)"
+                        strokeDasharray="4 4" strokeWidth={1}
+                        label={{ value: `GEX P $${sbGexPut.toFixed(0)}`, fontSize: 8, fill: SB_RED, position: 'insideTopLeft', offset: 4 }}
+                      />
+                    )}
+                    {/* DP Floor */}
+                    {sbDpFloor != null && (
+                      <ReferenceLine
+                        x={sbDpFloor}
+                        stroke="oklch(0.80 0.15 200 / 50%)"
+                        strokeDasharray="3 3" strokeWidth={1}
+                        label={{ value: `DP $${sbDpFloor.toFixed(0)}`, fontSize: 8, fill: SB_CYAN, position: 'insideBottomLeft', offset: 4 }}
+                      />
+                    )}
+                    {/* DP Ceiling */}
+                    {sbDpCeil != null && (
+                      <ReferenceLine
+                        x={sbDpCeil}
+                        stroke="oklch(0.80 0.15 200 / 40%)"
+                        strokeDasharray="3 3" strokeWidth={1}
+                        label={{ value: `DP Ceil $${sbDpCeil.toFixed(0)}`, fontSize: 8, fill: SB_CYAN, position: 'insideTopRight', offset: 4 }}
+                      />
+                    )}
+                    {/* Breakeven */}
+                    {sandboxMetrics?.breakeven != null && (
+                      <ReferenceLine
+                        x={sandboxMetrics.breakeven}
+                        stroke="oklch(0.78 0.18 85 / 80%)"
+                        strokeDasharray="6 2" strokeWidth={1.5}
+                        label={{ value: `BE $${sandboxMetrics.breakeven.toFixed(0)}`, fontSize: 8, fill: SB_AMBER, position: 'insideBottomRight', offset: 4 }}
+                      />
+                    )}
+                    <Line
+                      type="monotone" dataKey="pnl"
+                      stroke={SB_CYAN} strokeWidth={2} dot={false}
+                      activeDot={{ r: 3, fill: SB_CYAN }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                {/* Legend */}
+                <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+                  {[
+                    { color: SB_CYAN, label: 'P&L at Expiry' },
+                    { color: SB_AMBER, label: 'Breakeven' },
+                    { color: SB_GREEN, label: 'GEX Call Wall' },
+                    { color: SB_RED, label: 'GEX Put Wall' },
+                  ].map(({ color, label }) => (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <div className="w-3 h-0.5 rounded" style={{ background: color }} />
+                      <span className="font-mono-data text-[9px]" style={{ color: SB_DIM }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center rounded" style={{ background: 'oklch(1 0 0 / 4%)' }}>
+                <span className="text-xs" style={{ color: SB_DIM }}>Select a ticker to generate payoff curve</span>
+              </div>
+            )}
+
+            {/* Breakeven warning badge */}
+            {sandboxMetrics?.breakeven != null && sbSpot > 0 && (() => {
+              const beDistance = Math.abs(sbSpot - sandboxMetrics.breakeven) / sbSpot;
+              const isClose = beDistance < 0.05;
+              const isVeryClose = beDistance < 0.02;
+              if (!isClose) return null;
+              return (
+                <div className="flex items-center gap-2 rounded px-3 py-2" style={{
+                  background: isVeryClose ? 'oklch(0.65 0.22 25 / 12%)' : 'oklch(0.78 0.18 85 / 10%)',
+                  border: `1px solid ${isVeryClose ? 'oklch(0.65 0.22 25 / 40%)' : 'oklch(0.78 0.18 85 / 30%)'}`,
+                }}>
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" style={{ color: isVeryClose ? SB_RED : SB_AMBER }} />
+                  <span className="text-xs" style={{ color: isVeryClose ? SB_RED : SB_AMBER }}>
+                    {isVeryClose
+                      ? `Breakeven $${sandboxMetrics.breakeven.toFixed(0)} is only ${(beDistance * 100).toFixed(1)}% from spot — very thin margin`
+                      : `Breakeven $${sandboxMetrics.breakeven.toFixed(0)} is ${(beDistance * 100).toFixed(1)}% from spot — watch closely`
+                    }
+                  </span>
+                </div>
+              );
+            })()}
+
+            {/* Live metrics grid */}
+            {sandboxMetrics && (() => {
+              // Gamma risk score: higher delta + shorter DTE = higher gamma risk
+              const gammaScore = Math.round(sandboxDelta * 10 + (1 / (sandboxDte / 30)) * 3);
+              const gammaLabel = gammaScore >= 8 ? 'HIGH' : gammaScore >= 5 ? 'MODERATE' : 'LOW';
+              const gammaColor = gammaScore >= 8 ? SB_RED : gammaScore >= 5 ? SB_AMBER : SB_GREEN;
+              // Margin efficiency: theta per day / max loss (proxy for return on risk)
+              const marginEff = sandboxMetrics.thetaEst != null && sandboxMetrics.minPnl < -0.01
+                ? Math.abs(sandboxMetrics.thetaEst) / Math.abs(sandboxMetrics.minPnl) * 100
+                : null;
+              return (
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    {
+                      label: 'PoP (Est.)',
+                      value: sandboxMetrics.pop != null ? `${(sandboxMetrics.pop * 100).toFixed(1)}%` : '—',
+                      color: sandboxMetrics.pop != null && sandboxMetrics.pop >= 0.80 ? SB_GREEN
+                           : sandboxMetrics.pop != null && sandboxMetrics.pop >= 0.65 ? SB_AMBER : SB_RED,
+                      hint: 'prob. of profit at expiry',
+                    },
+                    {
+                      label: 'Max Profit',
+                      value: `$${sandboxMetrics.maxPnl.toFixed(0)}`,
+                      color: SB_GREEN,
+                      hint: 'per contract',
+                    },
+                    {
+                      label: 'Max Loss',
+                      value: sandboxMetrics.minPnl < -9999 ? 'Unlimited' : `$${sandboxMetrics.minPnl.toFixed(0)}`,
+                      color: SB_RED,
+                      hint: 'per contract',
+                    },
+                    {
+                      label: 'θ/day (Est.)',
+                      value: sandboxMetrics.thetaEst != null ? `$${sandboxMetrics.thetaEst.toFixed(2)}` : '—',
+                      color: SB_AMBER,
+                      hint: 'daily decay',
+                    },
+                    {
+                      label: 'Gamma Risk',
+                      value: `${gammaLabel} (${gammaScore}/10)`,
+                      color: gammaColor,
+                      hint: `Δ${sandboxDelta.toFixed(2)} × ${sandboxDte}d exposure`,
+                    },
+                    {
+                      label: 'θ Efficiency',
+                      value: marginEff != null ? `${marginEff.toFixed(2)}%/d` : '—',
+                      color: marginEff != null && marginEff >= 0.5 ? SB_GREEN
+                           : marginEff != null && marginEff >= 0.2 ? SB_AMBER : SB_DIM,
+                      hint: 'theta / max risk per day',
+                    },
+                  ].map(m => (
+                    <div key={m.label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
+                      <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: SB_DIM }}>{m.label}</div>
+                      <div className="font-mono-data text-sm font-bold" style={{ color: m.color }}>{m.value}</div>
+                      <div className="text-[9px] mt-0.5" style={{ color: 'oklch(0.42 0.010 258)' }}>{m.hint}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Signal Mode Info */}
