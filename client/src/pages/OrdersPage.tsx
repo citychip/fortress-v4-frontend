@@ -162,6 +162,8 @@ function OrderCard({ order }: { order: NormalisedOrder }) {
     WATCH:     'oklch(0.80 0.15 200 / 20%)',
   };
 
+  const [jsonCopied, setJsonCopied] = useState(false);
+
   const copyOrder = () => {
     const text = [
       order.action,
@@ -175,6 +177,23 @@ function OrderCard({ order }: { order: NormalisedOrder }) {
     setCopied(true);
     toast.success('Order copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const copyJsonPayload = () => {
+    const payload = JSON.stringify({
+      action: order.action,
+      ticker: order.ticker,
+      strategy: order.strategy ?? null,
+      strike: order.strike ?? null,
+      expiry: order.expiry ?? null,
+      urgency: order.urgency,
+      reason: order.reason,
+      timestamp: new Date().toISOString(),
+    }, null, 2);
+    navigator.clipboard.writeText(payload);
+    setJsonCopied(true);
+    toast.success('JSON payload copied — paste into IBKR webhook or automation');
+    setTimeout(() => setJsonCopied(false), 2000);
   };
 
   return (
@@ -227,14 +246,33 @@ function OrderCard({ order }: { order: NormalisedOrder }) {
           )}
         </div>
 
-        <button
-          onClick={copyOrder}
-          className="flex-shrink-0 p-1.5 rounded transition-all hover:bg-[oklch(1_0_0_/_8%)]"
-          style={{ color: copied ? 'oklch(0.72 0.18 145)' : 'oklch(0.50 0.010 258)' }}
-          title="Copy order to clipboard"
-        >
-          {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-        </button>
+        <div className="flex-shrink-0 flex items-center gap-1">
+          {/* Copy human-readable text */}
+          <button
+            onClick={copyOrder}
+            className="p-1.5 rounded transition-all hover:bg-[oklch(1_0_0_/_8%)]"
+            style={{ color: copied ? 'oklch(0.72 0.18 145)' : 'oklch(0.50 0.010 258)' }}
+            title="Copy order text"
+          >
+            {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          </button>
+          {/* Copy JSON payload (for IBKR webhook / automation) — URGENT only */}
+          {order.urgency === 'URGENT' && (
+            <button
+              onClick={copyJsonPayload}
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border transition-all hover:opacity-80"
+              style={{
+                color: jsonCopied ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
+                borderColor: jsonCopied ? 'oklch(0.72 0.18 145 / 40%)' : 'oklch(0.65 0.22 25 / 40%)',
+                background: jsonCopied ? 'oklch(0.72 0.18 145 / 8%)' : 'oklch(0.65 0.22 25 / 8%)',
+              }}
+              title="Copy JSON payload for IBKR webhook or automation"
+            >
+              {jsonCopied ? <CheckCircle2 className="w-3 h-3" /> : <SendHorizonal className="w-3 h-3" />}
+              {jsonCopied ? 'Copied' : 'JSON'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -70,8 +70,23 @@ function ScriptCard({ scriptKey, onRun, running, result }: {
   };
 
   const hasResult = result !== undefined;
-  const resultStr = hasResult ? JSON.stringify(result, null, 2) : null;
   const [expanded, setExpanded] = useState(false);
+
+  // Extract structured fields from the result object
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = result as any;
+  const exitCode: number | undefined = res?.exit_code;
+  const duration: number | undefined = res?.duration_seconds;
+  const rawStdout: string | undefined = res?.stdout ?? res?.output;
+  const success = exitCode === 0;
+
+  // Convert literal \n escape sequences (from JSON string values) to real newlines
+  const stdoutLines: string[] = rawStdout
+    ? rawStdout.replace(/\\n/g, '\n').split('\n')
+    : [];
+
+  // Fall back to pretty-printed JSON if no stdout field
+  const fallbackStr = hasResult && !rawStdout ? JSON.stringify(result, null, 2) : null;
 
   return (
     <div className="rounded border overflow-hidden transition-colors"
@@ -111,11 +126,57 @@ function ScriptCard({ scriptKey, onRun, running, result }: {
           </button>
         </div>
       </div>
-      {expanded && resultStr && (
-        <div className="border-t px-4 py-3" style={{ borderColor: 'oklch(1 0 0 / 10%)', background: 'oklch(0.13 0.010 258)' }}>
-          <pre className="text-[10px] font-mono-data overflow-auto max-h-48 whitespace-pre-wrap" style={{ color: GREEN }}>
-            {resultStr}
-          </pre>
+      {expanded && hasResult && (
+        <div className="border-t" style={{ borderColor: 'oklch(1 0 0 / 10%)' }}>
+          {/* Terminal header bar */}
+          <div className="flex items-center justify-between px-4 py-2" style={{ background: 'oklch(0.11 0.010 258)', borderBottom: '1px solid oklch(1 0 0 / 8%)' }}>
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3 h-3" style={{ color: DIM }} />
+              <span className="font-mono-data text-[10px]" style={{ color: DIM }}>stdout</span>
+              {exitCode !== undefined && (
+                <span className="font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{
+                  color: success ? GREEN : RED,
+                  background: success ? 'oklch(0.72 0.18 145 / 12%)' : 'oklch(0.65 0.22 25 / 12%)'
+                }}>
+                  exit {exitCode}
+                </span>
+              )}
+              {duration !== undefined && (
+                <span className="font-mono-data text-[10px]" style={{ color: 'oklch(0.45 0.010 258)' }}>
+                  {duration.toFixed(2)}s
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Terminal body */}
+          <div className="px-4 py-3 overflow-auto max-h-64" style={{ background: 'oklch(0.10 0.010 258)' }}>
+            {stdoutLines.length > 0 ? (
+              <pre className="text-[11px] font-mono-data whitespace-pre-wrap leading-relaxed" style={{ color: success ? 'oklch(0.75 0.15 145)' : 'oklch(0.70 0.20 25)' }}>
+                {stdoutLines.map((line, i) => (
+                  <span key={i}>
+                    {line.startsWith('{') || line.startsWith('[') ? (
+                      <span style={{ color: CYAN }}>{line}</span>
+                    ) : line.includes('ERROR') || line.includes('FAIL') ? (
+                      <span style={{ color: RED }}>{line}</span>
+                    ) : line.includes('\u2713') || line.includes('OK') || line.includes('saved') ? (
+                      <span style={{ color: GREEN }}>{line}</span>
+                    ) : line.includes('SCANNING') || line.includes('Running') ? (
+                      <span style={{ color: AMBER }}>{line}</span>
+                    ) : (
+                      <span style={{ color: 'oklch(0.68 0.010 258)' }}>{line}</span>
+                    )}
+                    {'\n'}
+                  </span>
+                ))}
+              </pre>
+            ) : fallbackStr ? (
+              <pre className="text-[10px] font-mono-data whitespace-pre-wrap" style={{ color: CYAN }}>
+                {fallbackStr}
+              </pre>
+            ) : (
+              <span className="text-[10px] font-mono-data" style={{ color: DIM }}>No output</span>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -94,3 +94,23 @@
 - [x] Analysis page: fix Order Flow zeros — show "No data" placeholder when net_delta=0 AND buy_pct=0 AND sell_pct=0 (distinguish true zero from missing data)
 - [x] Analysis page: fix GEX Call Wall blank — ensure call_walls array is read correctly (gex.call_walls[0].strike) with fallback to regime.gex_call_wall
 - [x] Analysis page: replace global SPY Hedge Coverage card with per-ticker Position Risk Context card (ticker concentration %, beta-weighted delta, theta efficiency ratio)
+
+## Portfolio View Critique (v3.5 Action Items)
+- [ ] Positions page: fix negative currency sign order — show -$0.11/d not $-0.11/d; add green/red color coding for theta column values
+- [ ] Positions page: sync alert badges on accordion headers — show amber badge for BOTH concentration violations AND technical violations (e.g. below_sma200) from briefing data
+- [ ] Positions page: wire ROLL? column — show Auto-Roll button/icon for legs at or below 21 DTE that navigates to Trade Builder with the leg pre-loaded
+
+## Market Intelligence Critique (v3.5 Action Items)
+- [ ] Market Intelligence page: fix spot price duplication bug — all tickers showing same $396.84 price instead of their own live spot price (loop index/key mapping bug in frontend or backend)
+- [ ] Market Intelligence page: standardize regime label formatting — STRONGLY_BULLISH → "Strongly Bullish", BEARISH → "Bearish" etc. across all views (Trade Builder, Market Intel, Analysis)
+
+## Orders Page & Cross-Screen Hierarchy (v3.5 Action Items)
+- [ ] Orders page: add execution hook buttons on URGENT rows — "Copy JSON" copies structured order payload to clipboard; "Send to IBKR" button calls /api/ibkr/execute with the order payload
+- [ ] Morning Brief: suppress new-entry candidate rows for tickers that have an active stop-loss flag (cross-screen rule hierarchy — Layer 4 risk overrides Layer 1 screener)
+
+## P&L Profile Page Critique (v3.5 Action Items)
+- [ ] P&L/Journal page: fix metric unit multiplier bug — KPI cards show -$6207.0k instead of -$6.2k; the raw P&L values are already in dollars but the "k" formatter is dividing by 1 instead of 1000, or the raw values are already in cents/thousandths
+
+## Script Runner Layer 6 (v3.5 Action Items)
+- [ ] Script Runner: fix log display — convert raw \n escape sequences to real line breaks; wrap output in terminal-styled <pre> block (dark bg, green monospace text, scrollable)
+- [ ] Script Runner: add post-script cache-write hook — after max_pain/whale_flow scripts complete, POST results to /api/cache/update so dashboard GEX/DP/drift cells hydrate immediately

@@ -14,6 +14,7 @@ import {
   useMarketIntelligence,
   useChartLevels,
   evaluateCandidate,
+  regimeInfo,
   type CandidateRow,
   type PretradeResult,
 } from '@/hooks/useApi';
@@ -595,7 +596,8 @@ function MarketContext({ ticker }: { ticker: string }) {
   if (!intel && !levels) return null;
 
   const regime = intel?.regime;
-  const regimeColor = regime?.overall === 'bullish' ? GREEN : regime?.overall === 'bearish' ? RED : AMBER;
+  const { label: regimeLabelStr, color: regimeColorKey } = regimeInfo(regime?.overall ?? 'neutral');
+  const regimeColor = regimeColorKey === 'green' ? GREEN : regimeColorKey === 'red' ? RED : AMBER;
 
   // Hydrate GEX walls: prefer regime fields, fall back to top-level gex object
   const callWall = regime?.gex_call_wall ?? intel?.gex?.call_wall;
@@ -613,7 +615,7 @@ function MarketContext({ ticker }: { ticker: string }) {
       {regime && (
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: 'Asset Regime', value: regime.overall?.toUpperCase() ?? '—', color: regimeColor },
+            { label: 'Asset Regime', value: regimeLabelStr, color: regimeColor },
             { label: 'Score', value: regime.score != null ? `${regime.score > 0 ? '+' : ''}${regime.score}` : '—', color: regimeColor },
             { label: 'GEX Call Wall', value: callWall != null ? `$${callWall.toFixed(0)}` : '—', color: GREEN },
             { label: 'GEX Put Wall', value: putWall  != null ? `$${putWall.toFixed(0)}`  : '—', color: RED },

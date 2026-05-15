@@ -16,6 +16,7 @@ import {
   useIbkrPreview,
   useMarketIntelligence,
   formatDollar,
+  regimeInfo,
   type TradeReport,
   type TradeReportRollCandidate,
   type TradeReportPostEarningsCandidate,
@@ -478,6 +479,14 @@ function CompactTradeReport() {
     return m;
   }, [candidatesData]);
 
+  // Build a set of tickers with active stop-loss flags — suppress from new-entry suggestions
+  const stopLossTickers = useMemo(() => {
+    const report = data as TradeReport | undefined;
+    return new Set(
+      (report?.stop_loss_alerts ?? []).filter(a => a.verdict !== 'OK').map(a => a.ticker)
+    );
+  }, [data]);
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -536,8 +545,10 @@ function CompactTradeReport() {
         </div>
       ))}
 
-      {/* Entry candidates — enriched with IVR + GEX zone + bias */}
-      {report.entry_candidates?.slice(0, 5).map((c, i) => {
+      {/* Entry candidates — enriched with IVR + GEX zone + bias.
+           Tickers with an active stop-loss flag are suppressed: opening a new position
+           while a stop-loss is firing is contradictory and confusing. */}
+      {report.entry_candidates?.filter(c => !stopLossTickers.has(c.ticker)).slice(0, 5).map((c, i) => {
         const cand = candidateMap.get(c.ticker);
         const isExpanded = expandedTicker === c.ticker;
         return (
@@ -782,15 +793,15 @@ function AccountStrip() {
   const spyFlip = spyIntel?.regime?.flip_zone ?? null;
   const spyGammaRegime = spyIntel?.regime?.gamma_regime ?? null;
 
-  // Build regime label with gamma flip
+  // Build regime label with gamma flip — use regimeInfo for consistent title-case formatting
+  const { label: regimeBaseLabel, color: regimeColorKey } = regimeInfo(regime ?? 'neutral');
   const regimeLabel = (() => {
     if (!regime) return '—';
-    const base = regime.toUpperCase();
-    if (spyFlip != null) return `${base} · Flip $${spyFlip.toFixed(0)}`;
-    return base;
+    if (spyFlip != null) return `${regimeBaseLabel} · Flip $${spyFlip.toFixed(0)}`;
+    return regimeBaseLabel;
   })();
 
-  const regimeColor = regime === 'bullish' ? GREEN : regime === 'bearish' ? RED : AMBER;
+  const regimeColor = regimeColorKey === 'green' ? GREEN : regimeColorKey === 'red' ? RED : AMBER;
 
   const metrics = [
     { label: 'Net Liq', value: netLiq != null ? formatDollar(netLiq) : '—', color: CYAN, sub: null },

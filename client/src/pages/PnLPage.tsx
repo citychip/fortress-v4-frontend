@@ -58,10 +58,13 @@ type FilterPnL   = 'all' | 'winners' | 'losers';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function computeLegPnL(pos: any): LegPnL {
   const qty        = Number(pos.qty ?? 0);
-  const multiplier = Number(pos.multiplier ?? 100);
+  // IBKR avg_cost for options is the TOTAL cost per contract (price × multiplier already included).
+  // Do NOT multiply by multiplier again — that would inflate costBasis by 100×.
+  // market_value = qty × avg_cost (backend already applies multiplier when syncing from IBKR).
   const avgCost    = Number(pos.avg_cost ?? 0);
   const marketValue = Number(pos.market_value ?? 0);
-  const costBasis  = avgCost * Math.abs(qty) * multiplier;
+  // costBasis = avg_cost × |qty|  (avg_cost already includes the 100× option multiplier)
+  const costBasis  = avgCost * Math.abs(qty);
   const isShort    = qty < 0;
   const unrealisedPnL = isShort ? costBasis + marketValue : marketValue - costBasis;
   const unrealisedPct = costBasis !== 0 ? (unrealisedPnL / Math.abs(costBasis)) * 100 : 0;

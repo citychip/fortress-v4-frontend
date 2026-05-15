@@ -270,8 +270,8 @@ function LegRow({
       <td className="px-4 py-2.5 text-right">
         <DeltaCell delta={leg.current_delta} direction={leg.leg_direction} threshold={strategy.deltaAlertThreshold} />
       </td>
-      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: DIM }}>
-        {leg.current_theta !== undefined ? `$${leg.current_theta.toFixed(2)}/d` : '—'}
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.current_theta !== undefined ? (leg.current_theta >= 0 ? GREEN : RED) : DIM }}>
+        {leg.current_theta !== undefined ? `${leg.current_theta >= 0 ? '+' : '-'}$${Math.abs(leg.current_theta).toFixed(2)}/d` : '—'}
       </td>
       <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.market_value >= 0 ? GREEN : RED }}>
         {formatDollar(leg.market_value)}
@@ -292,6 +292,17 @@ function LegRow({
             {alerts.map((a, i) => (
               <span key={i} className="text-[10px]" style={{ color: AMBER }}>⚠ {a}</span>
             ))}
+            {/* Auto-Roll shortcut for legs in roll window */}
+            {alerts.some(a => a.includes('roll window')) && (
+              <Link
+                href="/trade-builder"
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border mt-0.5 hover:opacity-80"
+                style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
+              >
+                <Zap className="w-2.5 h-2.5" />
+                Roll →
+              </Link>
+            )}
           </div>
         ) : (
           <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'oklch(0.72 0.18 145 / 60%)' }} />
@@ -476,7 +487,8 @@ export default function PositionsPage() {
       const totalPctNL  = legs.reduce((s, l) => s + l.net_liq_pct, 0);
       const netDelta    = legs.reduce((s, l) => s + (l.current_delta ?? 0) * l.qty, 0);
       const netTheta    = legs.reduce((s, l) => s + (l.current_theta ?? 0) * l.qty, 0);
-      const alertCount  = legs.filter(l => evaluatePositionLeg(l, config.strategy, stopLossAct, rollNeeded).length > 0).length;
+      const legAlertCount = legs.filter(l => evaluatePositionLeg(l, config.strategy, stopLossAct, rollNeeded).length > 0).length;
+      const alertCount  = legAlertCount + (totalPctNL > config.strategy.maxSingleNamePct ? 1 : 0);
       // P&L sparkline: use per-leg market values as a rough proxy series
       const pnlSeries   = legs.map(l => l.market_value);
       return { ticker, legs, totalMktVal, totalPctNL, netDelta, netTheta, alertCount, pnlSeries };
