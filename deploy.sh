@@ -45,11 +45,11 @@ ok "Archive created: $(du -sh "$ARCHIVE" | cut -f1)"
 
 # ── 4. Upload ──────────────────────────────────────────────
 info "Uploading to $VPS_USER@$VPS_HOST..."
-scp -i "$SSH_KEY" -o StrictHostKeyChecking=no "$ARCHIVE" "$VPS_USER@$VPS_HOST:/tmp/"
+scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=10 "$ARCHIVE" "$VPS_USER@$VPS_HOST:/tmp/"
 
 # ── 5. Deploy on VPS ───────────────────────────────────────
 info "Deploying on VPS..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" \
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=10 "$VPS_USER@$VPS_HOST" \
   "sudo rm -rf ${REMOTE_WEB_ROOT}/* && \
    sudo tar -xzf /tmp/fortress-v2-dist.tar.gz -C ${REMOTE_WEB_ROOT}/ && \
    [[ -f ${REMOTE_WEB_ROOT}/index.html ]] || { echo 'index.html missing after extract!'; exit 1; } && \

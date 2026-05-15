@@ -72,3 +72,11 @@
 
 ## Deploy Hardening
 - [x] Create deploy.sh script (always uses dist/public/) and add pnpm deploy command to package.json
+
+## Dashboard Critical Optimizations (Analysis v3.2)
+- [x] Dashboard: fix hedge coverage target display — show as % of Net Liq (e.g. "Target: 10–15% of Net Liq") not raw dollar percentage
+- [x] Dashboard: hydrate Macro Regime Gate with SPY GEX value, gamma regime label, dark pool DIX level, and net drift — show the data behind "Bearish" explicitly
+- [x] Dashboard: suppress/grey out new entry rows for any ticker with an active concentration warning (>20% of Net Liq) — lock new entries until exposure drops
+- [x] Dashboard: wire Send Briefing button to owner notification system (push trade report summary to owner via notifyOwner API)
+- [ ] Dashboard: add actual dark pool DIX level to Macro Regime Gate (if available from market-intel API), or document that DP Floor is the available proxy
+- [x] Dashboard: make Send Briefing await notifyOwner, handle false/error returns, show accurate success/failure per channel

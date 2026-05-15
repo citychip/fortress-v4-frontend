@@ -9,6 +9,7 @@ import { useLocation } from 'wouter';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
   useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
+  useMarketIntelligence, useCandidates,
   formatDollar, regimeInfo,
   type BriefingData, type TradeReport, type TradeReportRollCandidate, type TradeReportPostEarningsCandidate,
 } from '@/hooks/useApi';
@@ -117,37 +118,55 @@ function TradeReportPanel() {
         </div>
       ))}
 
-      {/* Entry candidates */}
-      {report.entry_candidates?.slice(0, 5).map((c, i) => (
-        <div key={i} className="flex items-center gap-3 p-3 rounded border"
-          style={{ background: 'oklch(0.72 0.18 145 / 6%)', borderColor: 'oklch(0.72 0.18 145 / 25%)' }}>
-          <Target className="w-4 h-4 flex-shrink-0" style={{ color: GREEN }} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-mono-data text-xs font-bold" style={{ color: BRIGHT }}>{c.ticker}</span>
-              {c.iv_rank != null && (
-                <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: GREEN, background: 'oklch(0.72 0.18 145 / 12%)' }}>
-                  IVR {c.iv_rank.toFixed(0)}
-                </span>
-              )}
-              {c.iv_rank == null && (
-                <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: DIM, background: 'oklch(1 0 0 / 5%)' }}>
-                  IVR —
-                </span>
-              )}
-              <span className="text-[10px] font-mono-data" style={{ color: DIM }}>
-                {c.concentration_pct != null ? `${c.concentration_pct.toFixed(1)}% conc` : '—'}
-              </span>
-              {c.has_existing_position && (
-                <span className="text-[9px] font-mono-data px-1 py-0.5 rounded" style={{ color: CYAN, background: 'oklch(0.80 0.15 200 / 10%)' }}>HAS POS</span>
-              )}
-            </div>
-            <div className="text-[10px] mt-0.5" style={{ color: DIM }}>
-              {c.action} · {c.earnings_state} · {c.days_to_earnings}d to earnings
+      {/* Entry candidates — greyed out when concentration >= 20% */}
+      {report.entry_candidates?.slice(0, 5).map((c, i) => {
+        const isLocked = c.concentration_pct != null && c.concentration_pct >= 20;
+        return (
+          <div key={i} className="flex items-center gap-3 p-3 rounded border"
+            style={{
+              background: isLocked ? 'oklch(0.78 0.18 85 / 4%)' : 'oklch(0.72 0.18 145 / 6%)',
+              borderColor: isLocked ? 'oklch(0.78 0.18 85 / 20%)' : 'oklch(0.72 0.18 145 / 25%)',
+              opacity: isLocked ? 0.55 : 1,
+            }}>
+            {isLocked
+              ? <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: AMBER }} />
+              : <Target className="w-4 h-4 flex-shrink-0" style={{ color: GREEN }} />
+            }
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono-data text-xs font-bold" style={{ color: isLocked ? AMBER : BRIGHT }}>{c.ticker}</span>
+                {isLocked && (
+                  <span className="text-[9px] font-mono-data px-1.5 py-0.5 rounded font-bold"
+                    style={{ color: AMBER, background: 'oklch(0.78 0.18 85 / 15%)', border: '1px solid oklch(0.78 0.18 85 / 30%)' }}>
+                    LOCKED {c.concentration_pct?.toFixed(1)}% conc
+                  </span>
+                )}
+                {!isLocked && c.iv_rank != null && (
+                  <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: GREEN, background: 'oklch(0.72 0.18 145 / 12%)' }}>
+                    IVR {c.iv_rank.toFixed(0)}
+                  </span>
+                )}
+                {!isLocked && c.iv_rank == null && (
+                  <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: DIM, background: 'oklch(1 0 0 / 5%)' }}>
+                    IVR —
+                  </span>
+                )}
+                {!isLocked && (
+                  <span className="text-[10px] font-mono-data" style={{ color: DIM }}>
+                    {c.concentration_pct != null ? `${c.concentration_pct.toFixed(1)}% conc` : '—'}
+                  </span>
+                )}
+                {c.has_existing_position && !isLocked && (
+                  <span className="text-[9px] font-mono-data px-1 py-0.5 rounded" style={{ color: CYAN, background: 'oklch(0.80 0.15 200 / 10%)' }}>HAS POS</span>
+                )}
+              </div>
+              <div className="text-[10px] mt-0.5" style={{ color: DIM }}>
+                {isLocked ? `Entry locked — reduce ${c.ticker} below 20% of Net Liq before adding` : `${c.action} · ${c.earnings_state} · ${c.days_to_earnings}d to earnings`}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* Roll candidates */}
       {report.roll_candidates?.slice(0, 3).map((rc: TradeReportRollCandidate, i) => {
@@ -478,7 +497,7 @@ function SpyHedgeWidget() {
           <div className="flex justify-between text-[10px] font-mono-data mt-1" style={{ color: DIM }}>
             <span>0%</span>
             <span style={{ color }}>{pct != null ? `${pct.toFixed(1)}% of Net Liq` : '—'}</span>
-            <span>Target: {data.target_min}–{data.target_max}%</span>
+            <span>Target: {data.target_min}–{data.target_max}% of Net Liq</span>
           </div>
         </div>
         <div className="text-right">
@@ -495,6 +514,8 @@ function SpyHedgeWidget() {
 function AccountSummarySection() {
   const { data, loading, error } = useBriefing();
   const { config } = useConfig();
+  const { data: spyIntel } = useMarketIntelligence('SPY');
+  const { data: candidates } = useCandidates();
 
   if (!config.apiToken) {
     return (
@@ -532,20 +553,40 @@ function AccountSummarySection() {
           {loading && <div className="h-7 w-40 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 8%)' }} />}
         </div>
 
-        {macro && (
-          <div className="grid grid-cols-3 gap-3 mt-3">
-            {[
-              { label: 'VIX', value: macro.vix !== null ? macro.vix.toFixed(2) : '—' },
-              { label: 'VIX State', value: macro.vix_state ?? '—' },
-              { label: 'Regime', value: macro.regime },
-            ].map(({ label, value }) => (
-              <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
-                <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: DIM }}>{label}</div>
-                <div className="font-mono-data text-sm capitalize" style={{ color: CYAN }}>{value}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        {macro && (() => {
+          const gexCallWall = spyIntel?.gex?.call_wall ?? spyIntel?.regime?.gex_call_wall;
+          const gexPutWall  = spyIntel?.gex?.put_wall  ?? spyIntel?.regime?.gex_put_wall;
+          const flipZone    = spyIntel?.gex?.flip_zone  ?? spyIntel?.regime?.flip_zone;
+          const gammaRegime = spyIntel?.regime?.gamma_regime;
+          const netDrift    = spyIntel?.regime?.net_drift;
+          const dpFloor     = spyIntel?.regime?.dp_floor;
+          const regimeColor = macro.regime?.toLowerCase().includes('bear') ? RED
+            : macro.regime?.toLowerCase().includes('bull') ? GREEN : AMBER;
+
+          const metrics: { label: string; value: string; color?: string }[] = [
+            { label: 'VIX', value: macro.vix !== null ? macro.vix.toFixed(2) : '—' },
+            { label: 'VIX State', value: macro.vix_state ?? '—' },
+            { label: 'Regime', value: macro.regime, color: regimeColor },
+            { label: 'Gamma Regime', value: gammaRegime ?? '—' },
+            { label: 'GEX Call Wall', value: gexCallWall != null ? `$${gexCallWall.toFixed(2)}` : '—' },
+            { label: 'GEX Put Wall',  value: gexPutWall  != null ? `$${gexPutWall.toFixed(2)}`  : '—' },
+            { label: 'Gamma Flip',    value: flipZone    != null ? `$${flipZone.toFixed(2)}`    : '—' },
+            { label: 'DP Floor',      value: dpFloor     != null ? `$${dpFloor.toFixed(2)}`     : '—' },
+            { label: 'Net Drift',     value: netDrift    != null ? (netDrift >= 0 ? `+${netDrift.toFixed(2)}` : netDrift.toFixed(2)) : '—',
+              color: netDrift != null ? (netDrift >= 0 ? GREEN : RED) : undefined },
+          ];
+
+          return (
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              {metrics.map(({ label, value, color }) => (
+                <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
+                  <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: DIM }}>{label}</div>
+                  <div className="font-mono-data text-sm capitalize" style={{ color: color ?? CYAN }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {error && <p className="text-xs mt-2" style={{ color: RED }}>Error: {error}</p>}
       </div>
@@ -553,14 +594,20 @@ function AccountSummarySection() {
       {/* SPY Hedge Coverage */}
       <SpyHedgeWidget />
 
-      {/* Concentration warning */}
-      {data?.concentration?.msft_warning && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded border text-xs"
-          style={{ background: 'oklch(0.78 0.18 85 / 10%)', borderColor: 'oklch(0.78 0.18 85 / 30%)', color: 'oklch(0.85 0.18 85)' }}>
-          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          MSFT concentration warning — {data.concentration.top.find(t => t.ticker === 'MSFT')?.pct.toFixed(1)}% of Net Liq
-        </div>
-      )}
+      {/* Concentration warnings — one banner per over-concentrated ticker */}
+      {data?.concentration?.top
+        .filter(t => t.pct >= 20)
+        .map(t => (
+          <div key={t.ticker} className="flex items-center gap-2 px-3 py-2 rounded border text-xs"
+            style={{ background: 'oklch(0.78 0.18 85 / 10%)', borderColor: 'oklch(0.78 0.18 85 / 30%)', color: 'oklch(0.85 0.18 85)' }}>
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>
+              <strong>{t.ticker}</strong> concentration warning — {t.pct.toFixed(1)}% of Net Liq.
+              {' '}<span style={{ color: RED }}>New entries LOCKED until below 20%.</span>
+            </span>
+          </div>
+        ))
+      }
     </div>
   );
 }
@@ -798,11 +845,28 @@ function SendBriefingModal({
     return lines.join('\n');
   }
 
+  const notifyMutation = trpc.system.notifyOwner.useMutation();
+
   async function handleSend() {
     if (!email.trim()) { toast.error('Please enter an email address'); return; }
     try {
+      // Send email briefing
       await sendMutation.mutateAsync({ to: email.trim(), body: buildBody() });
-      toast.success('Morning briefing sent!', { description: `Delivered to ${email}` });
+      toast.success('Email briefing sent!', { description: `Delivered to ${email}` });
+      // Also push in-app owner notification (best-effort, non-blocking)
+      try {
+        const notified = await notifyMutation.mutateAsync({
+          title: `📊 Fortress Morning Briefing — ${today}`,
+          content: buildBody(),
+        });
+        if (notified) {
+          toast.success('In-app notification sent', { description: 'Owner notified via Manus' });
+        } else {
+          toast.warning('In-app notification unavailable', { description: 'Email delivered; owner notification service returned false' });
+        }
+      } catch {
+        toast.warning('In-app notification failed', { description: 'Email delivered; owner notification service unreachable' });
+      }
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
