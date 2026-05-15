@@ -121,3 +121,17 @@
 - [ ] VPS Python: add broadcast_to_dashboard() async HTTP POST helper to max_pain.py and whale_flow.py
 - [ ] Frontend: MarketIntelPage — overlay hydrated cache values as fallback when QuantData fields are blank
 - [ ] Frontend: MarketIntelPage — show "hydrated" badge with timestamp when cache values are in use
+
+## Strategy Workspace (v3.7)
+- [ ] Extend ConfigContext: add traderPersona, activeStrategies[], signalMode (strict/advisory/sandbox), full strategy parameters, backup/restore
+- [ ] StrategyPage Zone 0: header bar with profile selector, regime badge, signal mode three-state toggle
+- [ ] StrategyPage Zone 1: Trader Persona cards (5), active strategies checklist (grouped), risk/objective dropdowns, live narrative
+- [ ] StrategyPage Zone 2: Volatility Regime Playbook matrix (IV×GEX grid), parameter override sliders (delta buffer, DTE, profit target, stop loss)
+- [ ] StrategyPage Zone 2b: Full Strategy Parameters collapsible grid (Entry Rules, Sizing, Income, Volatility, Directional, Protection, Other)
+- [ ] StrategyPage Zone 3: Live candidate screener table filtered by active strategy rules
+- [ ] StrategyPage Zone 3b: Theoretical payoff curve with GEX wall overlays and breakeven warning badge
+- [ ] StrategyPage Zone 3c: Sandbox metrics card (PoP%, theta/margin efficiency, gamma risk score)
+- [ ] StrategyPage Zone 3d: Export to Trade Builder button
+- [ ] Backup/Restore: export strategy profile as JSON download, import from JSON file, reset to defaults
+- [ ] Wire signal mode into TradeBuilderPage (advisory warning vs hard block vs sandbox)
+- [ ] Register /strategy route in App.tsx and add sidebar nav item

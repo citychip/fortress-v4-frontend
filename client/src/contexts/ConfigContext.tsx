@@ -8,64 +8,283 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { trpc } from '@/lib/trpc';
 
+// ─── Trader Persona ────────────────────────────────────────────────────────────
+export type TraderPersona =
+  | 'income_seeker'
+  | 'strategic_speculator'
+  | 'volatility_trader'
+  | 'portfolio_protector'
+  | 'pmcc_income';
+
+export type RiskTolerance = 'conservative' | 'moderate' | 'aggressive';
+export type PrimaryObjective = 'income' | 'growth' | 'protection';
+
+// ─── Signal Mode ───────────────────────────────────────────────────────────────
+/** Controls how the dashboard interprets strategy violations across all views */
+export type SignalMode = 'strict' | 'advisory' | 'sandbox';
+
+// ─── Active Strategies ─────────────────────────────────────────────────────────
+export type StrategyType =
+  | 'CSP' | 'PMCC' | 'COVERED_CALL'                              // Income
+  | 'BULL_CALL_SPREAD' | 'BEAR_PUT_SPREAD' | 'BULL_PUT_SPREAD' | 'BEAR_CALL_SPREAD' | 'LEAPS'  // Directional
+  | 'IRON_CONDOR' | 'SHORT_STRANGLE' | 'SHORT_STRADDLE' | 'IRON_BUTTERFLY' | 'JADE_LIZARD'     // Volatility
+  | 'COLLAR' | 'PROTECTIVE_PUT' | 'SPY_HEDGE';                   // Protection
+
+// ─── Strategy Parameters ───────────────────────────────────────────────────────
 export interface StrategyConfig {
+  // ── Entry Rules ──
   /** Delta threshold for short leg alert (default 0.40) */
   deltaAlertThreshold: number;
-  /** DTE window to trigger roll evaluation (default 45) */
-  rollDteDays: number;
-  /** Max single-name concentration as % of Net Liq (default 20%) */
-  maxSingleNamePct: number;
-  /** Max sector concentration as % of Net Liq (default 40%) */
-  maxSectorPct: number;
-  /** Stop-loss: close position if underlying breaks 200-SMA (default true) */
-  stopLoss200SMA: boolean;
-  /** Minimum premium credit to keep a short leg open (default $50) */
-  minPremiumCredit: number;
-  /** Macro regime score threshold below which no new entries (default 0) */
-  regimeEntryThreshold: number;
+  /** Upper delta bound for new entries (default 0.7) */
+  deltaEntryMax: number;
+  /** Critical gamma delta threshold (default 0.70) */
+  criticalGammaDelta: number;
+  /** Target DTE for new entries (default 45) */
+  targetDte: number;
+  /** Minimum DTE for new entries (default 21) */
+  minDteEntry: number;
   /** IV rank threshold for Candidates screener entry signal (default 50) */
   ivRankThreshold: number;
   /** IV/HV spread threshold in decimal for Candidates screener (default 0.05 = 5pp) */
   ivHvSpreadThreshold: number;
+  /** High IV threshold for regime-based strategy selection (default 50) */
+  ivHighThreshold: number;
+  /** Macro regime score threshold below which no new entries (default 0) */
+  regimeEntryThreshold: number;
+
+  // ── Cut & Roll Rules ──
+  /** DTE window to trigger roll evaluation (default 45) */
+  rollDteDays: number;
+  /** Profit target % of max profit to close early (default 0.5 = 50%) */
+  profitTargetPct: number;
+  /** Stop-loss drawdown threshold as multiple of credit received (default 2.0) */
+  stopLossMultiplier: number;
+  /** Stop-loss: close position if underlying breaks 200-SMA (default true) */
+  stopLoss200SMA: boolean;
+  /** Stop-loss 200-SMA buffer % (default 0.02 = 2%) */
+  stopLoss200SMABuffer: number;
+
+  // ── Sizing & Pacing ──
+  /** Max open positions across portfolio (default 20) */
+  maxOpenPositions: number;
+  /** Strikes per week pacing cap (default 5) */
+  strikesPerWeekCap: number;
+  /** Max single-name concentration as % of Net Liq (default 20%) */
+  maxSingleNamePct: number;
+  /** Single ticker concentration cap % (default 10) */
+  singleTickerConcentrationCap: number;
+  /** Minimum premium credit to keep a short leg open (default $50) */
+  minPremiumCredit: number;
+
+  // ── Income Strategies ──
+  /** Min CSP credit (default $1.00) */
+  minCspCredit: number;
+  /** Min PMCC call credit (default $0.50) */
+  minPmccCredit: number;
+  /** Min Covered Call credit (default $0.50) */
+  minCoveredCallCredit: number;
+
+  // ── Volatility Strategies ──
+  /** Iron Condor short delta (default 0.16) */
+  ironCondorShortDelta: number;
+  /** Iron Condor wing width (default 5) */
+  ironCondorWingWidth: number;
+  /** Strangle/Straddle target DTE (default 30) */
+  strangleTargetDte: number;
+
+  // ── Directional Strategies ──
+  /** Vertical spread width (default 5) */
+  verticalSpreadWidth: number;
+  /** LEAPS minimum DTE at entry (default 365) */
+  leapsMinDte: number;
+
+  // ── Protection Strategies ──
+  /** Collar short delta (default 0.25) */
+  collarShortDelta: number;
+  /** Protective put delta (default 0.3) */
+  protectivePutDelta: number;
+  /** SPY hedge MV target — min (default 20000) */
+  spyHedgeTargetMin: number;
+  /** SPY hedge MV target — max (default 30000) */
+  spyHedgeTargetMax: number;
+
+  // ── Other ──
+  /** Portfolio theta target % of Net Liq per day (default 0.001 = 0.1%) */
+  portfolioThetaTarget: number;
+  /** Portfolio long bias threshold (default 5000) */
+  portfolioLongBiasThreshold: number;
+  /** Portfolio short bias threshold (default -5000) */
+  portfolioShortBiasThreshold: number;
+  /** Available funds floor (default 17000) */
+  availableFundsFloor: number;
+  /** Excess liquidity floor (default 25000) */
+  excessLiquidityFloor: number;
+  /** Prime entry gap high (default 0) */
+  primeEntryGapHigh: number;
+  /** VIX high regime threshold (default 25) */
+  vixHighRegime: number;
+  /** VIX extreme regime threshold (default 35) */
+  vixExtremeRegime: number;
+  /** Min Strangle credit (default 0.5) */
+  minStrangleCredit: number;
+  /** Max long option cost (% Net Liq) (default 0.05 = 5%) */
+  maxLongOptionCostPct: number;
+  /** Long call target delta (default 0.3) */
+  longCallTargetDelta: number;
+  /** Long put target delta (default 0.3) */
+  longPutTargetDelta: number;
+  /** Butterfly body width (default 5) */
+  butterflyBodyWidth: number;
+  /** LEAPS profit take (default 10) */
+  leapsProfitTake: number;
+  /** LEAPS scale-out tranche (default 25) */
+  leapsScaleOutTranche: number;
+  /** LEAPS earnings blackout (default 21) */
+  leapsEarningsBlackout: number;
+  /** Max sector concentration as % of Net Liq (default 40%) — kept for backward compat */
+  maxSectorPct: number;
+}
+
+// ─── Trader Profile ────────────────────────────────────────────────────────────
+export interface TraderProfile {
+  persona: TraderPersona;
+  activeStrategies: StrategyType[];
+  riskTolerance: RiskTolerance;
+  primaryObjective: PrimaryObjective;
+  signalMode: SignalMode;
+  /** Session-only DTE override (not saved to profile unless explicitly saved) */
+  sessionDteOverride?: number;
+  /** Session-only delta buffer override */
+  sessionDeltaBuffer?: number;
+}
+
+export const DEFAULT_TRADER_PROFILE: TraderProfile = {
+  persona: 'pmcc_income',
+  activeStrategies: ['PMCC', 'CSP', 'IRON_CONDOR', 'JADE_LIZARD', 'COVERED_CALL'],
+  riskTolerance: 'moderate',
+  primaryObjective: 'income',
+  signalMode: 'advisory',
+};
+
+export interface StrategyConfig {
+  deltaAlertThreshold: number;
+  deltaEntryMax: number;
+  criticalGammaDelta: number;
+  targetDte: number;
+  minDteEntry: number;
+  ivRankThreshold: number;
+  ivHvSpreadThreshold: number;
+  ivHighThreshold: number;
+  regimeEntryThreshold: number;
+  rollDteDays: number;
+  profitTargetPct: number;
+  stopLossMultiplier: number;
+  stopLoss200SMA: boolean;
+  stopLoss200SMABuffer: number;
+  maxOpenPositions: number;
+  strikesPerWeekCap: number;
+  maxSingleNamePct: number;
+  singleTickerConcentrationCap: number;
+  minPremiumCredit: number;
+  minCspCredit: number;
+  minPmccCredit: number;
+  minCoveredCallCredit: number;
+  ironCondorShortDelta: number;
+  ironCondorWingWidth: number;
+  strangleTargetDte: number;
+  verticalSpreadWidth: number;
+  leapsMinDte: number;
+  collarShortDelta: number;
+  protectivePutDelta: number;
+  spyHedgeTargetMin: number;
+  spyHedgeTargetMax: number;
+  portfolioThetaTarget: number;
+  portfolioLongBiasThreshold: number;
+  portfolioShortBiasThreshold: number;
+  availableFundsFloor: number;
+  excessLiquidityFloor: number;
+  primeEntryGapHigh: number;
+  vixHighRegime: number;
+  vixExtremeRegime: number;
+  minStrangleCredit: number;
+  maxLongOptionCostPct: number;
+  longCallTargetDelta: number;
+  longPutTargetDelta: number;
+  butterflyBodyWidth: number;
+  leapsProfitTake: number;
+  leapsScaleOutTranche: number;
+  leapsEarningsBlackout: number;
 }
 
 export interface AppConfig {
-  /** Fortress Dashboard REST API base URL */
   apiUrl: string;
-  /** Bearer token for API authentication */
   apiToken: string;
-  /** Ticker universe — list of symbols to monitor */
   tickers: string[];
-  /** Strategy parameters */
   strategy: StrategyConfig;
-  /** Whether to auto-refresh data (default true) */
+  traderProfile: TraderProfile;
   autoRefresh: boolean;
-  /** Auto-refresh interval in seconds (default 60) */
   refreshIntervalSec: number;
-  /** Dashboard name shown in sidebar header */
   dashboardName: string;
-  /** DTE threshold below which a P&L leg shows the TRIAGE badge and click-to-analyse shortcut (default 7) */
   dteTriage: number;
 }
 
+export const DEFAULT_STRATEGY: StrategyConfig = {
+  deltaAlertThreshold: 0.40,
+  deltaEntryMax: 0.7,
+  criticalGammaDelta: 0.70,
+  targetDte: 45,
+  minDteEntry: 21,
+  ivRankThreshold: 50,
+  ivHvSpreadThreshold: 0.05,
+  ivHighThreshold: 50,
+  regimeEntryThreshold: 0,
+  rollDteDays: 45,
+  profitTargetPct: 0.50,
+  stopLossMultiplier: 2.0,
+  stopLoss200SMA: true,
+  stopLoss200SMABuffer: 0.02,
+  maxOpenPositions: 20,
+  strikesPerWeekCap: 5,
+  maxSingleNamePct: 20,
+  singleTickerConcentrationCap: 10,
+  minPremiumCredit: 50,
+  minCspCredit: 1.0,
+  minPmccCredit: 0.5,
+  minCoveredCallCredit: 0.5,
+  ironCondorShortDelta: 0.16,
+  ironCondorWingWidth: 5,
+  strangleTargetDte: 30,
+  verticalSpreadWidth: 5,
+  leapsMinDte: 365,
+  collarShortDelta: 0.25,
+  protectivePutDelta: 0.3,
+  spyHedgeTargetMin: 20000,
+  spyHedgeTargetMax: 30000,
+  portfolioThetaTarget: 0.001,
+  portfolioLongBiasThreshold: 5000,
+  portfolioShortBiasThreshold: -5000,
+  availableFundsFloor: 17000,
+  excessLiquidityFloor: 25000,
+  primeEntryGapHigh: 0,
+  vixHighRegime: 25,
+  vixExtremeRegime: 35,
+  minStrangleCredit: 0.5,
+  maxLongOptionCostPct: 0.05,
+  longCallTargetDelta: 0.3,
+  longPutTargetDelta: 0.3,
+  butterflyBodyWidth: 5,
+  leapsProfitTake: 10,
+  leapsScaleOutTranche: 25,
+  leapsEarningsBlackout: 21,
+  maxSectorPct: 40,
+};
+
 export const DEFAULT_CONFIG: AppConfig = {
-  // Empty string = relative URL, so requests go to the same origin.
-  // When served via nginx on port 3000, /api/* is proxied to port 8080 automatically.
-  // Set this to an absolute URL only if running the dashboard on a different host.
   apiUrl: '',
   apiToken: '',
   tickers: ['MSFT', 'AVGO', 'NFLX', 'SPY', 'AMD', 'GOOGL', 'UNH', 'NVDA'],
-  strategy: {
-    deltaAlertThreshold: 0.40,
-    rollDteDays: 45,
-    maxSingleNamePct: 20,
-    maxSectorPct: 40,
-    stopLoss200SMA: true,
-    minPremiumCredit: 50,
-    regimeEntryThreshold: 0,
-    ivRankThreshold: 50,
-    ivHvSpreadThreshold: 0.05,
-  },
+  strategy: DEFAULT_STRATEGY,
+  traderProfile: DEFAULT_TRADER_PROFILE,
   autoRefresh: true,
   refreshIntervalSec: 60,
   dashboardName: 'Fortress v3',
@@ -76,14 +295,49 @@ const STORAGE_KEY = 'fortress_v2_config';
 
 export type PrefsSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+// ─── Strategy Profile Backup/Restore ──────────────────────────────────────────
+export interface StrategyProfileSnapshot {
+  version: '1.0';
+  exportedAt: string;
+  profileName: string;
+  traderProfile: TraderProfile;
+  strategy: StrategyConfig;
+}
+
+export function exportStrategyProfile(config: AppConfig, profileName?: string): string {
+  const snapshot: StrategyProfileSnapshot = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    profileName: profileName ?? `Fortress Profile ${new Date().toLocaleDateString()}`,
+    traderProfile: config.traderProfile,
+    strategy: config.strategy,
+  };
+  return JSON.stringify(snapshot, null, 2);
+}
+
+export function downloadStrategyProfile(config: AppConfig, profileName?: string): void {
+  const json = exportStrategyProfile(config, profileName);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fortress-strategy-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 interface ConfigContextValue {
   config: AppConfig;
   updateConfig: (patch: Partial<AppConfig>) => void;
   updateStrategy: (patch: Partial<StrategyConfig>) => void;
+  updateTraderProfile: (patch: Partial<TraderProfile>) => void;
+  setSignalMode: (mode: SignalMode) => void;
   resetConfig: () => void;
+  resetStrategyToDefaults: () => void;
   exportConfig: () => string;
   importConfig: (json: string) => boolean;
-  /** Server-side prefs save status — use in Settings to show sync indicator */
+  /** Import only strategy profile + trader profile from a snapshot JSON */
+  importStrategyProfile: (json: string) => { ok: boolean; profileName?: string; error?: string };
   prefsSaveStatus: PrefsSaveStatus;
 }
 
@@ -95,8 +349,6 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Migration: if the stored apiUrl points to the old absolute port-8080 address,
-        // clear it so requests go through the nginx proxy on the same origin instead.
         const OLD_ABSOLUTE_URLS = [
           'http://76.13.138.194:8080',
           'http://localhost:8080',
@@ -104,11 +356,11 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         if (OLD_ABSOLUTE_URLS.some(u => parsed.apiUrl === u)) {
           parsed.apiUrl = '';
         }
-        // Deep merge with defaults to handle new fields added in updates
         return {
           ...DEFAULT_CONFIG,
           ...parsed,
-          strategy: { ...DEFAULT_CONFIG.strategy, ...parsed.strategy },
+          strategy: { ...DEFAULT_STRATEGY, ...parsed.strategy },
+          traderProfile: { ...DEFAULT_TRADER_PROFILE, ...parsed.traderProfile },
         };
       }
     } catch {
@@ -117,8 +369,6 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     return DEFAULT_CONFIG;
   });
 
-  // ─── Server-side persistence ───────────────────────────────────────────────
-  // Load prefs from server on mount (merges over localStorage, preserving local apiToken)
   const serverPrefs = trpc.prefs.get.useQuery(undefined, { retry: false });
   const savePrefs = trpc.prefs.save.useMutation();
   const serverPrefsApplied = useRef(false);
@@ -131,13 +381,12 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     setConfig(prev => ({
       ...DEFAULT_CONFIG,
       ...remote,
-      strategy: { ...DEFAULT_CONFIG.strategy, ...(remote.strategy ?? {}) },
-      // Always keep the local apiToken — never overwrite with server value (it's stripped on save)
+      strategy: { ...DEFAULT_STRATEGY, ...(remote.strategy ?? {}) },
+      traderProfile: { ...DEFAULT_TRADER_PROFILE, ...(remote.traderProfile ?? {}) },
       apiToken: prev.apiToken,
     }));
   }, [serverPrefs.data]);
 
-  // Persist to localStorage on every change
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
@@ -146,7 +395,6 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     }
   }, [config]);
 
-  // Debounced save to server (1 s after last change, skip initial mount)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = useRef(false);
   useEffect(() => {
@@ -171,12 +419,33 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const updateTraderProfile = useCallback((patch: Partial<TraderProfile>) => {
+    setConfig(prev => ({
+      ...prev,
+      traderProfile: { ...prev.traderProfile, ...patch },
+    }));
+  }, []);
+
+  const setSignalMode = useCallback((mode: SignalMode) => {
+    setConfig(prev => ({
+      ...prev,
+      traderProfile: { ...prev.traderProfile, signalMode: mode },
+    }));
+  }, []);
+
   const resetConfig = useCallback(() => {
     setConfig(DEFAULT_CONFIG);
   }, []);
 
+  const resetStrategyToDefaults = useCallback(() => {
+    setConfig(prev => ({
+      ...prev,
+      strategy: DEFAULT_STRATEGY,
+      traderProfile: DEFAULT_TRADER_PROFILE,
+    }));
+  }, []);
+
   const exportConfig = useCallback(() => {
-    // Export without the API token for safe sharing
     const safe = { ...config, apiToken: '' };
     return JSON.stringify(safe, null, 2);
   }, [config]);
@@ -187,13 +456,33 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       setConfig(prev => ({
         ...DEFAULT_CONFIG,
         ...parsed,
-        strategy: { ...DEFAULT_CONFIG.strategy, ...parsed.strategy },
-        // Preserve existing token if import doesn't include one
+        strategy: { ...DEFAULT_STRATEGY, ...parsed.strategy },
+        traderProfile: { ...DEFAULT_TRADER_PROFILE, ...parsed.traderProfile },
         apiToken: parsed.apiToken || prev.apiToken,
       }));
       return true;
     } catch {
       return false;
+    }
+  }, []);
+
+  const importStrategyProfile = useCallback((json: string): { ok: boolean; profileName?: string; error?: string } => {
+    try {
+      const snapshot = JSON.parse(json) as Partial<StrategyProfileSnapshot>;
+      if (snapshot.version !== '1.0') {
+        return { ok: false, error: 'Unrecognised profile format (expected version 1.0)' };
+      }
+      if (!snapshot.traderProfile || !snapshot.strategy) {
+        return { ok: false, error: 'Profile file is missing traderProfile or strategy fields' };
+      }
+      setConfig(prev => ({
+        ...prev,
+        strategy: { ...DEFAULT_STRATEGY, ...snapshot.strategy },
+        traderProfile: { ...DEFAULT_TRADER_PROFILE, ...snapshot.traderProfile },
+      }));
+      return { ok: true, profileName: snapshot.profileName };
+    } catch (e) {
+      return { ok: false, error: `Parse error: ${e instanceof Error ? e.message : String(e)}` };
     }
   }, []);
 
@@ -204,7 +493,19 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     : 'idle';
 
   return (
-    <ConfigContext.Provider value={{ config, updateConfig, updateStrategy, resetConfig, exportConfig, importConfig, prefsSaveStatus }}>
+    <ConfigContext.Provider value={{
+      config,
+      updateConfig,
+      updateStrategy,
+      updateTraderProfile,
+      setSignalMode,
+      resetConfig,
+      resetStrategyToDefaults,
+      exportConfig,
+      importConfig,
+      importStrategyProfile,
+      prefsSaveStatus,
+    }}>
       {children}
     </ConfigContext.Provider>
   );

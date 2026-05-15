@@ -869,25 +869,45 @@ export default function TradeBuilderPage() {
             )}
 
             {/* Two-column layout: strategies + market context */}
-            {/* Warning banner: pre-trade gate failed — advisory only, user can still proceed */}
+            {/* Warning banner: pre-trade gate failed — behaviour depends on signal mode */}
             <div className="relative">
-              {pretradeResult && pretradeResult.verdict !== 'PROCEED' && (
-                <div
-                  className="flex items-start gap-3 rounded-lg px-4 py-3 mb-3"
-                  style={{
-                    background: 'oklch(0.65 0.22 25 / 10%)',
-                    border: '1px solid oklch(0.65 0.22 25 / 35%)',
-                  }}
-                >
-                  <Lock className="w-4 h-4 mt-0.5 shrink-0" style={{ color: AMBER }} />
-                  <div>
-                    <p className="font-mono-data text-xs font-bold" style={{ color: AMBER }}>PRE-TRADE WARNINGS ACTIVE</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: DIM }}>
-                      One or more pre-trade checks flagged issues above. Review before entering — you can still proceed at your discretion.
-                    </p>
+              {(() => {
+                const signalMode = config.traderProfile?.signalMode ?? 'advisory';
+                const hasFail = pretradeResult && pretradeResult.verdict !== 'PROCEED';
+                if (!hasFail) return null;
+                if (signalMode === 'sandbox') return null; // silent in sandbox
+                if (signalMode === 'strict') {
+                  return (
+                    <div
+                      className="flex items-start gap-3 rounded-lg px-4 py-3 mb-3"
+                      style={{ background: 'oklch(0.65 0.22 25 / 18%)', border: '1px solid oklch(0.65 0.22 25 / 60%)' }}
+                    >
+                      <Lock className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'oklch(0.65 0.22 25)' }} />
+                      <div>
+                        <p className="font-mono-data text-xs font-bold" style={{ color: 'oklch(0.65 0.22 25)' }}>PRE-TRADE GATE BLOCKED — STRICT MODE</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: DIM }}>
+                          Signal mode is set to Strict. One or more pre-trade checks failed. Change to Advisory or Sandbox mode in the Strategy Workspace to proceed.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                // advisory (default)
+                return (
+                  <div
+                    className="flex items-start gap-3 rounded-lg px-4 py-3 mb-3"
+                    style={{ background: 'oklch(0.65 0.22 25 / 10%)', border: '1px solid oklch(0.65 0.22 25 / 35%)' }}
+                  >
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: AMBER }} />
+                    <div>
+                      <p className="font-mono-data text-xs font-bold" style={{ color: AMBER }}>PRE-TRADE WARNINGS ACTIVE — ADVISORY MODE</p>
+                      <p className="text-[11px] mt-0.5" style={{ color: DIM }}>
+                        One or more pre-trade checks flagged issues above. Review before entering — you can still proceed at your discretion.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             <div className="grid grid-cols-3 gap-5">
               {/* Step 3: Strategy selection */}
               <div className="col-span-2">

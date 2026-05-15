@@ -33,6 +33,7 @@ import {
   Zap,
   Activity,
   Clock,
+  Target,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,12 +52,14 @@ import ScriptsPage from "./pages/ScriptsPage";
 import NotFound from "./pages/NotFound";
 import MorningBriefPage from "./pages/MorningBriefPage";
 import TradeBuilderPage from "./pages/TradeBuilderPage";
+import StrategyPage from "./pages/StrategyPage";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
   { path: '/morning-brief', label: 'Morning Brief',  icon: Activity },
   { path: '/trade-builder', label: 'Trade Builder',  icon: Zap },
+  { path: '/strategy',      label: 'Strategy',       icon: Target },
   { path: '/',              label: 'Dashboard',     icon: LayoutDashboard },
   { path: '/positions',     label: 'Positions',     icon: BookOpen },
   { path: '/market-intel',  label: 'Market Intel',  icon: TrendingUp },
@@ -414,6 +417,7 @@ function Router() {
           <Route path="/earnings"     component={EarningsPage} />
           <Route path="/journal"      component={JournalPage} />
           <Route path="/scripts"      component={ScriptsPage} />
+          <Route path="/strategy"     component={StrategyPage} />
           <Route path="/settings"     component={SettingsPage} />
           <Route                      component={NotFound} />
         </Switch>
