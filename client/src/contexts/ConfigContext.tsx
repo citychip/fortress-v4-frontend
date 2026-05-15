@@ -1,5 +1,5 @@
 /**
- * FORTRESS V2 — ConfigContext
+ * FORTRESS V3 — ConfigContext
  * All user-configurable settings stored in localStorage.
  * Nothing is hardcoded — API URL, token, ticker universe, and all strategy
  * parameters are fully editable via the Settings tab.
@@ -68,7 +68,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   autoRefresh: true,
   refreshIntervalSec: 60,
-  dashboardName: 'Fortress v2',
+  dashboardName: 'Fortress v3',
   dteTriage: 7,
 };
 

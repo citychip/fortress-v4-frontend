@@ -1,5 +1,5 @@
 /**
- * FORTRESS V2 — Settings Page
+ * FORTRESS V3 — Settings Page
  * ALL configuration lives here — API URL, token, ticker universe, strategy parameters.
  * Stored in localStorage via ConfigContext. Nothing is hardcoded.
  * Supports export (without token) and import for backup/restore.
@@ -774,7 +774,7 @@ function GeneralSection() {
           <Input
             value={config.dashboardName}
             onChange={v => updateConfig({ dashboardName: v })}
-            placeholder="Fortress v2"
+            placeholder="Fortress v3"
           />
         </Field>
 

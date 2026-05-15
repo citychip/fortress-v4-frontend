@@ -21,9 +21,9 @@
 - [ ] Audit all v3.6 settings sections and catalogue every configurable field for migration
 - [ ] Audit IBKR Web API order placement endpoints (place, preview, cancel, status)
 - [ ] Rationalise and update all documentation (fortress_docs, fortress_docs_vps, README, CHANGELOG)
-- [ ] Rename project to Fortress v3 (app title, sidebar, page title, package.json)
-- [ ] Persistent 5px status bar: IBKR status, QuantData status, VIX, SPY price, market hours clock
-- [ ] Collapsed sidebar (icon-only default, expand on hover/click)
+- [x] Rename project to Fortress v3 (app title, sidebar, page title, package.json)
+- [x] Persistent 5px status bar: IBKR status, QuantData status, VIX, SPY price, market hours clock
+- [x] Collapsed sidebar (icon-only default, expand on hover/click)
 - [ ] Morning Brief landing page (trade report full-width, portfolio snapshot strip below)
 - [ ] Migrate all v3.6 settings into Fortress v3 Settings page (strategy, universe, security, notifications, backup/restore)
 - [ ] Trade Builder page: live option chain from IBKR, GEX regime, strategy suggester, PoP calculator
