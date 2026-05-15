@@ -10,10 +10,11 @@
  *   Position             → { current_delta, market_value, local_symbol, expiry, right, strike, qty }
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow, useSpyHedgeCoverage,
-  useCalendar, useEarningsHistory, calcDte, formatDollar, regimeInfo,
+  useCalendar, useEarningsHistory, useBriefing, calcDte, formatDollar, regimeInfo,
+  type Position,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -29,7 +30,7 @@ import {
   ReferenceArea,
   ResponsiveContainer,
 } from 'recharts';
-import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck, Sigma } from 'lucide-react';
+import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck, Sigma, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Ticker selector ──────────────────────────────────────────────────────────
@@ -144,12 +145,26 @@ function GreeksSummaryPanel({ ticker }: { ticker: string }) {
   );
 }
 
+// ─── OTM Buffer label helper ─────────────────────────────────────────────────
+
+function otmBufferColor(pct: number): string {
+  if (pct < 5)  return 'oklch(0.65 0.22 25)';   // red
+  if (pct < 8)  return 'oklch(0.78 0.18 85)';   // orange/amber
+  if (pct < 15) return 'oklch(0.85 0.18 80)';   // yellow
+  return 'oklch(0.72 0.18 145)';                 // green
+}
+
 // ─── Price chart (uses candles + levels + earnings overlay) ───────────────────
 
-function PriceChart({ ticker }: { ticker: string }) {
+function PriceChart({ ticker, positions, vix }: {
+  ticker: string;
+  positions: Position[];
+  vix: number | null;
+}) {
   const { data, loading, error } = useChartData(ticker);
   const { data: calendarData } = useCalendar();
   const { data: earningsHistory } = useEarningsHistory(ticker);
+  const { config } = useConfig();
 
   if (loading) return <div className="h-64 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
 
@@ -207,6 +222,53 @@ function PriceChart({ ticker }: { ticker: string }) {
   const dpFloors = data.levels?.dp_floors ?? [];
   const gexCalls = data.levels?.gex_calls ?? [];
   const gexPuts = data.levels?.gex_puts ?? [];
+
+  // ── §9 Active option strike lines from live positions ─────────────────────
+  // Derive short call, short put, long put, LEAP entry from open legs for this ticker
+  const tickerLegs = positions.filter(p => p.ticker === ticker && p.sec_type === 'OPT');
+
+  // Short calls: short (qty < 0) call legs → highest strike (nearest OTM)
+  const shortCallLegs = tickerLegs.filter(l => l.qty < 0 && l.right === 'C');
+  const shortCallStrike = shortCallLegs.length
+    ? Math.min(...shortCallLegs.map(l => l.strike))
+    : null;
+
+  // Short puts: short (qty < 0) put legs → highest strike (nearest OTM)
+  const shortPutLegs = tickerLegs.filter(l => l.qty < 0 && l.right === 'P');
+  const shortPutStrike = shortPutLegs.length
+    ? Math.max(...shortPutLegs.map(l => l.strike))
+    : null;
+
+  // Long puts: long (qty > 0) put legs → highest strike (spread floor)
+  const longPutLegs = tickerLegs.filter(l => l.qty > 0 && l.right === 'P');
+  const longPutStrike = longPutLegs.length
+    ? Math.max(...longPutLegs.map(l => l.strike))
+    : null;
+
+  // LEAP entry: long call legs with DTE > 180 (LEAPS)
+  const leapLegs = tickerLegs.filter(l => l.qty > 0 && l.right === 'C' && l.expiry && calcDte(l.expiry) > 180);
+  const leapEntryStrike = leapLegs.length
+    ? Math.min(...leapLegs.map(l => l.strike))
+    : null;
+
+  // OTM buffer calculations (vs current close)
+  const shortCallOtmPct = shortCallStrike != null && currentClose != null
+    ? ((shortCallStrike - currentClose) / shortCallStrike) * 100
+    : null;
+  const shortPutOtmPct = shortPutStrike != null && currentClose != null
+    ? ((currentClose - shortPutStrike) / shortPutStrike) * 100
+    : null;
+
+  // ── §4 Earnings blackout window ───────────────────────────────────────────
+  const earningsEntry = calendarData?.tickers?.[ticker];
+  const earningsBlackout = earningsEntry?.status === 'blackout' || earningsEntry?.status === 'approaching';
+  const daysToEarnings = earningsEntry?.days_to_earnings ?? null;
+  const earningsWindowDays = 10; // §4 strategy default: 10-day no-entry window
+  const earningsWindowActive = daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= earningsWindowDays;
+
+  // ── §7 VIX pause zone ─────────────────────────────────────────────────────
+  const vixPauseLevel = 25;
+  const vixPause = vix != null && vix > vixPauseLevel;
 
   // Earnings overlay: multi-marker from history endpoint, fallback to calendar next_earnings
   const earningsMarkers: Array<{ date: string; label: string; isPast: boolean; surprisePct: number | null }> = useMemo(() => {
@@ -268,6 +330,42 @@ function PriceChart({ ticker }: { ticker: string }) {
             borderRadius: '4px', fontSize: '11px', fontFamily: 'JetBrains Mono', color: 'oklch(0.93 0.005 258)',
           }} formatter={(value: number) => [`$${value.toFixed(2)}`]} />
 
+          {/* §7 VIX Pause Zone — red background when VIX > 25 */}
+          {vixPause && (
+            <ReferenceArea
+              x1={chartDataWithIndicators[0]?.date}
+              x2={chartDataWithIndicators[chartDataWithIndicators.length - 1]?.date}
+              fill="oklch(0.65 0.22 25 / 6%)"
+              ifOverflow="visible"
+            />
+          )}
+
+          {/* §4 Earnings Blackout Window — yellow background from 10 days before next earnings date */}
+          {(() => {
+            if (!earningsWindowActive) return null;
+            const nextEarningsDate = earningsEntry?.next_earnings;
+            if (!nextEarningsDate || !chartData.length) return null;
+            // Compute the blackout start date = next_earnings - 10 calendar days
+            const earningsMs = new Date(nextEarningsDate).getTime();
+            const blackoutStartMs = earningsMs - earningsWindowDays * 24 * 60 * 60 * 1000;
+            const blackoutStartStr = new Date(blackoutStartMs).toISOString().slice(0, 10);
+            // Find the closest chart bar to the blackout start
+            const startBar = chartData.reduce((best, d) =>
+              Math.abs(new Date(d.rawDate).getTime() - blackoutStartMs) <
+              Math.abs(new Date(best.rawDate).getTime() - blackoutStartMs) ? d : best
+            );
+            // End bar: last bar in chart (earnings may be beyond chart window)
+            const endBar = chartData[chartData.length - 1];
+            return (
+              <ReferenceArea
+                x1={startBar.date}
+                x2={endBar.date}
+                fill="oklch(0.85 0.18 80 / 8%)"
+                ifOverflow="visible"
+              />
+            );
+          })()}
+
           {/* Thesis Broken Zone — red background when price < 200 SMA */}
           {thesisBroken && (
             <ReferenceArea
@@ -308,6 +406,68 @@ function PriceChart({ ticker }: { ticker: string }) {
             );
           })}
 
+          {/* §9 Active option strike lines from live positions */}
+          {shortCallStrike != null && (
+            <ReferenceLine
+              y={shortCallStrike}
+              stroke="oklch(0.78 0.18 55 / 90%)"
+              strokeDasharray="6 3"
+              strokeWidth={2}
+              label={{
+                value: `Short Call $${shortCallStrike}${shortCallOtmPct != null ? ` (OTM ${shortCallOtmPct.toFixed(1)}%)` : ''}`,
+                fontSize: 9,
+                fill: otmBufferColor(shortCallOtmPct ?? 99),
+                position: 'insideTopLeft',
+                offset: 4,
+              }}
+            />
+          )}
+          {shortPutStrike != null && (
+            <ReferenceLine
+              y={shortPutStrike}
+              stroke="oklch(0.65 0.22 25 / 85%)"
+              strokeDasharray="6 3"
+              strokeWidth={2}
+              label={{
+                value: `Short Put $${shortPutStrike}${shortPutOtmPct != null ? ` (OTM ${shortPutOtmPct.toFixed(1)}%)` : ''}`,
+                fontSize: 9,
+                fill: otmBufferColor(shortPutOtmPct ?? 99),
+                position: 'insideBottomLeft',
+                offset: 4,
+              }}
+            />
+          )}
+          {longPutStrike != null && (
+            <ReferenceLine
+              y={longPutStrike}
+              stroke="oklch(0.60 0.18 250 / 70%)"
+              strokeDasharray="3 3"
+              strokeWidth={1}
+              label={{
+                value: `Long Put $${longPutStrike}`,
+                fontSize: 9,
+                fill: 'oklch(0.60 0.18 250)',
+                position: 'insideBottomLeft',
+                offset: 4,
+              }}
+            />
+          )}
+          {leapEntryStrike != null && (
+            <ReferenceLine
+              y={leapEntryStrike}
+              stroke="oklch(0.72 0.20 180 / 70%)"
+              strokeDasharray="3 3"
+              strokeWidth={1.5}
+              label={{
+                value: `LEAP Entry $${leapEntryStrike}`,
+                fontSize: 9,
+                fill: 'oklch(0.72 0.20 180)',
+                position: 'insideTopLeft',
+                offset: 4,
+              }}
+            />
+          )}
+
           {/* DP floors (support) */}
           {dpFloors.map((level, i) => (
             <ReferenceLine key={`dp-${i}`} y={level} stroke="oklch(0.80 0.15 200 / 50%)" strokeDasharray="4 4"
@@ -333,13 +493,55 @@ function PriceChart({ ticker }: { ticker: string }) {
         </LineChart>
       </ResponsiveContainer>
 
-      {/* Thesis Broken Zone badge */}
-      {thesisBroken && (
-        <div className="flex items-center gap-2 mt-2 mb-1 px-2.5 py-1.5 rounded text-xs" style={{ background: 'oklch(0.65 0.22 25 / 12%)', border: '1px solid oklch(0.65 0.22 25 / 30%)', color: 'oklch(0.65 0.22 25)' }}>
-          <span className="font-bold">⚠ THESIS BROKEN</span>
-          <span style={{ color: 'oklch(0.55 0.010 258)' }}>Price is below 200 SMA — trend-following regime, reduce size</span>
-        </div>
-      )}
+      {/* Status badges row */}
+      <div className="flex flex-col gap-1 mt-2">
+        {/* §6 Thesis Broken Zone badge */}
+        {thesisBroken && (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs" style={{ background: 'oklch(0.65 0.22 25 / 12%)', border: '1px solid oklch(0.65 0.22 25 / 30%)', color: 'oklch(0.65 0.22 25)' }}>
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="font-bold">THESIS BROKEN</span>
+            <span style={{ color: 'oklch(0.55 0.010 258)' }}>Price below 200 SMA — trend-following regime, reduce size</span>
+          </div>
+        )}
+
+        {/* §7 VIX Pause Zone badge */}
+        {vixPause && (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs" style={{ background: 'oklch(0.65 0.22 25 / 10%)', border: '1px solid oklch(0.65 0.22 25 / 25%)', color: 'oklch(0.65 0.22 25)' }}>
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="font-bold">VIX PAUSE — NO NEW ENTRIES</span>
+            <span style={{ color: 'oklch(0.55 0.010 258)' }}>VIX {vix?.toFixed(1)} &gt; 25 — §7 regime filter active, pause all new premium-selling entries</span>
+          </div>
+        )}
+
+        {/* §4 Earnings Blackout Window badge */}
+        {earningsWindowActive && (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs" style={{ background: 'oklch(0.85 0.18 80 / 10%)', border: '1px solid oklch(0.85 0.18 80 / 30%)', color: 'oklch(0.78 0.18 85)' }}>
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="font-bold">EARNINGS WINDOW</span>
+            <span style={{ color: 'oklch(0.55 0.010 258)' }}>
+              {daysToEarnings === 0 ? 'Earnings today' : `${daysToEarnings}d to earnings`} — §4 no-entry window active, no new puts/diagonals/Jade Lizards
+            </span>
+          </div>
+        )}
+
+        {/* §5 OTM buffer status for short call */}
+        {shortCallOtmPct != null && (
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs"
+            style={{
+              background: `${otmBufferColor(shortCallOtmPct)}15`,
+              border: `1px solid ${otmBufferColor(shortCallOtmPct)}40`,
+              color: otmBufferColor(shortCallOtmPct),
+            }}>
+            <span className="font-bold">SHORT CALL OTM {shortCallOtmPct.toFixed(1)}%</span>
+            <span style={{ color: 'oklch(0.55 0.010 258)' }}>
+              {shortCallOtmPct < 5 ? '🔴 Critical — evaluate roll up-and-out for net credit'
+                : shortCallOtmPct < 8 ? '🟠 Warning — monitor closely'
+                : shortCallOtmPct < 15 ? '🟡 Adequate buffer'
+                : '🟢 Comfortable buffer'}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Legend */}
       <div className="flex items-center gap-4 mt-2 flex-wrap">
@@ -348,6 +550,10 @@ function PriceChart({ ticker }: { ticker: string }) {
           { color: 'oklch(0.60 0.18 250)', label: '50 SMA' },
           { color: 'oklch(0.65 0.22 25)', label: '200 SMA (Thesis Stop)' },
           hi52w != null ? { color: 'oklch(0.65 0.22 25 / 80%)', label: '52W High' } : null,
+          shortCallStrike != null ? { color: 'oklch(0.78 0.18 55)', label: 'Short Call' } : null,
+          shortPutStrike != null ? { color: 'oklch(0.65 0.22 25)', label: 'Short Put' } : null,
+          longPutStrike != null ? { color: 'oklch(0.60 0.18 250)', label: 'Long Put' } : null,
+          leapEntryStrike != null ? { color: 'oklch(0.72 0.20 180)', label: 'LEAP Entry' } : null,
           dpFloors.length > 0 ? { color: 'oklch(0.80 0.15 200 / 70%)', label: 'DP Floor' } : null,
           gexCalls.length > 0 ? { color: 'oklch(0.72 0.18 145)', label: 'GEX Call' } : null,
           gexPuts.length > 0 ? { color: 'oklch(0.65 0.22 25)', label: 'GEX Put' } : null,
@@ -647,6 +853,10 @@ function SpyHedgePanel() {
 
 export default function AnalysisPage() {
   const { config } = useConfig();
+  const { data: positionsData } = usePositions();
+  const { data: briefingData } = useBriefing();
+  const allPositions = positionsData?.positions ?? [];
+  const vix = briefingData?.macro_regime?.vix ?? null;
   const [selectedTicker, setSelectedTicker] = useState(() => {
     // Check for triage ticker set by DTE shortcut from P&L page
     const triage = sessionStorage.getItem('fortress_triage_ticker');
@@ -696,7 +906,7 @@ export default function AnalysisPage() {
         <TickerSelector tickers={config.tickers} selected={selectedTicker} onSelect={setSelectedTicker} />
         {selectedTicker && (
           <>
-            <PriceChart ticker={selectedTicker} />
+            <PriceChart ticker={selectedTicker} positions={allPositions} vix={vix} />
             <GreeksSummaryPanel ticker={selectedTicker} />
             <div className="grid grid-cols-2 gap-4">
               <ChartLevelsPanel ticker={selectedTicker} />

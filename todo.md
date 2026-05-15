@@ -36,3 +36,10 @@
 - [ ] Dashboard mini sparklines: per-ticker price sparkline vs key GEX levels in trade report rows
 - [ ] Analysis page indicator panel: RSI, MACD, Bollinger Bands, ATR overlaid on price chart
 - [x] Pine Script indicators on Analysis chart: 50-day SMA (blue), 200-day SMA (red), 52-week high line (red dashed), Thesis Broken Zone background (red tint when price < 200 SMA)
+
+## Pine Script v3.1 Indicators (Analysis Chart)
+
+- [x] Analysis chart: auto-drawn strike lines from live positions (short call orange dashed, short put red dashed, long put blue dotted, LEAP entry teal dotted) with labels
+- [x] Analysis chart: OTM buffer % label per strike (color-coded: red <5%, orange <8%, yellow <15%, green ≥15%)
+- [x] Analysis chart: earnings blackout shading (10-day yellow zone before next earnings, auto from /api/calendar)
+- [x] Analysis chart: VIX pause zone shading (red background when VIX > 25, from /api/briefing)
