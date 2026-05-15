@@ -58,3 +58,14 @@
 - [x] Trade Builder: ticker selector only shows universe tickers — fix to allow free-text entry of any ticker (e.g. MSFT not in universe)
 - [x] Trade Builder: show all universe tickers in selector (not just screener candidates), grouped as READY (pass) vs NOT READY (fail) with reason badges
 - [ ] Trade Builder: NOT READY tickers show generic "low IV rank" badge — improve to show actual reason (IVR below threshold, IV/HV spread thin, or "not in screener results") once backend exposes per-ticker screener failure reasons
+
+## Morning Brief Improvements (v3.1)
+- [x] Morning Brief: fix IV Rank Heatmap empty state — show all universe tickers as tiles with IVR bars; fallback message when screener returns zero hits
+- [x] Morning Brief: enrich trade report rows with IVR, GEX zone (positive/negative/flip), and bias badge (bullish/bearish drift) from candidates + market-intel data
+- [x] Morning Brief: deepen regime display — show gamma flip price alongside regime label (e.g. "BEARISH · Below SPY $510 Gamma Flip")
+- [x] Morning Brief: add beta-weighted delta (β-Δ to SPY) to Portfolio Greeks panel
+- [x] Morning Brief: add theta efficiency metric (Theta / Net Liq %) to Greeks panel with 0.1%–0.5% target range indicator
+- [x] Morning Brief: fix SPY chart height (increase from ~120px to ~220px)
+- [x] Morning Brief: fix "PREV LIQ" label — renamed to "MACRO REGIME" with proper color coding
+- [x] Morning Brief: add market status pill (PRE / OPEN / AH / CLOSED) to page header
+- [x] Morning Brief: make trade report row action links more prominent (larger click targets, Analyse → button per entry row)
