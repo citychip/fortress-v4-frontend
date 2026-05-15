@@ -55,3 +55,6 @@
 - [ ] MACD panel: add plotted crossover marker dots at bullish/bearish signal crossover bars
 - [ ] Bollinger Bands: option to overlay BB bands directly on the main price chart (currently rendered as a separate panel below)
 - [x] Analysis page: show/hide toggles for BB, RSI, MACD panels (persisted to localStorage)
+- [x] Trade Builder: ticker selector only shows universe tickers — fix to allow free-text entry of any ticker (e.g. MSFT not in universe)
+- [x] Trade Builder: show all universe tickers in selector (not just screener candidates), grouped as READY (pass) vs NOT READY (fail) with reason badges
+- [ ] Trade Builder: NOT READY tickers show generic "low IV rank" badge — improve to show actual reason (IVR below threshold, IV/HV spread thin, or "not in screener results") once backend exposes per-ticker screener failure reasons

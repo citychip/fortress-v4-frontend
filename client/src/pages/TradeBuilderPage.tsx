@@ -168,22 +168,42 @@ function TickerSelector({
   selected,
   onSelect,
   candidates,
+  universeTickers,
   loading,
 }: {
   selected: string | null;
   onSelect: (t: string) => void;
   candidates: CandidateRow[];
+  universeTickers: string[];
   loading: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState('');  const sel = candidates.find(c => c.ticker === selected);
 
-  const filtered = useMemo(() => {
-    const q = search.toUpperCase();
-    return candidates.filter(c => c.ticker.includes(q));
-  }, [candidates, search]);
+  // Build a map of ticker → candidate data for O(1) lookup
+  const candidateMap = useMemo(() => {
+    const m = new Map<string, CandidateRow>();
+    candidates.forEach(c => m.set(c.ticker, c));
+    return m;
+  }, [candidates]);
 
-  const sel = candidates.find(c => c.ticker === selected);
+  // Split universe into READY (in screener) vs NOT READY (not in screener results)
+  const { ready, notReady } = useMemo(() => {
+    const q = search.toUpperCase().trim();
+    const all = universeTickers.filter(t => !q || t.includes(q));
+    const r: string[] = [];
+    const nr: string[] = [];
+    all.forEach(t => (candidateMap.has(t) ? r : nr).push(t));
+    return { ready: r, notReady: nr };
+  }, [universeTickers, candidateMap, search]);
+
+  // Extra tickers typed that aren't in universe at all
+  const freeTextTicker = useMemo(() => {
+    const q = search.toUpperCase().trim();
+    if (!q) return null;
+    if (universeTickers.includes(q)) return null;
+    return q;
+  }, [universeTickers, search]);
 
   return (
     <div className="relative">
@@ -194,7 +214,7 @@ function TickerSelector({
           background: CARD,
           borderColor: selected ? 'oklch(0.80 0.15 200 / 40%)' : BORDER,
           color: BRIGHT,
-          minWidth: '200px',
+          minWidth: '220px',
         }}
       >
         {loading ? (
@@ -202,10 +222,12 @@ function TickerSelector({
         ) : selected ? (
           <>
             <span className="font-mono-data text-sm font-bold" style={{ color: CYAN }}>{selected}</span>
-            {sel && (
+            {sel ? (
               <span className="text-xs font-mono-data" style={{ color: DIM }}>
                 IVR {sel.ivr.toFixed(0)} · ${sel.price.toFixed(2)}
               </span>
+            ) : (
+              <span className="text-xs font-mono-data" style={{ color: AMBER }}>not in screener</span>
             )}
           </>
         ) : (
@@ -216,10 +238,11 @@ function TickerSelector({
 
       {open && (
         <div
-          className="absolute top-full left-0 mt-1 z-30 rounded border overflow-hidden"
-          style={{ background: 'oklch(0.14 0.010 258)', borderColor: BORDER, width: '280px', maxHeight: '320px' }}
+          className="absolute top-full left-0 mt-1 z-30 rounded border"
+          style={{ background: 'oklch(0.14 0.010 258)', borderColor: BORDER, width: '320px', maxHeight: '400px', overflowY: 'auto' }}
         >
-          <div className="p-2 border-b" style={{ borderColor: BORDER }}>
+          {/* Search box */}
+          <div className="p-2 border-b sticky top-0" style={{ borderColor: BORDER, background: 'oklch(0.14 0.010 258)' }}>
             <input
               autoFocus
               value={search}
@@ -229,26 +252,75 @@ function TickerSelector({
               style={{ background: 'oklch(0.20 0.010 258)', color: BRIGHT, border: '1px solid oklch(1 0 0 / 12%)' }}
             />
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
-            {filtered.length === 0 ? (
-              <div className="py-4 text-center text-xs" style={{ color: DIM }}>No tickers found</div>
-            ) : (
-              filtered.map(c => {
+
+          {/* Free-text: ticker not in universe at all */}
+          {freeTextTicker && (
+            <>
+              <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider" style={{ color: DIM }}>Not in universe</div>
+              <button
+                onClick={() => { onSelect(freeTextTicker); setOpen(false); setSearch(''); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all hover:bg-[oklch(1_0_0_/_4%)] border-b"
+                style={{ borderColor: BORDER }}
+              >
+                <span className="font-mono-data text-sm font-bold w-16" style={{ color: CYAN }}>{freeTextTicker}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: 'oklch(0.78 0.18 85 / 12%)', color: AMBER }}>custom</span>
+                <span className="text-xs font-mono-data ml-auto" style={{ color: CYAN }}>Use →</span>
+              </button>
+            </>
+          )}
+
+          {/* READY section — tickers that passed screener */}
+          {ready.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider flex items-center gap-2"
+                style={{ color: 'oklch(0.72 0.18 145)' }}>
+                <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'oklch(0.72 0.18 145)' }} />
+                Ready — passed screener ({ready.length})
+              </div>
+              {ready.map(ticker => {
+                const c = candidateMap.get(ticker)!;
                 const ev = evaluateCandidate(c);
                 return (
                   <button
-                    key={c.ticker}
-                    onClick={() => { onSelect(c.ticker); setOpen(false); setSearch(''); }}
+                    key={ticker}
+                    onClick={() => { onSelect(ticker); setOpen(false); setSearch(''); }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all hover:bg-[oklch(1_0_0_/_4%)]"
                   >
-                    <span className="font-mono-data text-sm font-bold w-14" style={{ color: CYAN }}>{c.ticker}</span>
+                    <span className="font-mono-data text-sm font-bold w-16" style={{ color: CYAN }}>{ticker}</span>
                     <span className="text-xs font-mono-data" style={{ color: DIM }}>IVR {c.ivr.toFixed(0)}</span>
-                    <span className="text-xs font-mono-data ml-auto" style={{ color: ev.color }}>{ev.label}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data ml-auto" style={{ background: `${ev.color.replace(')', ' / 12%)')}`, color: ev.color }}>{ev.label}</span>
                   </button>
                 );
-              })
-            )}
-          </div>
+              })}
+            </>
+          )}
+
+          {/* NOT READY section — universe tickers not in screener results */}
+          {notReady.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider flex items-center gap-2 border-t"
+                style={{ color: DIM, borderColor: BORDER }}>
+                <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: DIM }} />
+                Not ready — below screener threshold ({notReady.length})
+              </div>
+              {notReady.map(ticker => (
+                <button
+                  key={ticker}
+                  onClick={() => { onSelect(ticker); setOpen(false); setSearch(''); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all hover:bg-[oklch(1_0_0_/_4%)]"
+                  style={{ opacity: 0.65 }}
+                >
+                  <span className="font-mono-data text-sm font-bold w-16" style={{ color: DIM }}>{ticker}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: 'oklch(1 0 0 / 5%)', color: DIM }}>low IV rank</span>
+                  <span className="text-xs font-mono-data ml-auto" style={{ color: DIM }}>select anyway →</span>
+                </button>
+              ))}
+            </>
+          )}
+
+          {ready.length === 0 && notReady.length === 0 && !freeTextTicker && (
+            <div className="py-4 text-center text-xs" style={{ color: DIM }}>No tickers found</div>
+          )}
         </div>
       )}
     </div>
@@ -695,6 +767,7 @@ export default function TradeBuilderPage() {
           selected={selectedTicker}
           onSelect={t => { setSelectedTicker(t); setSelectedStrategy(null); }}
           candidates={candidates}
+          universeTickers={config.tickers}
           loading={candLoading}
         />
         {candidate && strategyDef && (
