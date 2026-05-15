@@ -310,6 +310,15 @@ export interface TradeReportRollCandidate {
   action: string;
 }
 
+export interface TradeReportPostEarningsCandidate {
+  ticker: string;
+  days_since_earnings: number;  // 0 = today, 1 = yesterday, 2 = 2d ago, 3 = 3d ago
+  current_price: number | null;
+  iv_rank_post: number | null;  // IV rank after the earnings event
+  action: string;               // "POST_EARNINGS_PLAYBOOK"
+  note: string;
+}
+
 export interface TradeReport {
   as_of: string;
   macro: { vix: number; regime: string; vix_state: string };
@@ -317,7 +326,7 @@ export interface TradeReport {
   roll_candidates: TradeReportRollCandidate[];
   stop_loss_alerts: TradeReportStopLoss[];
   exit_candidates: TradeReportExitCandidate[];
-  post_earnings_candidates: unknown[];
+  post_earnings_candidates: TradeReportPostEarningsCandidate[];
   summary: {
     entry_candidates_count: number;
     roll_candidates_count: number;

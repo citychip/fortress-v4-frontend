@@ -9,7 +9,7 @@ import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
   useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
   formatDollar, regimeInfo,
-  type BriefingData, type TradeReport, type TradeReportRollCandidate,
+  type BriefingData, type TradeReport, type TradeReportRollCandidate, type TradeReportPostEarningsCandidate,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -72,12 +72,13 @@ function TradeReportPanel() {
   return (
     <div className="space-y-4">
       {/* Summary counts */}
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-6 gap-2">
         {[
           { label: 'Entry Candidates', count: summary?.entry_candidates_count ?? report.entry_candidates?.length ?? 0, color: GREEN },
           { label: 'Stop-Loss Alerts', count: summary?.stop_loss_alerts_count ?? report.stop_loss_alerts?.length ?? 0, color: RED },
           { label: 'Exit Candidates', count: summary?.exit_candidates_count ?? report.exit_candidates?.length ?? 0, color: AMBER },
           { label: 'Roll Candidates', count: summary?.roll_candidates_count ?? report.roll_candidates?.length ?? 0, color: CYAN },
+          { label: 'Post-Earnings', count: summary?.post_earnings_count ?? report.post_earnings_candidates?.length ?? 0, color: GREEN },
           { label: 'Urgent Actions', count: summary?.urgent_actions ?? 0, color: summary?.urgent_actions ? RED : DIM },
         ].map(s => (
           <div key={s.label} className="rounded border p-2 text-center" style={{ background: 'oklch(0.22 0.010 258)', borderColor: `${s.color}25` }}>
@@ -239,6 +240,65 @@ function TradeReportPanel() {
           </div>
         );
       })}
+
+      {/* Post-earnings candidates */}
+      {report.post_earnings_candidates?.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 pt-1">
+            <div className="flex-1 h-px" style={{ background: 'oklch(1 0 0 / 8%)' }} />
+            <span className="text-[9px] uppercase tracking-widest font-semibold font-mono-data px-2" style={{ color: 'oklch(0.72 0.18 145)' }}>Post-Earnings Playbook</span>
+            <div className="flex-1 h-px" style={{ background: 'oklch(1 0 0 / 8%)' }} />
+          </div>
+          {report.post_earnings_candidates.map((pe: TradeReportPostEarningsCandidate, i) => {
+            const freshness = pe.days_since_earnings === 0 ? 'TODAY'
+              : pe.days_since_earnings === 1 ? '1D AGO'
+              : `${pe.days_since_earnings}D AGO`;
+            const freshnessColor = pe.days_since_earnings === 0 ? GREEN
+              : pe.days_since_earnings === 1 ? AMBER
+              : DIM;
+            const ivLabel = pe.iv_rank_post != null ? `IVR ${pe.iv_rank_post.toFixed(0)}` : null;
+            // IV rank post-earnings: high IVR = IV hasn't crushed yet (unusual), low = normal crush
+            const ivColor = pe.iv_rank_post == null ? DIM
+              : pe.iv_rank_post >= 50 ? AMBER   // still elevated — potential entry
+              : pe.iv_rank_post >= 25 ? GREEN    // moderate — normal
+              : DIM;                             // crushed — watch only
+            return (
+              <div key={i} className="flex items-center gap-3 p-3 rounded border"
+                style={{ background: 'oklch(0.72 0.18 145 / 5%)', borderColor: 'oklch(0.72 0.18 145 / 20%)' }}>
+                {/* Days-since badge */}
+                <div className="flex-shrink-0 flex items-center justify-center rounded"
+                  style={{ width: 36, height: 36, background: `${freshnessColor}18`, border: `1px solid ${freshnessColor}40` }}>
+                  <span className="font-mono-data font-bold text-center leading-tight"
+                    style={{ fontSize: 8, color: freshnessColor, whiteSpace: 'nowrap' }}>
+                    {freshness}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono-data text-xs font-bold" style={{ color: BRIGHT }}>{pe.ticker}</span>
+                    {ivLabel && (
+                      <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded"
+                        style={{ color: ivColor, background: `${ivColor}18` }}>
+                        {ivLabel}
+                      </span>
+                    )}
+                    {pe.current_price != null && (
+                      <span className="text-[10px] font-mono-data" style={{ color: DIM }}>
+                        ${pe.current_price.toFixed(2)}
+                      </span>
+                    )}
+                    <span className="text-[9px] font-mono-data px-1.5 py-0.5 rounded"
+                      style={{ color: GREEN, background: 'oklch(0.72 0.18 145 / 12%)' }}>
+                      PLAYBOOK
+                    </span>
+                  </div>
+                  <div className="text-[10px] mt-0.5 truncate" style={{ color: DIM }}>{pe.note}</div>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
 
       {report.macro && (
         <div className="flex items-center gap-4 text-[10px] font-mono-data pt-1" style={{ color: DIM }}>
