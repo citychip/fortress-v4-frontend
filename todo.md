@@ -24,7 +24,7 @@
 - [x] Rename project to Fortress v3 (app title, sidebar, page title, package.json)
 - [x] Persistent 5px status bar: IBKR status, QuantData status, VIX, SPY price, market hours clock
 - [x] Collapsed sidebar (icon-only default, expand on hover/click)
-- [ ] Morning Brief landing page (trade report full-width, portfolio snapshot strip below)
+- [x] Morning Brief landing page (trade report full-width, portfolio snapshot strip below)
 - [ ] Migrate all v3.6 settings into Fortress v3 Settings page (strategy, universe, security, notifications, backup/restore)
 - [ ] Trade Builder page: live option chain from IBKR, GEX regime, strategy suggester, PoP calculator
 - [ ] IBKR order submission flow in Trade Builder (preview ticket, confirm dialog, submit to IBKR, status tracking)

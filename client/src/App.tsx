@@ -49,10 +49,12 @@ import EarningsPage from "./pages/EarningsPage";
 import JournalPage from "./pages/JournalPage";
 import ScriptsPage from "./pages/ScriptsPage";
 import NotFound from "./pages/NotFound";
+import MorningBriefPage from "./pages/MorningBriefPage";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
+  { path: '/morning-brief', label: 'Morning Brief',  icon: Activity },
   { path: '/',              label: 'Dashboard',     icon: LayoutDashboard },
   { path: '/positions',     label: 'Positions',     icon: BookOpen },
   { path: '/market-intel',  label: 'Market Intel',  icon: TrendingUp },
@@ -398,6 +400,7 @@ function Router() {
         className="h-full"
       >
         <Switch>
+          <Route path="/morning-brief" component={MorningBriefPage} />
           <Route path="/"             component={DashboardPage} />
           <Route path="/positions"    component={PositionsPage} />
           <Route path="/market-intel" component={MarketIntelPage} />
