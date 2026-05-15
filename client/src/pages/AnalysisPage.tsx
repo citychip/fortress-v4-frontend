@@ -1198,6 +1198,15 @@ export default function AnalysisPage() {
   const { data: briefingData } = useBriefing();
   const allPositions = positionsData?.positions ?? [];
   const vix = briefingData?.macro_regime?.vix ?? null;
+  // Indicator panel visibility — persisted to localStorage
+  const [showBB, setShowBB] = useState(() => localStorage.getItem('fortress_show_bb') !== 'false');
+  const [showRsi, setShowRsi] = useState(() => localStorage.getItem('fortress_show_rsi') !== 'false');
+  const [showMacd, setShowMacd] = useState(() => localStorage.getItem('fortress_show_macd') !== 'false');
+
+  const toggleBB = () => setShowBB(v => { const next = !v; localStorage.setItem('fortress_show_bb', String(next)); return next; });
+  const toggleRsi = () => setShowRsi(v => { const next = !v; localStorage.setItem('fortress_show_rsi', String(next)); return next; });
+  const toggleMacd = () => setShowMacd(v => { const next = !v; localStorage.setItem('fortress_show_macd', String(next)); return next; });
+
   const [selectedTicker, setSelectedTicker] = useState(() => {
     // Check for triage ticker set by DTE shortcut from P&L page
     const triage = sessionStorage.getItem('fortress_triage_ticker');
@@ -1248,11 +1257,41 @@ export default function AnalysisPage() {
         {selectedTicker && (
           <>
             <PriceChart ticker={selectedTicker} positions={allPositions} vix={vix} />
-            <BollingerBandsPanel ticker={selectedTicker} />
-            <div className="grid grid-cols-2 gap-4">
-              <RsiPanel ticker={selectedTicker} />
-              <MacdPanel ticker={selectedTicker} />
+
+            {/* Indicator toggle bar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono-data text-[10px] uppercase tracking-wider mr-1" style={{ color: 'oklch(0.45 0.010 258)' }}>Indicators</span>
+              {([
+                { label: 'BB(20,2)', active: showBB, toggle: toggleBB },
+                { label: 'RSI(14)', active: showRsi, toggle: toggleRsi },
+                { label: 'MACD(12,26,9)', active: showMacd, toggle: toggleMacd },
+              ] as const).map(({ label, active, toggle }) => (
+                <button
+                  key={label}
+                  onClick={toggle}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono-data transition-all"
+                  style={{
+                    background: active ? 'oklch(0.80 0.15 200 / 15%)' : 'oklch(1 0 0 / 5%)',
+                    color: active ? 'oklch(0.80 0.15 200)' : 'oklch(0.45 0.010 258)',
+                    border: `1px solid ${active ? 'oklch(0.80 0.15 200 / 40%)' : 'oklch(1 0 0 / 10%)'}`,
+                  }}
+                >
+                  <span style={{
+                    display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                    background: active ? 'oklch(0.80 0.15 200)' : 'oklch(0.35 0.010 258)',
+                  }} />
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {showBB && <BollingerBandsPanel ticker={selectedTicker} />}
+            {(showRsi || showMacd) && (
+              <div className={showRsi && showMacd ? 'grid grid-cols-2 gap-4' : ''}>
+                {showRsi && <RsiPanel ticker={selectedTicker} />}
+                {showMacd && <MacdPanel ticker={selectedTicker} />}
+              </div>
+            )}
             <GreeksSummaryPanel ticker={selectedTicker} />
             <div className="grid grid-cols-2 gap-4">
               <ChartLevelsPanel ticker={selectedTicker} />

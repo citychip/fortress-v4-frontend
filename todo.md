@@ -54,3 +54,4 @@
 
 - [ ] MACD panel: add plotted crossover marker dots at bullish/bearish signal crossover bars
 - [ ] Bollinger Bands: option to overlay BB bands directly on the main price chart (currently rendered as a separate panel below)
+- [x] Analysis page: show/hide toggles for BB, RSI, MACD panels (persisted to localStorage)
