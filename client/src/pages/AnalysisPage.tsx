@@ -360,9 +360,10 @@ function OrderFlowPanel({ ticker }: { ticker: string }) {
   if (!data) return null;
 
   // OrderFlowResponse: bars[], net_delta, buy_pct, sell_pct
-  const netDelta = data.net_delta;
-  const buyPct = data.buy_pct;
-  const sellPct = data.sell_pct;
+  // Guard against undefined/null values from the API
+  const netDelta = data.net_delta ?? 0;
+  const buyPct = data.buy_pct ?? 0;
+  const sellPct = data.sell_pct ?? 0;
   const bias = netDelta > 0 ? 'BULLISH' : netDelta < 0 ? 'BEARISH' : 'NEUTRAL';
   const biasColor = bias === 'BULLISH' ? 'oklch(0.72 0.18 145)' : bias === 'BEARISH' ? 'oklch(0.65 0.22 25)' : 'oklch(0.80 0.15 200)';
 
@@ -375,9 +376,9 @@ function OrderFlowPanel({ ticker }: { ticker: string }) {
       </div>
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Net Delta', value: `${netDelta > 0 ? '+' : ''}${netDelta.toLocaleString()}`, color: netDelta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' },
-          { label: 'Buy %', value: `${(buyPct * 100).toFixed(1)}%`, color: 'oklch(0.72 0.18 145)' },
-          { label: 'Sell %', value: `${(sellPct * 100).toFixed(1)}%`, color: 'oklch(0.65 0.22 25)' },
+          { label: 'Net Delta', value: `${netDelta > 0 ? '+' : ''}${Number(netDelta).toLocaleString()}`, color: netDelta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' },
+          { label: 'Buy %', value: `${(Number(buyPct) * 100).toFixed(1)}%`, color: 'oklch(0.72 0.18 145)' },
+          { label: 'Sell %', value: `${(Number(sellPct) * 100).toFixed(1)}%`, color: 'oklch(0.65 0.22 25)' },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
             <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>

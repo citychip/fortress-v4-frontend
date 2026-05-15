@@ -43,6 +43,8 @@ export interface AppConfig {
   refreshIntervalSec: number;
   /** Dashboard name shown in sidebar header */
   dashboardName: string;
+  /** DTE threshold below which a P&L leg shows the TRIAGE badge and click-to-analyse shortcut (default 7) */
+  dteTriage: number;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -66,6 +68,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   autoRefresh: true,
   refreshIntervalSec: 60,
   dashboardName: 'Fortress v2',
+  dteTriage: 7,
 };
 
 const STORAGE_KEY = 'fortress_v2_config';

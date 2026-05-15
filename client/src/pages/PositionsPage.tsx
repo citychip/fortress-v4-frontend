@@ -76,11 +76,11 @@ function DeltaCell({ delta, direction, threshold }: { delta: number | null; dire
 
 // ─── DTE cell ─────────────────────────────────────────────────────────────────
 
-function DteCell({ expiry, rollDays }: { expiry: string | null; rollDays: number }) {
+function DteCell({ expiry, rollDays, dteTriage }: { expiry: string | null; rollDays: number; dteTriage: number }) {
   if (!expiry) return <span className="font-mono-data text-xs" style={{ color: 'oklch(0.45 0.010 258)' }}>—</span>;
   const dte = calcDte(expiry);
   const isRoll = dte <= rollDays;
-  const isUrgent = dte <= 7;
+  const isUrgent = dte <= dteTriage;
 
   return (
     <span
@@ -97,12 +97,13 @@ function DteCell({ expiry, rollDays }: { expiry: string | null; rollDays: number
 // ─── Leg row ──────────────────────────────────────────────────────────────────
 
 function LegRow({
-  leg, strategy, stopLossAct, rollNeeded,
+  leg, strategy, stopLossAct, rollNeeded, dteTriage,
 }: {
   leg: Position;
   strategy: { deltaAlertThreshold: number; rollDteDays: number; maxSingleNamePct: number };
   stopLossAct: Set<string>;
   rollNeeded: Set<string>;
+  dteTriage: number;
 }) {
   const alerts = evaluatePositionLeg(leg, strategy, stopLossAct, rollNeeded);
   const hasAlert = alerts.length > 0;
@@ -144,7 +145,7 @@ function LegRow({
         <div className="font-mono-data text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>
           {leg.expiry ?? '—'}
         </div>
-        <DteCell expiry={leg.expiry} rollDays={strategy.rollDteDays} />
+        <DteCell expiry={leg.expiry} rollDays={strategy.rollDteDays} dteTriage={dteTriage} />
       </td>
 
       {/* Qty */}
@@ -208,12 +209,13 @@ interface TickerGroupData {
 }
 
 function TickerGroupCard({
-  group, strategy, stopLossAct, rollNeeded,
+  group, strategy, stopLossAct, rollNeeded, dteTriage,
 }: {
   group: TickerGroupData;
   strategy: { deltaAlertThreshold: number; rollDteDays: number; maxSingleNamePct: number };
   stopLossAct: Set<string>;
   rollNeeded: Set<string>;
+  dteTriage: number;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isConcentrated = group.totalPctNL > strategy.maxSingleNamePct;
@@ -279,7 +281,7 @@ function TickerGroupCard({
             </thead>
             <tbody>
               {group.legs.map((leg, i) => (
-                <LegRow key={i} leg={leg} strategy={strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} />
+                <LegRow key={i} leg={leg} strategy={strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} dteTriage={dteTriage} />
               ))}
             </tbody>
           </table>
@@ -363,7 +365,7 @@ export default function PositionsPage() {
         {!loading && groups.length > 0 && (
           <div className="space-y-3">
             {groups.map(group => (
-              <TickerGroupCard key={group.ticker} group={group} strategy={config.strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} />
+              <TickerGroupCard key={group.ticker} group={group} strategy={config.strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} dteTriage={config.dteTriage ?? 7} />
             ))}
           </div>
         )}

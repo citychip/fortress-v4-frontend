@@ -129,9 +129,9 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 
 // ─── Leg row// ─── Leg row ─────────────────────────────────────────────────────
 
-function LegRow({ leg, onTriageClick }: { leg: LegPnL; onTriageClick: (ticker: string) => void }) {
+function LegRow({ leg, onTriageClick, dteTriage }: { leg: LegPnL; onTriageClick: (ticker: string) => void; dteTriage: number }) {
   const isShort = leg.qty < 0;
-  const isExpiringSoon = leg.dte !== null && leg.dte <= 7;
+  const isExpiringSoon = leg.dte !== null && leg.dte <= dteTriage;
 
   return (
     <div
@@ -163,7 +163,7 @@ function LegRow({ leg, onTriageClick }: { leg: LegPnL; onTriageClick: (ticker: s
         <div className="font-mono-data mt-0.5" style={{ color: 'oklch(0.42 0.010 258)', fontSize: '10px' }}>{leg.localSymbol}</div>
       </div>
       {/* DTE */}
-      <div className="font-mono-data text-right" style={{ color: leg.dte !== null && leg.dte <= 7 ? AMBER : leg.dte !== null && leg.dte <= 21 ? 'oklch(0.78 0.15 85)' : DIM }}>
+      <div className="font-mono-data text-right" style={{ color: leg.dte !== null && leg.dte <= dteTriage ? AMBER : leg.dte !== null && leg.dte <= 21 ? 'oklch(0.78 0.15 85)' : DIM }}>
         {leg.dte !== null ? `${leg.dte}d` : '—'}
       </div>
       {/* Qty */}
@@ -203,7 +203,7 @@ export default function PnLPage() {
   // ── DTE triage shortcut ──
   function handleTriageClick(ticker: string) {
     toast.info(`Opening Analysis for ${ticker}`, {
-      description: `DTE ≤ 7 — navigating to Analysis tab with ${ticker} pre-selected`,
+      description: `DTE ≤ ${config.dteTriage}d — navigating to Analysis tab with ${ticker} pre-selected`,
     });
     // Store triage ticker in sessionStorage so AnalysisPage can pick it up
     sessionStorage.setItem('fortress_triage_ticker', ticker);
@@ -439,7 +439,7 @@ export default function PnLPage() {
                 </div>
               ) : (
                 <div className="px-4">
-                  {sortedLegs.map((leg, i) => <LegRow key={i} leg={leg} onTriageClick={handleTriageClick} />)}
+                  {sortedLegs.map((leg, i) => <LegRow key={i} leg={leg} onTriageClick={handleTriageClick} dteTriage={config.dteTriage ?? 7} />)}
                 </div>
               )}
 

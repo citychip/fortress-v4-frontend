@@ -626,16 +626,49 @@ function RefreshSection() {
 
 function GeneralSection() {
   const { config, updateConfig } = useConfig();
+  const DTE_OPTIONS = [7, 14, 21] as const;
 
   return (
     <Section title="General" description="Dashboard display settings.">
-      <Field label="Dashboard Name" hint="Shown in the sidebar header">
-        <Input
-          value={config.dashboardName}
-          onChange={v => updateConfig({ dashboardName: v })}
-          placeholder="Fortress v2"
-        />
-      </Field>
+      <div className="space-y-4">
+        <Field label="Dashboard Name" hint="Shown in the sidebar header">
+          <Input
+            value={config.dashboardName}
+            onChange={v => updateConfig({ dashboardName: v })}
+            placeholder="Fortress v2"
+          />
+        </Field>
+
+        <Field
+          label="DTE Triage Threshold"
+          hint="Legs at or below this DTE show a pulsing TRIAGE badge in the P&L tab and are clickable to jump to the Analysis tab."
+        >
+          <div className="flex gap-2">
+            {DTE_OPTIONS.map(days => (
+              <button
+                key={days}
+                onClick={() => updateConfig({ dteTriage: days })}
+                className="flex-1 py-2 rounded border text-xs font-mono-data font-semibold transition-all"
+                style={config.dteTriage === days ? {
+                  background: 'oklch(0.78 0.18 85 / 15%)',
+                  borderColor: 'oklch(0.78 0.18 85 / 60%)',
+                  color: 'oklch(0.78 0.18 85)',
+                } : {
+                  background: 'transparent',
+                  borderColor: 'oklch(1 0 0 / 12%)',
+                  color: 'oklch(0.55 0.010 258)',
+                }}
+              >
+                {days}d
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded" style={{ background: 'oklch(0.78 0.18 85 / 8%)', border: '1px solid oklch(0.78 0.18 85 / 20%)' }}>
+            <span className="font-mono-data text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse" style={{ background: 'oklch(0.78 0.18 85 / 20%)', color: 'oklch(0.78 0.18 85)' }}>TRIAGE</span>
+            <span className="text-[11px]" style={{ color: 'oklch(0.65 0.010 258)' }}>badge appears on legs with DTE ≤ <strong style={{ color: 'oklch(0.78 0.18 85)' }}>{config.dteTriage}d</strong></span>
+          </div>
+        </Field>
+      </div>
     </Section>
   );
 }
