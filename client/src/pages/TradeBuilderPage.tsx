@@ -34,6 +34,8 @@ import {
   Plus,
   RefreshCw,
   Info,
+  Lock,
+  Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -46,6 +48,34 @@ const DIM    = 'oklch(0.55 0.010 258)';
 const BRIGHT = 'oklch(0.93 0.005 258)';
 const CARD   = 'oklch(0.17 0.010 258)';
 const BORDER = 'oklch(1 0 0 / 9%)';
+
+// ─── Expiry date helper ──────────────────────────────────────────────────────
+
+/**
+ * Find the nearest Friday expiry within the target DTE range.
+ * Returns a string like "Jun 20 (35 DTE)".
+ */
+function getNearestExpiry(minDte: number, maxDte: number): string {
+  const today = new Date();
+  const targetDte = Math.round((minDte + maxDte) / 2);
+  // Start from targetDte and scan ±7 days for a Friday
+  for (let offset = 0; offset <= 7; offset++) {
+    for (const sign of [1, -1]) {
+      const candidate = new Date(today);
+      candidate.setDate(today.getDate() + targetDte + sign * offset);
+      if (candidate.getDay() === 5) { // Friday
+        const dte = Math.round((candidate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const label = candidate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `${label} (${dte} DTE)`;
+      }
+    }
+  }
+  // Fallback: just show the target date
+  const fallback = new Date(today);
+  fallback.setDate(today.getDate() + targetDte);
+  const label = fallback.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${label} (~${targetDte} DTE)`;
+}
 
 // ─── Strategy definitions ─────────────────────────────────────────────────────
 
@@ -567,19 +597,28 @@ function MarketContext({ ticker }: { ticker: string }) {
   const regime = intel?.regime;
   const regimeColor = regime?.overall === 'bullish' ? GREEN : regime?.overall === 'bearish' ? RED : AMBER;
 
+  // Hydrate GEX walls: prefer regime fields, fall back to top-level gex object
+  const callWall = regime?.gex_call_wall ?? intel?.gex?.call_wall;
+  const putWall  = regime?.gex_put_wall  ?? intel?.gex?.put_wall;
+  const flipZone = regime?.flip_zone     ?? intel?.gex?.flip_zone;
+  const dpFloor  = regime?.dp_floor;
+
   return (
     <div className="rounded border p-4 space-y-3" style={{ background: CARD, borderColor: BORDER }}>
-      <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: DIM }}>Market Context</div>
+      {/* Ticker-specific label — distinct from the global SPY macro regime in the top bar */}
+      <div className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: DIM }}>
+        {ticker} Asset Regime
+      </div>
 
       {regime && (
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: 'Regime', value: regime.overall?.toUpperCase() ?? '—', color: regimeColor },
+            { label: 'Asset Regime', value: regime.overall?.toUpperCase() ?? '—', color: regimeColor },
             { label: 'Score', value: regime.score != null ? `${regime.score > 0 ? '+' : ''}${regime.score}` : '—', color: regimeColor },
-            { label: 'GEX Call Wall', value: regime.gex_call_wall != null ? `$${regime.gex_call_wall.toFixed(0)}` : '—', color: DIM },
-            { label: 'GEX Put Wall', value: regime.gex_put_wall != null ? `$${regime.gex_put_wall.toFixed(0)}` : '—', color: DIM },
-            { label: 'DP Floor', value: regime.dp_floor != null ? `$${regime.dp_floor.toFixed(0)}` : '—', color: CYAN },
-            { label: 'Flip Zone', value: regime.flip_zone != null ? `$${regime.flip_zone.toFixed(0)}` : '—', color: AMBER },
+            { label: 'GEX Call Wall', value: callWall != null ? `$${callWall.toFixed(0)}` : '—', color: GREEN },
+            { label: 'GEX Put Wall', value: putWall  != null ? `$${putWall.toFixed(0)}`  : '—', color: RED },
+            { label: 'DP Floor',     value: dpFloor  != null ? `$${dpFloor.toFixed(0)}`  : '—', color: CYAN },
+            { label: 'Flip Zone',    value: flipZone != null ? `$${flipZone.toFixed(0)}` : '—', color: AMBER },
           ].map(m => (
             <div key={m.label} className="rounded p-2" style={{ background: 'oklch(0.22 0.010 258)' }}>
               <div className="text-[9px] uppercase tracking-wider" style={{ color: DIM }}>{m.label}</div>
@@ -604,12 +643,28 @@ function MarketContext({ ticker }: { ticker: string }) {
                   </div>
                   <p className="text-[11px]" style={{ color: DIM }}>{s.description}</p>
                   {(s.entry || s.target || s.stop) && (
-                    <div className="flex gap-4 mt-1.5 text-[10px] font-mono-data">
+                    <div className="flex flex-wrap gap-4 mt-1.5 text-[10px] font-mono-data">
                       {s.entry && <span style={{ color: DIM }}>Entry: <span style={{ color: BRIGHT }}>{s.entry}</span></span>}
                       {s.target && <span style={{ color: DIM }}>Target: <span style={{ color: GREEN }}>{s.target}</span></span>}
                       {s.stop && <span style={{ color: DIM }}>Stop: <span style={{ color: RED }}>{s.stop}</span></span>}
                     </div>
                   )}
+                  {/* Expiry date: map setup name to nearest matching strategy's idealDte */}
+                  {(() => {
+                    const sn = s.name.toLowerCase();
+                    const matched = STRATEGIES.find(def =>
+                      sn.includes(def.shortName.toLowerCase()) ||
+                      sn.includes(def.id.toLowerCase()) ||
+                      sn.includes(def.name.toLowerCase().split(' ')[0])
+                    );
+                    const [minDte, maxDte] = matched?.idealDte ?? [30, 60];
+                    return (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-mono-data" style={{ color: DIM }}>
+                        <Calendar className="w-3 h-3" />
+                        <span>Expiry: <span style={{ color: CYAN }}>{getNearestExpiry(minDte, maxDte)}</span></span>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -812,6 +867,25 @@ export default function TradeBuilderPage() {
             )}
 
             {/* Two-column layout: strategies + market context */}
+            {/* Warning banner: pre-trade gate failed — advisory only, user can still proceed */}
+            <div className="relative">
+              {pretradeResult && pretradeResult.verdict !== 'PROCEED' && (
+                <div
+                  className="flex items-start gap-3 rounded-lg px-4 py-3 mb-3"
+                  style={{
+                    background: 'oklch(0.65 0.22 25 / 10%)',
+                    border: '1px solid oklch(0.65 0.22 25 / 35%)',
+                  }}
+                >
+                  <Lock className="w-4 h-4 mt-0.5 shrink-0" style={{ color: AMBER }} />
+                  <div>
+                    <p className="font-mono-data text-xs font-bold" style={{ color: AMBER }}>PRE-TRADE WARNINGS ACTIVE</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: DIM }}>
+                      One or more pre-trade checks flagged issues above. Review before entering — you can still proceed at your discretion.
+                    </p>
+                  </div>
+                </div>
+              )}
             <div className="grid grid-cols-3 gap-5">
               {/* Step 3: Strategy selection */}
               <div className="col-span-2">
@@ -839,6 +913,7 @@ export default function TradeBuilderPage() {
                 <MarketContext ticker={selectedTicker} />
               </div>
             </div>
+            </div>{/* end BLOCKED overlay wrapper */}
 
             {/* Step 4: PoP / Risk calculator */}
             {candidate && strategyDef && (

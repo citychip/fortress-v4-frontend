@@ -80,3 +80,9 @@
 - [x] Dashboard: wire Send Briefing button to owner notification system (push trade report summary to owner via notifyOwner API)
 - [ ] Dashboard: add actual dark pool DIX level to Macro Regime Gate (if available from market-intel API), or document that DP Floor is the available proxy
 - [x] Dashboard: make Send Briefing await notifyOwner, handle false/error returns, show accurate success/failure per channel
+
+## Trade Builder UI/UX Cleanups (Analysis v3.3)
+- [x] Trade Builder: relabel Market Context regime as "{ticker} Asset Regime" (ticker-specific) to distinguish from global SPY macro regime in top bar
+- [x] Trade Builder: hydrate GEX Call Wall, GEX Put Wall, DP Floor metric boxes from market intel data (fallback: regime fields → top-level gex object)
+- [x] Trade Builder: add advisory warning banner (non-blocking) when pre-trade gate fails — warns user but allows them to proceed at their discretion
+- [x] Trade Builder: add expiry dates to proposed trade setups (target DTE range → nearest Friday expiry, shown as "Jun 20 (35 DTE)")
