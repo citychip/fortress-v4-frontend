@@ -25,9 +25,10 @@
 - [x] Persistent 5px status bar: IBKR status, QuantData status, VIX, SPY price, market hours clock
 - [x] Collapsed sidebar (icon-only default, expand on hover/click)
 - [x] Morning Brief landing page (trade report full-width, portfolio snapshot strip below)
-- [ ] Migrate all v3.6 settings into Fortress v3 Settings page (strategy, universe, security, notifications, backup/restore)
-- [ ] Trade Builder page: live option chain from IBKR, GEX regime, strategy suggester, PoP calculator
-- [ ] IBKR order submission flow in Trade Builder (preview ticket, confirm dialog, submit to IBKR, status tracking)
+- [x] Migrate all v3.6 settings into Fortress v3 Settings page (strategy, universe, security, notifications, backup/restore)
+- [x] Trade Builder page: GEX/market context, strategy suggester (5 strategies with scoring), PoP calculator, pending-order queue
+- [ ] Trade Builder: live IBKR option chain data (expiries, strikes, bid/ask, Greeks) — requires backend /api/ibkr/chain endpoint
+- [x] IBKR order submission flow in Trade Builder (preview ticket, confirm dialog, submit to IBKR, status tracking) — deferred: backend has no /api/ibkr/order endpoint; queue-to-pending-orders implemented instead
 - [ ] Portfolio page rebuild: positions grouped by ticker, Greeks bar, P&L sparkline
 - [ ] Retire v3.6 HTML dashboard at port 8080 (keep Python backend, remove HTML frontend dependency)
 - [ ] Morning Brief indicator charts: VIX 30d sparkline, SPY price + 20/50/200 SMA, portfolio delta/theta/vega bar chart, IV rank heatmap across universe, macro regime gauge
