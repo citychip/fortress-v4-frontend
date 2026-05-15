@@ -78,7 +78,9 @@
 - [x] Dashboard: hydrate Macro Regime Gate with SPY GEX value, gamma regime label, dark pool DIX level, and net drift — show the data behind "Bearish" explicitly
 - [x] Dashboard: suppress/grey out new entry rows for any ticker with an active concentration warning (>20% of Net Liq) — lock new entries until exposure drops
 - [x] Dashboard: wire Send Briefing button to owner notification system (push trade report summary to owner via notifyOwner API)
-- [ ] Dashboard: add actual dark pool DIX level to Macro Regime Gate (if available from market-intel API), or document that DP Floor is the available proxy
+- [x] Dashboard: add actual dark pool DIX level to Macro Regime Gate (if available from market-intel API), or document that DP Floor is the available proxy
+- [x] Dashboard: fix Macro Regime Gate data pipes — GEX Call/Put Wall now read from gex.call_walls[0].strike array, Net Drift from net_drift.cumulative_drift, DP Floor from dark_pool.floors[0].price with regime scalar fallbacks
+- [x] Dashboard: fix SPY Hedge Coverage target display — was showing "20000–30000%", now correctly shows "$20,000–$30,000" (target_min/max are dollar amounts from backend)
 - [x] Dashboard: make Send Briefing await notifyOwner, handle false/error returns, show accurate success/failure per channel
 
 ## Trade Builder UI/UX Cleanups (Analysis v3.3)

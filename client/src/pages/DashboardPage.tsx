@@ -497,7 +497,7 @@ function SpyHedgeWidget() {
           <div className="flex justify-between text-[10px] font-mono-data mt-1" style={{ color: DIM }}>
             <span>0%</span>
             <span style={{ color }}>{pct != null ? `${pct.toFixed(1)}% of Net Liq` : '—'}</span>
-            <span>Target: {data.target_min}–{data.target_max}% of Net Liq</span>
+            <span>Target: {formatDollar(data.target_min)}–{formatDollar(data.target_max)}</span>
           </div>
         </div>
         <div className="text-right">
@@ -554,12 +554,23 @@ function AccountSummarySection() {
         </div>
 
         {macro && (() => {
-          const gexCallWall = spyIntel?.gex?.call_wall ?? spyIntel?.regime?.gex_call_wall;
-          const gexPutWall  = spyIntel?.gex?.put_wall  ?? spyIntel?.regime?.gex_put_wall;
+          // GEX walls: prefer top-level call_walls array, fall back to regime scalar
+          const gexCallWall = spyIntel?.gex?.call_walls?.[0]?.strike
+            ?? spyIntel?.gex?.call_wall
+            ?? spyIntel?.regime?.gex_call_wall;
+          const gexPutWall  = spyIntel?.gex?.put_walls?.[0]?.strike
+            ?? spyIntel?.gex?.put_wall
+            ?? spyIntel?.regime?.gex_put_wall;
           const flipZone    = spyIntel?.gex?.flip_zone  ?? spyIntel?.regime?.flip_zone;
-          const gammaRegime = spyIntel?.regime?.gamma_regime;
-          const netDrift    = spyIntel?.regime?.net_drift;
-          const dpFloor     = spyIntel?.regime?.dp_floor;
+          const gammaRegime = spyIntel?.gex?.gamma_regime ?? spyIntel?.regime?.gamma_regime;
+          // Net drift: prefer cumulative_drift from net_drift object, fall back to regime scalar
+          const netDriftRaw = spyIntel?.net_drift?.cumulative_drift
+            ?? spyIntel?.net_drift?.net_drift_last
+            ?? spyIntel?.regime?.net_drift;
+          const netDriftBias = spyIntel?.net_drift?.bias;
+          // DP floor: nearest floor from dark_pool array, or regime scalar
+          const dpFloorRaw = spyIntel?.dark_pool?.floors?.[0]?.price
+            ?? spyIntel?.regime?.dp_floor;
           const regimeColor = macro.regime?.toLowerCase().includes('bear') ? RED
             : macro.regime?.toLowerCase().includes('bull') ? GREEN : AMBER;
 
@@ -567,24 +578,34 @@ function AccountSummarySection() {
             { label: 'VIX', value: macro.vix !== null ? macro.vix.toFixed(2) : '—' },
             { label: 'VIX State', value: macro.vix_state ?? '—' },
             { label: 'Regime', value: macro.regime, color: regimeColor },
-            { label: 'Gamma Regime', value: gammaRegime ?? '—' },
-            { label: 'GEX Call Wall', value: gexCallWall != null ? `$${gexCallWall.toFixed(2)}` : '—' },
-            { label: 'GEX Put Wall',  value: gexPutWall  != null ? `$${gexPutWall.toFixed(2)}`  : '—' },
-            { label: 'Gamma Flip',    value: flipZone    != null ? `$${flipZone.toFixed(2)}`    : '—' },
-            { label: 'DP Floor',      value: dpFloor     != null ? `$${dpFloor.toFixed(2)}`     : '—' },
-            { label: 'Net Drift',     value: netDrift    != null ? (netDrift >= 0 ? `+${netDrift.toFixed(2)}` : netDrift.toFixed(2)) : '—',
-              color: netDrift != null ? (netDrift >= 0 ? GREEN : RED) : undefined },
+            { label: 'Gamma Regime', value: gammaRegime ?? '—',
+              color: gammaRegime === 'positive' ? GREEN : gammaRegime === 'negative' ? RED : undefined },
+            { label: 'GEX Call Wall', value: gexCallWall != null ? `$${gexCallWall.toFixed(2)}` : '—', color: 'oklch(0.72 0.18 145)' },
+            { label: 'GEX Put Wall',  value: gexPutWall  != null ? `$${gexPutWall.toFixed(2)}`  : '—', color: 'oklch(0.65 0.22 25)' },
+            { label: 'Gamma Flip',    value: flipZone    != null ? `$${flipZone.toFixed(2)}`    : '—', color: 'oklch(0.78 0.18 85)' },
+            { label: 'DP Floor ¹',    value: dpFloorRaw  != null ? `$${dpFloorRaw.toFixed(2)}`  : '—', color: 'oklch(0.80 0.15 200)' },
+            { label: 'Net Drift',
+              value: netDriftRaw != null
+                ? `${netDriftRaw >= 0 ? '+' : ''}${netDriftRaw.toLocaleString('en-US', { maximumFractionDigits: 0 })}${netDriftBias ? ` (${netDriftBias})` : ''}`
+                : '—',
+              color: netDriftRaw != null ? (netDriftRaw >= 0 ? GREEN : RED) : undefined },
           ];
 
           return (
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              {metrics.map(({ label, value, color }) => (
-                <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
-                  <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: DIM }}>{label}</div>
-                  <div className="font-mono-data text-sm capitalize" style={{ color: color ?? CYAN }}>{value}</div>
-                </div>
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {metrics.map(({ label, value, color }) => (
+                  <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
+                    <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: DIM }}>{label}</div>
+                    <div className="font-mono-data text-sm capitalize" style={{ color: color ?? CYAN }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] mt-2" style={{ color: DIM }}>
+                ¹ DP Floor = highest-notional dark pool print level (proxy for institutional support).
+                Live DIX flow data requires QuantData dark pool widget.
+              </p>
+            </>
           );
         })()}
 

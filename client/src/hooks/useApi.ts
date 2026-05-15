@@ -166,9 +166,25 @@ export interface MarketIntelligence {
     current_price: number;
   };
   gex?: {
+    // Simplified scalar helpers (populated by frontend fallback logic)
     call_wall?: number;
     put_wall?: number;
     flip_zone?: number;
+    gamma_regime?: string;
+    // Full arrays from backend
+    call_walls?: { strike: number; gex_m: number }[];
+    put_walls?:  { strike: number; gex_m: number }[];
+    dte0_call_walls?: { strike: number; gex_m: number }[];
+    dte0_put_walls?:  { strike: number; gex_m: number }[];
+    current_price?: number;
+  } | null;
+  net_drift?: {
+    net_drift_last?: number;
+    call_drift_last?: number;
+    put_drift_last?: number;
+    cumulative_drift?: number;
+    bias?: string;
+    current_price?: number;
   } | null;
   trade_setups?: TradeSetup[];
 }
