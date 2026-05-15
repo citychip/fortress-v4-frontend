@@ -114,3 +114,10 @@
 ## Script Runner Layer 6 (v3.5 Action Items)
 - [ ] Script Runner: fix log display — convert raw \n escape sequences to real line breaks; wrap output in terminal-styled <pre> block (dark bg, green monospace text, scrollable)
 - [ ] Script Runner: add post-script cache-write hook — after max_pain/whale_flow scripts complete, POST results to /api/cache/update so dashboard GEX/DP/drift cells hydrate immediately
+
+## Hydration Pipeline (v3.6)
+- [ ] Backend: add /api/manage/hydrate-asset POST endpoint with in-memory asset cache (ticker → gex_call_wall, gex_put_wall, dp_floor, net_drift, gamma_flip, timestamp)
+- [ ] Backend: expose /api/manage/hydrated-assets GET endpoint so frontend can poll the cache
+- [ ] VPS Python: add broadcast_to_dashboard() async HTTP POST helper to max_pain.py and whale_flow.py
+- [ ] Frontend: MarketIntelPage — overlay hydrated cache values as fallback when QuantData fields are blank
+- [ ] Frontend: MarketIntelPage — show "hydrated" badge with timestamp when cache values are in use

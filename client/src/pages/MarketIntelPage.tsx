@@ -4,12 +4,68 @@
  * Uses /api/market-intelligence?ticker=TICKER (nested regime object).
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMarketIntelligence, regimeInfo, type MarketIntelligence } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, ShieldAlert, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, ShieldAlert, ArrowUpRight, Database } from 'lucide-react';
+
+// ─── Hydrated asset cache hook ────────────────────────────────────────────────
+
+interface HydratedAsset {
+  ticker: string;
+  gex_call_wall: number | null;
+  gex_put_wall: number | null;
+  dp_floor: number | null;
+  net_drift: number | null;
+  gamma_flip: number | null;
+  timestamp: string;
+  received_at: string;
+}
+
+// Singleton cache map shared across all TickerIntelCard instances
+const _hydratedCache = new Map<string, HydratedAsset>();
+let _lastFetch = 0;
+let _fetchPromise: Promise<void> | null = null;
+
+async function fetchHydratedAssets(): Promise<void> {
+  const now = Date.now();
+  // Throttle: re-fetch at most every 30 seconds
+  if (now - _lastFetch < 30_000 && _hydratedCache.size > 0) return;
+  if (_fetchPromise) return _fetchPromise;
+  _fetchPromise = (async () => {
+    try {
+      const res = await fetch('/api/manage/hydrated-assets');
+      if (res.ok) {
+        const json = await res.json() as { assets: HydratedAsset[] };
+        for (const asset of json.assets ?? []) {
+          _hydratedCache.set(asset.ticker.toUpperCase(), asset);
+        }
+        _lastFetch = Date.now();
+      }
+    } catch { /* non-fatal */ }
+    _fetchPromise = null;
+  })();
+  return _fetchPromise;
+}
+
+function useHydratedAsset(ticker: string): HydratedAsset | undefined {
+  const [asset, setAsset] = useState<HydratedAsset | undefined>(() => _hydratedCache.get(ticker.toUpperCase()));
+  useEffect(() => {
+    fetchHydratedAssets().then(() => {
+      setAsset(_hydratedCache.get(ticker.toUpperCase()));
+    });
+    // Re-check every 60 seconds
+    const id = setInterval(() => {
+      fetchHydratedAssets().then(() => {
+        setAsset(_hydratedCache.get(ticker.toUpperCase()));
+      });
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [ticker]);
+  return asset;
+}
 
 // ─── Metric box ───────────────────────────────────────────────────────────────
 
@@ -30,6 +86,7 @@ function MetricBox({ label, value, color }: { label: string; value: string; colo
 
 function TickerIntelCard({ ticker }: { ticker: string }) {
   const { data, loading, error } = useMarketIntelligence(ticker);
+  const hydrated = useHydratedAsset(ticker);
   const [expanded, setExpanded] = useState(false);
 
   // Derive display values from the nested regime object
@@ -45,12 +102,28 @@ function TickerIntelCard({ ticker }: { ticker: string }) {
   };
   const regimeHex = colorMap[regimeColor];
 
-  const netDrift = regime?.net_drift;
-  const dpFloor = regime?.dp_floor;
-  const dpCeiling = regime?.dp_ceiling;
-  const gexCall = regime?.gex_call_wall;
-  const gexPut = regime?.gex_put_wall;
+  // Use live QuantData values; fall back to hydrated cache when blank
+  const rawNetDrift = regime?.net_drift;
+  const rawDpFloor = regime?.dp_floor;
+  const rawDpCeiling = regime?.dp_ceiling;
+  const rawGexCall = regime?.gex_call_wall;
+  const rawGexPut = regime?.gex_put_wall;
+
+  const netDrift  = (rawNetDrift  != null && isFinite(rawNetDrift))  ? rawNetDrift  : (hydrated?.net_drift  ?? null);
+  const dpFloor   = (rawDpFloor   != null && isFinite(rawDpFloor))   ? rawDpFloor   : (hydrated?.dp_floor   ?? null);
+  const dpCeiling = (rawDpCeiling != null && isFinite(rawDpCeiling)) ? rawDpCeiling : null;
+  const gexCall   = (rawGexCall   != null && isFinite(rawGexCall))   ? rawGexCall   : (hydrated?.gex_call_wall ?? null);
+  const gexPut    = (rawGexPut    != null && isFinite(rawGexPut))    ? rawGexPut    : (hydrated?.gex_put_wall  ?? null);
   const score = regime?.score;
+
+  // Track which fields are coming from the hydrated cache (not live QuantData)
+  const isHydrated = hydrated != null;
+  const usingCacheFor = [
+    (rawGexCall  == null || !isFinite(rawGexCall))  && hydrated?.gex_call_wall != null ? 'GEX' : null,
+    (rawDpFloor  == null || !isFinite(rawDpFloor))  && hydrated?.dp_floor      != null ? 'DP'  : null,
+    (rawNetDrift == null || !isFinite(rawNetDrift)) && hydrated?.net_drift     != null ? 'Drift' : null,
+  ].filter(Boolean) as string[];
+  const hydratedAt = hydrated ? new Date(hydrated.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
 
   const BiasIcon = overall.includes('bull') ? TrendingUp : overall.includes('bear') ? TrendingDown : Minus;
 
@@ -272,8 +345,20 @@ function TickerIntelCard({ ticker }: { ticker: string }) {
             </div>
           )}
 
-          <div className="text-[10px] font-mono-data" style={{ color: 'oklch(0.45 0.010 258)' }}>
-            Session: {data.session_date} · As of: {new Date(data.as_of).toLocaleTimeString()}
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-mono-data" style={{ color: 'oklch(0.45 0.010 258)' }}>
+              Session: {data.session_date} · As of: {new Date(data.as_of).toLocaleTimeString()}
+            </div>
+            {usingCacheFor.length > 0 && hydratedAt && (
+              <div
+                className="flex items-center gap-1 font-mono-data text-[10px] px-2 py-0.5 rounded"
+                style={{ background: 'oklch(0.80 0.15 200 / 12%)', color: 'oklch(0.80 0.15 200)' }}
+                title={`${usingCacheFor.join(', ')} values sourced from last script run at ${hydratedAt}`}
+              >
+                <Database className="w-2.5 h-2.5" />
+                cache: {usingCacheFor.join(', ')} · {hydratedAt}
+              </div>
+            )}
           </div>
         </div>
       )}
