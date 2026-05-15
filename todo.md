@@ -43,3 +43,14 @@
 - [x] Analysis chart: OTM buffer % label per strike (color-coded: red <5%, orange <8%, yellow <15%, green ≥15%)
 - [x] Analysis chart: earnings blackout shading (10-day yellow zone before next earnings, auto from /api/calendar)
 - [x] Analysis chart: VIX pause zone shading (red background when VIX > 25, from /api/briefing)
+
+## Technical Indicator Panels (Analysis Chart)
+
+- [x] Analysis chart: RSI(14) sub-panel with overbought/oversold zones (70/30) and current value badge
+- [x] Analysis chart: MACD(12,26,9) sub-panel with histogram, signal line, and crossover markers
+- [x] Analysis chart: Bollinger Bands(20,2) overlaid on price chart with squeeze detection
+
+## Technical Indicator Improvements (Backlog)
+
+- [ ] MACD panel: add plotted crossover marker dots at bullish/bearish signal crossover bars
+- [ ] Bollinger Bands: option to overlay BB bands directly on the main price chart (currently rendered as a separate panel below)

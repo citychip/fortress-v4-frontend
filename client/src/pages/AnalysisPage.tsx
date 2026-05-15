@@ -21,7 +21,9 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import {
   LineChart,
+  ComposedChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -29,6 +31,7 @@ import {
   ReferenceLine,
   ReferenceArea,
   ResponsiveContainer,
+  Cell,
 } from 'recharts';
 import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck, Sigma, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -145,6 +148,100 @@ function GreeksSummaryPanel({ ticker }: { ticker: string }) {
   );
 }
 
+// ─── Technical indicator math helpers ───────────────────────────────────────
+
+/** Wilder EMA (used for RSI) — first value is SMA, then Wilder smoothing */
+function wilderEma(values: number[], period: number): number[] {
+  const result: number[] = new Array(values.length).fill(null);
+  if (values.length < period) return result;
+  // Seed with SMA of first `period` values
+  const seed = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  result[period - 1] = seed;
+  for (let i = period; i < values.length; i++) {
+    result[i] = (result[i - 1] * (period - 1) + values[i]) / period;
+  }
+  return result;
+}
+
+/** Standard EMA */
+function ema(values: number[], period: number): (number | null)[] {
+  const result: (number | null)[] = new Array(values.length).fill(null);
+  if (values.length < period) return result;
+  const k = 2 / (period + 1);
+  let prev = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  result[period - 1] = prev;
+  for (let i = period; i < values.length; i++) {
+    prev = values[i] * k + prev * (1 - k);
+    result[i] = prev;
+  }
+  return result;
+}
+
+/** RSI(14) — returns array of RSI values (null where not enough data) */
+function calcRsi(closes: number[], period = 14): (number | null)[] {
+  const result: (number | null)[] = new Array(closes.length).fill(null);
+  if (closes.length < period + 1) return result;
+  const gains: number[] = [];
+  const losses: number[] = [];
+  for (let i = 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    gains.push(diff > 0 ? diff : 0);
+    losses.push(diff < 0 ? -diff : 0);
+  }
+  const avgGains = wilderEma(gains, period);
+  const avgLosses = wilderEma(losses, period);
+  for (let i = period - 1; i < gains.length; i++) {
+    const ag = avgGains[i];
+    const al = avgLosses[i];
+    if (ag == null || al == null) continue;
+    const rs = al === 0 ? 100 : ag / al;
+    result[i + 1] = 100 - 100 / (1 + rs);
+  }
+  return result;
+}
+
+/** MACD(12,26,9) — returns { macd, signal, histogram } arrays */
+function calcMacd(
+  closes: number[],
+  fast = 12, slow = 26, signal = 9
+): { macd: (number | null)[]; signal: (number | null)[]; histogram: (number | null)[] } {
+  const ema12 = ema(closes, fast);
+  const ema26 = ema(closes, slow);
+  const macdLine: (number | null)[] = closes.map((_, i) =>
+    ema12[i] != null && ema26[i] != null ? (ema12[i] as number) - (ema26[i] as number) : null
+  );
+  // Signal: EMA of macdLine values (skip nulls)
+  const macdValues = macdLine.map(v => v ?? 0);
+  const signalRaw = ema(macdValues, signal);
+  const signalLine: (number | null)[] = signalRaw.map((v, i) =>
+    macdLine[i] != null && i >= slow + signal - 2 ? v : null
+  );
+  const histogram: (number | null)[] = macdLine.map((m, i) =>
+    m != null && signalLine[i] != null ? m - (signalLine[i] as number) : null
+  );
+  return { macd: macdLine, signal: signalLine, histogram };
+}
+
+/** Bollinger Bands(20, 2) — returns { upper, middle, lower } arrays */
+function calcBollingerBands(
+  closes: number[],
+  period = 20, stdDevMultiplier = 2
+): { upper: (number | null)[]; middle: (number | null)[]; lower: (number | null)[] } {
+  const upper: (number | null)[] = new Array(closes.length).fill(null);
+  const middle: (number | null)[] = new Array(closes.length).fill(null);
+  const lower: (number | null)[] = new Array(closes.length).fill(null);
+  for (let i = period - 1; i < closes.length; i++) {
+    const slice = closes.slice(i - period + 1, i + 1);
+    const mean = slice.reduce((a, b) => a + b, 0) / period;
+    const variance = slice.reduce((a, b) => a + (b - mean) ** 2, 0) / period;
+    const sd = Math.sqrt(variance);
+    middle[i] = mean;
+    upper[i] = mean + stdDevMultiplier * sd;
+    lower[i] = mean - stdDevMultiplier * sd;
+  }
+  return { upper, middle, lower };
+}
+
 // ─── OTM Buffer label helper ─────────────────────────────────────────────────
 
 function otmBufferColor(pct: number): string {
@@ -166,62 +263,43 @@ function PriceChart({ ticker, positions, vix }: {
   const { data: earningsHistory } = useEarningsHistory(ticker);
   const { config } = useConfig();
 
-  if (loading) return <div className="h-64 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
-
-  if (error || !data) {
-    return (
-      <div className="h-64 rounded border flex items-center justify-center" style={{ borderColor: 'oklch(1 0 0 / 8%)', color: 'oklch(0.50 0.010 258)' }}>
-        <div className="text-center">
-          <div className="text-sm mb-1">Chart data unavailable</div>
-          <div className="text-xs">{error ?? 'No data returned'}</div>
-          <a href={`https://www.tradingview.com/chart/?symbol=${ticker}`} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 mt-3 text-xs" style={{ color: 'oklch(0.80 0.15 200)' }}>
-            <ExternalLink className="w-3.5 h-3.5" /> Open in TradingView
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  // Map candles to recharts format
-  const chartData = (data.candles ?? []).map(c => ({
+  // Map candles to recharts format — safe even when data is null (empty array)
+  const chartData = useMemo(() => (data?.candles ?? []).map(c => ({
     date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     rawDate: new Date(c.time * 1000).toISOString().slice(0, 10),
     close: c.close,
-  }));
+  })), [data]);
 
-  const closes = chartData.map(d => d.close);
-  const minPrice = closes.length ? Math.min(...closes) * 0.98 : 0;
-  const maxPrice = closes.length ? Math.max(...closes) * 1.02 : 100;
+  const closes = useMemo(() => chartData.map(d => d.close), [chartData]);
 
-  // ── Pine Script indicators ────────────────────────────────────────────────
-  // 50-day SMA (blue)
-  const sma50Data = chartData.map((d, i) => {
-    if (i < 49) return { ...d, sma50: null };
-    const slice = closes.slice(i - 49, i + 1);
-    return { ...d, sma50: slice.reduce((a, b) => a + b, 0) / 50 };
-  });
+  // ── Pine Script indicators ────────────────────────────────────────────
+  const chartDataWithIndicators = useMemo(() => {
+    const sma50Data = chartData.map((d, i) => {
+      if (i < 49) return { ...d, sma50: null };
+      const slice = closes.slice(i - 49, i + 1);
+      return { ...d, sma50: slice.reduce((a, b) => a + b, 0) / 50 };
+    });
+    return sma50Data.map((d, i) => {
+      if (i < 199) return { ...d, sma200: null };
+      const slice = closes.slice(i - 199, i + 1);
+      return { ...d, sma200: slice.reduce((a, b) => a + b, 0) / 200 };
+    });
+  }, [chartData, closes]);
 
-  // 200-day SMA (red) — merged into same data array
-  const chartDataWithIndicators = sma50Data.map((d, i) => {
-    if (i < 199) return { ...d, sma200: null };
-    const slice = closes.slice(i - 199, i + 1);
-    return { ...d, sma200: slice.reduce((a, b) => a + b, 0) / 200 };
-  });
-
-  // 52-week high (highest of last 252 daily closes)
-  const hi52w = closes.length >= 252
+  const hi52w = useMemo(() => closes.length >= 252
     ? Math.max(...closes.slice(-252))
-    : closes.length > 0 ? Math.max(...closes) : null;
+    : closes.length > 0 ? Math.max(...closes) : null, [closes]);
 
-  // Thesis Broken Zone: current price < 200 SMA
   const lastSma200 = chartDataWithIndicators.filter(d => d.sma200 != null).slice(-1)[0]?.sma200 ?? null;
   const currentClose = closes[closes.length - 1] ?? null;
   const thesisBroken = lastSma200 != null && currentClose != null && currentClose < lastSma200;
 
-  const dpFloors = data.levels?.dp_floors ?? [];
-  const gexCalls = data.levels?.gex_calls ?? [];
-  const gexPuts = data.levels?.gex_puts ?? [];
+  const minPrice = closes.length ? Math.min(...closes) * 0.98 : 0;
+  const maxPrice = closes.length ? Math.max(...closes) * 1.02 : 100;
+
+  const dpFloors = data?.levels?.dp_floors ?? [];
+  const gexCalls = data?.levels?.gex_calls ?? [];
+  const gexPuts = data?.levels?.gex_puts ?? [];
 
   // ── §9 Active option strike lines from live positions ─────────────────────
   // Derive short call, short put, long put, LEAP entry from open legs for this ticker
@@ -306,6 +384,23 @@ function PriceChart({ ticker, positions, vix }: {
     return markers;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartData, earningsHistory, calendarData, ticker]);
+
+  // Early returns AFTER all hooks
+  if (loading) return <div className="h-64 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  if (error || !data) {
+    return (
+      <div className="h-64 rounded border flex items-center justify-center" style={{ borderColor: 'oklch(1 0 0 / 8%)', color: 'oklch(0.50 0.010 258)' }}>
+        <div className="text-center">
+          <div className="text-sm mb-1">Chart data unavailable</div>
+          <div className="text-xs">{error ?? 'No data returned'}</div>
+          <a href={`https://www.tradingview.com/chart/?symbol=${ticker}`} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 mt-3 text-xs" style={{ color: 'oklch(0.80 0.15 200)' }}>
+            <ExternalLink className="w-3.5 h-3.5" /> Open in TradingView
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
@@ -569,8 +664,254 @@ function PriceChart({ ticker, positions, vix }: {
   );
 }
 
-// ─── Position legs for ticker ─────────────────────────────────────────────────
+// ─── Bollinger Bands panel ─────────────────────────────────────────────────────
+// Note: BB is overlaid on the price chart data array, not a separate chart.
+// The BB lines are added to chartDataWithIndicators in the BollingerBandsPanel component.
 
+function BollingerBandsPanel({ ticker }: { ticker: string }) {
+  const { data, loading } = useChartData(ticker);
+
+  const closes = useMemo(() => (data?.candles ?? []).map(c => c.close), [data]);
+
+  const chartData = useMemo(() => (data?.candles ?? []).map(c => ({
+    date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    close: c.close,
+  })), [data]);
+
+  const bb = useMemo(() => calcBollingerBands(closes, 20, 2), [closes]);
+
+  const chartDataWithBB = useMemo(() => chartData.map((d, i) => ({
+    ...d,
+    bbUpper: bb.upper[i],
+    bbMiddle: bb.middle[i],
+    bbLower: bb.lower[i],
+  })), [chartData, bb]);
+
+  // Bandwidth for squeeze detection: (upper - lower) / middle
+  const lastIdx = chartDataWithBB.length - 1;
+  const lastUpper = bb.upper[lastIdx];
+  const lastLower = bb.lower[lastIdx];
+  const lastMiddle = bb.middle[lastIdx];
+  const bandwidth = lastUpper != null && lastLower != null && lastMiddle != null && lastMiddle !== 0
+    ? ((lastUpper - lastLower) / lastMiddle) * 100
+    : null;
+
+  // Squeeze: bandwidth in bottom 20th percentile of last 50 bars
+  const bwHistory = bb.upper.slice(-50).map((u, i) => {
+    const l = bb.lower[bb.lower.length - 50 + i];
+    const m = bb.middle[bb.middle.length - 50 + i];
+    if (u == null || l == null || m == null || m === 0) return null;
+    return ((u - l) / m) * 100;
+  }).filter((v): v is number => v != null);
+  const bwSorted = [...bwHistory].sort((a, b) => a - b);
+  const bwP20 = bwSorted[Math.floor(bwSorted.length * 0.2)] ?? null;
+  const isSqueeze = bandwidth != null && bwP20 != null && bandwidth <= bwP20;
+
+  const minPrice = closes.length ? Math.min(...closes) * 0.97 : 0;
+  const maxPrice = closes.length ? Math.max(...closes) * 1.03 : 100;
+
+  if (loading) return <div className="h-40 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  if (!data || !chartData.length) return null;
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center gap-3 mb-3">
+        <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>Bollinger Bands(20, 2) — {ticker}</h3>
+        {bandwidth != null && (
+          <span className="font-mono-data text-[10px] px-2 py-0.5 rounded" style={{
+            background: isSqueeze ? 'oklch(0.78 0.18 85 / 15%)' : 'oklch(0.80 0.15 200 / 10%)',
+            color: isSqueeze ? 'oklch(0.78 0.18 85)' : 'oklch(0.80 0.15 200)',
+          }}>
+            {isSqueeze ? '🔧 SQUEEZE' : 'BW'} {bandwidth.toFixed(1)}%
+          </span>
+        )}
+        <div className="flex items-center gap-3 ml-auto">
+          {[{ color: 'oklch(0.80 0.15 200)', label: 'Price' }, { color: 'oklch(0.78 0.18 85 / 80%)', label: 'Upper' }, { color: 'oklch(0.65 0.010 258)', label: 'Middle (SMA20)' }, { color: 'oklch(0.72 0.18 145 / 80%)', label: 'Lower' }].map(l => (
+            <div key={l.label} className="flex items-center gap-1">
+              <div className="w-3 h-0.5 rounded" style={{ background: l.color }} />
+              <span className="font-mono-data text-[9px]" style={{ color: 'oklch(0.50 0.010 258)' }}>{l.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={160}>
+        <LineChart data={chartDataWithBB} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 6%)" />
+          <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'oklch(0.50 0.010 258)', fontFamily: 'JetBrains Mono' }}
+            tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis domain={[minPrice, maxPrice]}
+            tick={{ fontSize: 9, fill: 'oklch(0.50 0.010 258)', fontFamily: 'JetBrains Mono' }}
+            tickLine={false} axisLine={false} tickFormatter={v => `$${v.toFixed(0)}`} width={50} />
+          <Tooltip contentStyle={{
+            background: 'oklch(0.22 0.010 258)', border: '1px solid oklch(1 0 0 / 12%)',
+            borderRadius: '4px', fontSize: '10px', fontFamily: 'JetBrains Mono', color: 'oklch(0.93 0.005 258)',
+          }} formatter={(v: number) => [`$${v.toFixed(2)}`]} />
+          <Line type="monotone" dataKey="bbUpper" stroke="oklch(0.78 0.18 85 / 70%)" strokeWidth={1} dot={false} connectNulls strokeDasharray="4 2" />
+          <Line type="monotone" dataKey="bbMiddle" stroke="oklch(0.65 0.010 258 / 60%)" strokeWidth={1} dot={false} connectNulls strokeDasharray="2 2" />
+          <Line type="monotone" dataKey="bbLower" stroke="oklch(0.72 0.18 145 / 70%)" strokeWidth={1} dot={false} connectNulls strokeDasharray="4 2" />
+          <Line type="monotone" dataKey="close" stroke="oklch(0.80 0.15 200)" strokeWidth={1.5} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── RSI panel ────────────────────────────────────────────────────────────────────────────────────
+
+function RsiPanel({ ticker }: { ticker: string }) {
+  const { data, loading } = useChartData(ticker);
+
+  const closes = useMemo(() => (data?.candles ?? []).map(c => c.close), [data]);
+  const rsiValues = useMemo(() => calcRsi(closes, 14), [closes]);
+
+  const chartData = useMemo(() => (data?.candles ?? []).map((c, i) => ({
+    date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    rsi: rsiValues[i],
+  })), [data, rsiValues]);
+
+  const lastRsi = rsiValues.filter(v => v != null).slice(-1)[0] ?? null;
+  const rsiState = lastRsi == null ? 'neutral'
+    : lastRsi >= 70 ? 'overbought'
+    : lastRsi <= 30 ? 'oversold'
+    : 'neutral';
+  const rsiColor = rsiState === 'overbought' ? 'oklch(0.65 0.22 25)'
+    : rsiState === 'oversold' ? 'oklch(0.72 0.18 145)'
+    : 'oklch(0.78 0.18 85)';
+
+  if (loading) return <div className="h-32 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  if (!data || !chartData.length) return null;
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center gap-3 mb-3">
+        <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>RSI(14) — {ticker}</h3>
+        {lastRsi != null && (
+          <span className="font-mono-data text-xs font-bold px-2 py-0.5 rounded" style={{
+            color: rsiColor, background: `${rsiColor.replace(')', ' / 12%)')}`,
+          }}>
+            {lastRsi.toFixed(1)} {rsiState === 'overbought' ? '▲ OVERBOUGHT' : rsiState === 'oversold' ? '▼ OVERSOLD' : ''}
+          </span>
+        )}
+        <div className="flex items-center gap-3 ml-auto text-[9px] font-mono-data" style={{ color: 'oklch(0.50 0.010 258)' }}>
+          <span style={{ color: 'oklch(0.65 0.22 25)' }}>— 70 Overbought</span>
+          <span style={{ color: 'oklch(0.72 0.18 145)' }}>— 30 Oversold</span>
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={120}>
+        <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 6%)" />
+          <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'oklch(0.50 0.010 258)', fontFamily: 'JetBrains Mono' }}
+            tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis domain={[0, 100]}
+            tick={{ fontSize: 9, fill: 'oklch(0.50 0.010 258)', fontFamily: 'JetBrains Mono' }}
+            tickLine={false} axisLine={false} ticks={[0, 30, 50, 70, 100]} width={30} />
+          <Tooltip contentStyle={{
+            background: 'oklch(0.22 0.010 258)', border: '1px solid oklch(1 0 0 / 12%)',
+            borderRadius: '4px', fontSize: '10px', fontFamily: 'JetBrains Mono', color: 'oklch(0.93 0.005 258)',
+          }} formatter={(v: number) => [v != null ? v.toFixed(1) : '—', 'RSI']} />
+          {/* Overbought zone */}
+          <ReferenceArea y1={70} y2={100} fill="oklch(0.65 0.22 25 / 8%)" />
+          {/* Oversold zone */}
+          <ReferenceArea y1={0} y2={30} fill="oklch(0.72 0.18 145 / 8%)" />
+          {/* Midline */}
+          <ReferenceLine y={50} stroke="oklch(1 0 0 / 15%)" strokeDasharray="3 3" />
+          <ReferenceLine y={70} stroke="oklch(0.65 0.22 25 / 50%)" strokeDasharray="4 2" />
+          <ReferenceLine y={30} stroke="oklch(0.72 0.18 145 / 50%)" strokeDasharray="4 2" />
+          <Line type="monotone" dataKey="rsi" stroke="oklch(0.78 0.18 85)" strokeWidth={1.5} dot={false} connectNulls />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── MACD panel ──────────────────────────────────────────────────────────────────────────────────
+
+function MacdPanel({ ticker }: { ticker: string }) {
+  const { data, loading } = useChartData(ticker);
+
+  const closes = useMemo(() => (data?.candles ?? []).map(c => c.close), [data]);
+  const { macd, signal, histogram } = useMemo(() => calcMacd(closes, 12, 26, 9), [closes]);
+
+  const chartData = useMemo(() => (data?.candles ?? []).map((c, i) => ({
+    date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    macd: macd[i],
+    signal: signal[i],
+    histogram: histogram[i],
+  })), [data, macd, signal, histogram]);
+
+  const lastMacd = macd.filter(v => v != null).slice(-1)[0] ?? null;
+  const lastSignal = signal.filter(v => v != null).slice(-1)[0] ?? null;
+  const lastHist = histogram.filter(v => v != null).slice(-1)[0] ?? null;
+  const prevHist = histogram.filter(v => v != null).slice(-2)[0] ?? null;
+
+  const crossover = lastMacd != null && lastSignal != null
+    ? lastMacd > lastSignal ? 'bullish' : 'bearish'
+    : null;
+  const momentum = lastHist != null && prevHist != null
+    ? lastHist > prevHist ? 'increasing' : 'decreasing'
+    : null;
+
+  if (loading) return <div className="h-32 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  if (!data || !chartData.length) return null;
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center gap-3 mb-3">
+        <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>MACD(12, 26, 9) — {ticker}</h3>
+        {crossover && (
+          <span className="font-mono-data text-[10px] font-bold px-2 py-0.5 rounded" style={{
+            color: crossover === 'bullish' ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
+            background: crossover === 'bullish' ? 'oklch(0.72 0.18 145 / 12%)' : 'oklch(0.65 0.22 25 / 12%)',
+          }}>
+            {crossover === 'bullish' ? '▲ MACD ABOVE SIGNAL' : '▼ MACD BELOW SIGNAL'}
+          </span>
+        )}
+        {momentum && (
+          <span className="font-mono-data text-[9px] px-1.5 py-0.5 rounded" style={{
+            color: momentum === 'increasing' ? 'oklch(0.72 0.18 145 / 80%)' : 'oklch(0.65 0.22 25 / 80%)',
+            background: 'oklch(1 0 0 / 5%)',
+          }}>
+            Momentum {momentum}
+          </span>
+        )}
+        <div className="flex items-center gap-3 ml-auto">
+          {[{ color: 'oklch(0.80 0.15 200)', label: 'MACD' }, { color: 'oklch(0.78 0.18 85)', label: 'Signal' }, { color: 'oklch(0.72 0.18 145)', label: 'Histogram' }].map(l => (
+            <div key={l.label} className="flex items-center gap-1">
+              <div className="w-3 h-0.5 rounded" style={{ background: l.color }} />
+              <span className="font-mono-data text-[9px]" style={{ color: 'oklch(0.50 0.010 258)' }}>{l.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={130}>
+        <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 6%)" />
+          <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'oklch(0.50 0.010 258)', fontFamily: 'JetBrains Mono' }}
+            tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 9, fill: 'oklch(0.50 0.010 258)', fontFamily: 'JetBrains Mono' }}
+            tickLine={false} axisLine={false} tickFormatter={v => v.toFixed(2)} width={45} />
+          <Tooltip contentStyle={{
+            background: 'oklch(0.22 0.010 258)', border: '1px solid oklch(1 0 0 / 12%)',
+            borderRadius: '4px', fontSize: '10px', fontFamily: 'JetBrains Mono', color: 'oklch(0.93 0.005 258)',
+          }} formatter={(v: number) => [v != null ? v.toFixed(4) : '—']} />
+          <ReferenceLine y={0} stroke="oklch(1 0 0 / 20%)" />
+          <Bar dataKey="histogram" maxBarSize={6}>
+            {chartData.map((entry, i) => (
+              <Cell
+                key={`hist-${i}`}
+                fill={(entry.histogram ?? 0) >= 0 ? 'oklch(0.72 0.18 145 / 70%)' : 'oklch(0.65 0.22 25 / 70%)'}
+              />
+            ))}
+          </Bar>
+          <Line type="monotone" dataKey="macd" stroke="oklch(0.80 0.15 200)" strokeWidth={1.5} dot={false} connectNulls />
+          <Line type="monotone" dataKey="signal" stroke="oklch(0.78 0.18 85)" strokeWidth={1} dot={false} connectNulls strokeDasharray="4 2" />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── Position legs for ticker ─────────────────────────────────────────────────────
 function TickerLegs({ ticker }: { ticker: string }) {
   const { data } = usePositions();
   const { config } = useConfig();
@@ -907,6 +1248,11 @@ export default function AnalysisPage() {
         {selectedTicker && (
           <>
             <PriceChart ticker={selectedTicker} positions={allPositions} vix={vix} />
+            <BollingerBandsPanel ticker={selectedTicker} />
+            <div className="grid grid-cols-2 gap-4">
+              <RsiPanel ticker={selectedTicker} />
+              <MacdPanel ticker={selectedTicker} />
+            </div>
             <GreeksSummaryPanel ticker={selectedTicker} />
             <div className="grid grid-cols-2 gap-4">
               <ChartLevelsPanel ticker={selectedTicker} />
