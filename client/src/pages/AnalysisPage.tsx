@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow, useSpyHedgeCoverage,
+  useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow,
   useCalendar, useEarningsHistory, useBriefing, calcDte, formatDollar, regimeInfo,
   type Position,
 } from '@/hooks/useApi';
@@ -999,10 +999,15 @@ function TickerIntelPanel({ ticker }: { ticker: string }) {
   const floorsAbove = allFloors.filter(f => f.price >= currentPrice).sort((a, b) => b.notional_m - a.notional_m);
   const dpFloor = floorsBelow[0]?.price ?? null;
   const dpCeiling = floorsAbove[0]?.price ?? null;
-  const netDrift = (data as any).net_drift ?? null;
-  // GEX: from gex object if present
-  const gexData = (data as any).gex;
-  const gexCallWall = gexData?.call_wall ?? gexData?.call_resistance ?? null;
+  // Net Drift: backend returns an object {cumulative_drift, net_drift_last, bias, ...}
+  // Guard against NaN by checking isFinite
+  const netDriftObj = data.net_drift;
+  const netDriftRaw = netDriftObj?.cumulative_drift ?? netDriftObj?.net_drift_last ?? data.regime?.net_drift ?? null;
+  const netDrift = (netDriftRaw != null && isFinite(Number(netDriftRaw))) ? Number(netDriftRaw) : null;
+  const netDriftBias = netDriftObj?.bias ?? null;
+  // GEX: backend returns call_walls[] array, not a scalar call_wall
+  const gexData = data.gex;
+  const gexCallWall = gexData?.call_walls?.[0]?.strike ?? (gexData as any)?.call_wall ?? data.regime?.gex_call_wall ?? null;
 
   return (
     <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
@@ -1018,7 +1023,9 @@ function TickerIntelPanel({ ticker }: { ticker: string }) {
           { label: 'GEX Call Wall', value: gexCallWall !== null ? `$${Number(gexCallWall).toFixed(2)}` : '—' },
           { label: 'DP Floor', value: dpFloor !== null ? `$${dpFloor.toFixed(2)}` : '—' },
           { label: 'DP Ceiling', value: dpCeiling !== null ? `$${dpCeiling.toFixed(2)}` : '—' },
-          { label: 'Net Drift', value: netDrift !== null ? `${netDrift > 0 ? '+' : ''}${Number(netDrift).toFixed(2)}` : '—' },
+          { label: 'Net Drift', value: netDrift !== null
+              ? `${netDrift >= 0 ? '+' : ''}${netDrift.toLocaleString('en-US', { maximumFractionDigits: 0 })}${netDriftBias ? ` (${netDriftBias})` : ''}`
+              : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
             <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>
@@ -1117,10 +1124,12 @@ function OrderFlowPanel({ ticker }: { ticker: string }) {
   if (!data) return null;
 
   // OrderFlowResponse: bars[], net_delta, buy_pct, sell_pct
-  // Guard against undefined/null values from the API
   const netDelta = data.net_delta ?? 0;
   const buyPct = data.buy_pct ?? 0;
   const sellPct = data.sell_pct ?? 0;
+  const barsCount = data.bars?.length ?? 0;
+  // Distinguish true zero from missing data: if all metrics are 0 AND no bars loaded, data is unavailable
+  const hasData = barsCount > 0 || netDelta !== 0 || buyPct !== 0 || sellPct !== 0;
   const bias = netDelta > 0 ? 'BULLISH' : netDelta < 0 ? 'BEARISH' : 'NEUTRAL';
   const biasColor = bias === 'BULLISH' ? 'oklch(0.72 0.18 145)' : bias === 'BEARISH' ? 'oklch(0.65 0.22 25)' : 'oklch(0.80 0.15 200)';
 
@@ -1129,24 +1138,32 @@ function OrderFlowPanel({ ticker }: { ticker: string }) {
       <div className="flex items-center gap-2 mb-3">
         <Activity className="w-4 h-4" style={{ color: 'oklch(0.78 0.18 85)' }} />
         <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>Order Flow — {ticker}</h3>
-        <span className="font-mono-data text-[10px] font-bold px-2 py-0.5 rounded ml-auto" style={{ color: biasColor, background: `${biasColor}15` }}>{bias}</span>
+        {hasData && <span className="font-mono-data text-[10px] font-bold px-2 py-0.5 rounded ml-auto" style={{ color: biasColor, background: `${biasColor}15` }}>{bias}</span>}
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Net Delta', value: `${netDelta > 0 ? '+' : ''}${Number(netDelta).toLocaleString()}`, color: netDelta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' },
-          { label: 'Buy %', value: `${(Number(buyPct) * 100).toFixed(1)}%`, color: 'oklch(0.72 0.18 145)' },
-          { label: 'Sell %', value: `${(Number(sellPct) * 100).toFixed(1)}%`, color: 'oklch(0.65 0.22 25)' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
-            <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>
-            <div className="font-mono-data text-sm" style={{ color }}>{value}</div>
-          </div>
-        ))}
-      </div>
-      {(data.bars?.length ?? 0) > 0 && (
-        <div className="mt-3 pt-3" style={{ borderTop: '1px solid oklch(1 0 0 / 8%)' }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{data.bars?.length ?? 0} flow bars loaded</div>
+      {!hasData ? (
+        <div className="flex items-center justify-center h-16 text-xs" style={{ color: 'oklch(0.50 0.010 258)' }}>
+          No intraday flow data available for {ticker}
         </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Net Delta', value: `${netDelta > 0 ? '+' : ''}${Number(netDelta).toLocaleString()}`, color: netDelta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' },
+              { label: 'Buy %', value: `${(Number(buyPct) * 100).toFixed(1)}%`, color: 'oklch(0.72 0.18 145)' },
+              { label: 'Sell %', value: `${(Number(sellPct) * 100).toFixed(1)}%`, color: 'oklch(0.65 0.22 25)' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
+                <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>
+                <div className="font-mono-data text-sm" style={{ color }}>{value}</div>
+              </div>
+            ))}
+          </div>
+          {barsCount > 0 && (
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid oklch(1 0 0 / 8%)' }}>
+              <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{barsCount} flow bars loaded</div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1154,38 +1171,142 @@ function OrderFlowPanel({ ticker }: { ticker: string }) {
 
 // ─── SPY Levels Panel ────────────────────────────────────────────────────────────────
 
-function SpyHedgePanel() {
-  const { data, loading } = useSpyHedgeCoverage();
+function PositionRiskContextPanel({ ticker }: { ticker: string }) {
+  const { data: posData } = usePositions();
+  const { data: spyChart } = useChartData('SPY');
 
-  if (loading) return <div className="h-20 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
-  if (!data) return null;
+  const legs = useMemo(() =>
+    (posData?.positions ?? []).filter(p => p.ticker === ticker && p.sec_type === 'OPT'),
+    [posData, ticker]
+  );
 
-  const pct = data.hedge_pct_of_netliq;
-  const isAdequate = pct >= data.target_min;
+  const { concentration, betaWeightedDelta, thetaEfficiencyPct, netTheta, totalMV, netLiq } = useMemo(() => {
+    const nl = posData?.totals?.net_liq ?? null;
+    const concPct = posData?.concentration?.[ticker] ?? null;
+
+    if (!legs.length) return { concentration: concPct, betaWeightedDelta: null, thetaEfficiencyPct: null, netTheta: null, totalMV: null, netLiq: nl };
+
+    let theta = 0, mv = 0;
+    for (const p of legs) {
+      const mult = Number(p.multiplier ?? 100);
+      const qty = p.qty ?? 0;
+      if (p.current_theta != null) theta += p.current_theta * qty * mult;
+      mv += (p.market_value ?? 0);
+    }
+
+    const spyPrice = spyChart?.candles?.length
+      ? spyChart.candles[spyChart.candles.length - 1].close
+      : null;
+    let bwDelta: number | null = null;
+    if (spyPrice) {
+      let bwSum = 0;
+      for (const p of legs) {
+        const mult = Number(p.multiplier ?? 100);
+        const qty = p.qty ?? 0;
+        const price = p.avg_cost ?? null;
+        if (p.current_delta != null && price != null) {
+          bwSum += (p.current_delta * qty * mult) * (price / spyPrice);
+        }
+      }
+      bwDelta = bwSum;
+    }
+
+    const thetaEff = nl && nl > 0 ? (Math.abs(theta) / nl) * 100 : null;
+
+    return { concentration: concPct, betaWeightedDelta: bwDelta, thetaEfficiencyPct: thetaEff, netTheta: theta, totalMV: mv, netLiq: nl };
+  }, [legs, posData, spyChart, ticker]);
+
+  if (!posData) return null;
+
+  const GREEN  = 'oklch(0.72 0.18 145)';
+  const RED    = 'oklch(0.65 0.22 25)';
+  const AMBER  = 'oklch(0.78 0.18 85)';
+  const CYAN   = 'oklch(0.80 0.15 200)';
+  const DIM    = 'oklch(0.50 0.010 258)';
+  const BRIGHT = 'oklch(0.93 0.005 258)';
+
+  const concColor = concentration == null ? CYAN
+    : concentration >= 20 ? RED
+    : concentration >= 12 ? AMBER
+    : GREEN;
+
+  const thetaEffStatus = thetaEfficiencyPct == null ? null
+    : thetaEfficiencyPct >= 0.1 && thetaEfficiencyPct <= 0.5 ? 'on-target'
+    : thetaEfficiencyPct < 0.1 ? 'low' : 'high';
+  const thetaEffColor = thetaEffStatus === 'on-target' ? GREEN : thetaEffStatus === 'low' ? AMBER : RED;
 
   return (
     <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <ShieldCheck className="w-4 h-4" style={{ color: isAdequate ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }} />
-        <h3 className="font-display text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>SPY Hedge Coverage</h3>
-        <span className="font-mono-data text-[10px] font-bold px-2 py-0.5 rounded ml-auto"
-          style={{ color: isAdequate ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)', background: isAdequate ? 'oklch(0.72 0.18 145 / 12%)' : 'oklch(0.65 0.22 25 / 12%)' }}>
-          {isAdequate ? 'ADEQUATE' : 'UNDER TARGET'}
-        </span>
+        <ShieldCheck className="w-4 h-4" style={{ color: AMBER }} />
+        <h3 className="font-display text-sm" style={{ color: BRIGHT }}>Position Risk Context — {ticker}</h3>
+        {concentration != null && concentration >= 20 && (
+          <span className="font-mono-data text-[10px] font-bold px-2 py-0.5 rounded ml-auto"
+            style={{ color: RED, background: 'oklch(0.65 0.22 25 / 12%)' }}>
+            ⚠ CONCENTRATION WARNING
+          </span>
+        )}
       </div>
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Hedge MV', value: formatDollar(data.hedge_market_value), color: 'oklch(0.80 0.15 200)' },
-          { label: 'Net Hedge MV', value: formatDollar(data.hedge_net_market_value), color: 'oklch(0.80 0.15 200)' },
-          { label: 'Hedge % NLV', value: `${(pct * 100).toFixed(1)}%`, color: isAdequate ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' },
-          { label: 'Target Min', value: `${(data.target_min * 100).toFixed(1)}%`, color: 'oklch(0.65 0.010 258)' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
-            <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{label}</div>
-            <div className="font-mono-data text-sm" style={{ color }}>{value}</div>
+
+      {!legs.length ? (
+        <div className="flex items-center justify-center h-16 text-xs" style={{ color: DIM }}>
+          No open option legs for {ticker}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-3 py-2 rounded" style={{ background: 'oklch(0.22 0.010 258)' }}>
+            <div>
+              <div className="text-[9px] uppercase tracking-wide" style={{ color: DIM }}>Ticker Concentration</div>
+              <div className="font-mono-data text-sm font-bold mt-0.5" style={{ color: concColor }}>
+                {concentration != null ? `${concentration.toFixed(1)}% of Net Liq` : '—'}
+              </div>
+            </div>
+            <div className="text-[9px] text-right" style={{ color: DIM }}>
+              {concentration != null && concentration >= 20 ? 'Exceeds 20% limit' : 'Single-name limit: 20%'}
+            </div>
           </div>
-        ))}
-      </div>
+
+          <div className="flex items-center justify-between px-3 py-2 rounded" style={{ background: 'oklch(0.22 0.010 258)' }}>
+            <div>
+              <div className="text-[9px] uppercase tracking-wide" style={{ color: DIM }}>β-Weighted Δ to SPY</div>
+              <div className="font-mono-data text-sm font-bold mt-0.5"
+                style={{ color: betaWeightedDelta == null ? DIM : betaWeightedDelta >= 0 ? GREEN : RED }}>
+                {betaWeightedDelta != null ? `${betaWeightedDelta >= 0 ? '+' : ''}${betaWeightedDelta.toFixed(1)}` : '—'}
+              </div>
+            </div>
+            <div className="text-[9px] text-right" style={{ color: DIM }}>
+              Market-equivalent<br />SPY delta exposure
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between px-3 py-2 rounded" style={{ background: 'oklch(0.22 0.010 258)' }}>
+            <div>
+              <div className="text-[9px] uppercase tracking-wide" style={{ color: DIM }}>Θ Efficiency (Θ / Net Liq)</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-mono-data text-sm font-bold"
+                  style={{ color: thetaEfficiencyPct == null ? DIM : thetaEffColor }}>
+                  {thetaEfficiencyPct != null ? `${thetaEfficiencyPct.toFixed(3)}%/day` : '—'}
+                </span>
+                {thetaEffStatus && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-mono-data"
+                    style={{ color: thetaEffColor, background: `${thetaEffColor}15` }}>
+                    {thetaEffStatus === 'on-target' ? '✓ ON TARGET' : thetaEffStatus === 'low' ? '↓ LOW' : '↑ HIGH'}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="text-[9px] text-right" style={{ color: DIM }}>
+              Target: 0.10%–<br />0.50% / day
+            </div>
+          </div>
+
+          <div className="flex gap-3 text-[10px] font-mono-data pt-1" style={{ color: DIM }}>
+            {netTheta != null && <span>Net Θ: <span style={{ color: netTheta >= 0 ? GREEN : RED }}>{netTheta >= 0 ? '+' : ''}{netTheta.toFixed(2)}/day</span></span>}
+            {totalMV != null && <span>Position MV: <span style={{ color: CYAN }}>{formatDollar(totalMV)}</span></span>}
+            {netLiq != null && <span>Net Liq: <span style={{ color: CYAN }}>{formatDollar(netLiq)}</span></span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1298,7 +1419,7 @@ export default function AnalysisPage() {
               <OrderFlowPanel ticker={selectedTicker} />
             </div>
             <TickerIntelPanel ticker={selectedTicker} />
-            <SpyHedgePanel />
+            <PositionRiskContextPanel ticker={selectedTicker} />
             <TickerLegs ticker={selectedTicker} />
           </>
         )}

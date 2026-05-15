@@ -88,3 +88,9 @@
 - [x] Trade Builder: hydrate GEX Call Wall, GEX Put Wall, DP Floor metric boxes from market intel data (fallback: regime fields → top-level gex object)
 - [x] Trade Builder: add advisory warning banner (non-blocking) when pre-trade gate fails — warns user but allows them to proceed at their discretion
 - [x] Trade Builder: add expiry dates to proposed trade setups (target DTE range → nearest Friday expiry, shown as "Jun 20 (35 DTE)")
+
+## Analysis Page Critique (v3.4 Action Items)
+- [x] Analysis page: fix NaN display for Net Drift — add null/NaN guard in Market Intelligence panel, show "—" instead of NaN
+- [x] Analysis page: fix Order Flow zeros — show "No data" placeholder when net_delta=0 AND buy_pct=0 AND sell_pct=0 (distinguish true zero from missing data)
+- [x] Analysis page: fix GEX Call Wall blank — ensure call_walls array is read correctly (gex.call_walls[0].strike) with fallback to regime.gex_call_wall
+- [x] Analysis page: replace global SPY Hedge Coverage card with per-ticker Position Risk Context card (ticker concentration %, beta-weighted delta, theta efficiency ratio)
