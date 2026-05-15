@@ -29,7 +29,8 @@
 - [x] Trade Builder page: GEX/market context, strategy suggester (5 strategies with scoring), PoP calculator, pending-order queue
 - [ ] Trade Builder: live IBKR option chain data (expiries, strikes, bid/ask, Greeks) — requires backend /api/ibkr/chain endpoint
 - [x] IBKR order submission flow in Trade Builder (preview ticket, confirm dialog, submit to IBKR, status tracking) — deferred: backend has no /api/ibkr/order endpoint; queue-to-pending-orders implemented instead
-- [ ] Portfolio page rebuild: positions grouped by ticker, Greeks bar, P&L sparkline
+- [x] Portfolio page rebuild: positions grouped by ticker, Greeks bar (delta/theta/vega), Trade Builder shortcut per ticker
+- [ ] Portfolio P&L sparkline: real historical P&L series per ticker (requires backend /api/pnl endpoint or snapshot persistence)
 - [ ] Retire v3.6 HTML dashboard at port 8080 (keep Python backend, remove HTML frontend dependency)
 - [ ] Morning Brief indicator charts: VIX 30d sparkline, SPY price + 20/50/200 SMA, portfolio delta/theta/vega bar chart, IV rank heatmap across universe, macro regime gauge
 - [ ] Dashboard mini sparklines: per-ticker price sparkline vs key GEX levels in trade report rows

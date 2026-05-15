@@ -1,11 +1,11 @@
 /**
- * FORTRESS V2 — Positions Page
+ * FORTRESS V3 — Positions / Portfolio Page
  * Layer 3: Position-level evaluation — stop-loss, delta breach, roll check, concentration.
- * Uses /api/positions (flat list) + /api/manage/stop_loss_all + /api/manage/roll_all.
+ * Enhanced v3: portfolio Greeks bar, per-ticker P&L sparkline, Trade Builder shortcut.
  */
 
 import {
-  usePositions, useStopLossAll, useRollAll,
+  usePositions, useStopLossAll, useRollAll, useBriefing,
   formatDollar, calcDte,
   type Position,
 } from '@/hooks/useApi';
@@ -13,8 +13,22 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { StatCard } from '@/components/StatCard';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  AlertTriangle, CheckCircle2, ChevronDown, ChevronRight,
+  Zap, TrendingUp, TrendingDown,
+} from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { Link } from 'wouter';
+
+// ─── Color constants ──────────────────────────────────────────────────────────
+const CYAN   = 'oklch(0.80 0.15 200)';
+const GREEN  = 'oklch(0.72 0.18 145)';
+const AMBER  = 'oklch(0.78 0.18 85)';
+const RED    = 'oklch(0.65 0.22 25)';
+const DIM    = 'oklch(0.55 0.010 258)';
+const BRIGHT = 'oklch(0.93 0.005 258)';
+const CARD   = 'oklch(0.17 0.010 258)';
+const BORDER = 'oklch(1 0 0 / 9%)';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,7 +42,6 @@ function evaluatePositionLeg(
   const id = leg.local_symbol;
 
   if (stopLossAct.has(id)) alerts.push('Stop-loss signal active');
-
   if (rollNeeded.has(id)) alerts.push('Roll candidate');
 
   if (leg.current_delta !== null && leg.leg_direction === 'short') {
@@ -52,6 +65,124 @@ function evaluatePositionLeg(
   return alerts;
 }
 
+// ─── Portfolio Greeks Bar ─────────────────────────────────────────────────────
+
+function GreeksBar({
+  portfolioDelta,
+  portfolioTheta,
+  portfolioVega,
+  positionsWithGreeks,
+  positionsTotal,
+}: {
+  portfolioDelta: number;
+  portfolioTheta: number;
+  portfolioVega: number;
+  positionsWithGreeks: number;
+  positionsTotal: number;
+}) {
+  const coverage = positionsTotal > 0 ? (positionsWithGreeks / positionsTotal) * 100 : 0;
+
+  const metrics = [
+    {
+      label: 'Portfolio Δ',
+      value: portfolioDelta,
+      format: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(3)}`,
+      color: portfolioDelta > 0.3 ? AMBER : portfolioDelta < -0.3 ? RED : GREEN,
+      hint: 'Net directional exposure',
+    },
+    {
+      label: 'Portfolio Θ',
+      value: portfolioTheta,
+      format: (v: number) => `${v > 0 ? '+' : ''}$${Math.abs(v).toFixed(0)}/day`,
+      color: portfolioTheta >= 0 ? GREEN : RED,
+      hint: 'Daily time decay collected',
+    },
+    {
+      label: 'Portfolio V',
+      value: portfolioVega,
+      format: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
+      color: portfolioVega < -50 ? AMBER : portfolioVega < 0 ? GREEN : RED,
+      hint: 'Sensitivity to IV change',
+    },
+  ];
+
+  return (
+    <div className="rounded border p-4" style={{ background: CARD, borderColor: BORDER }}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: DIM }}>
+          Portfolio Greeks
+        </span>
+        <span className="text-[10px]" style={{ color: DIM }}>
+          {positionsWithGreeks}/{positionsTotal} legs with live Greeks ({coverage.toFixed(0)}% coverage)
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {metrics.map(m => (
+          <div key={m.label} className="rounded p-3" style={{ background: 'oklch(0.22 0.010 258)' }}>
+            <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: DIM }}>{m.label}</div>
+            <div className="font-mono-data text-lg font-bold" style={{ color: m.color }}>
+              {m.format(m.value)}
+            </div>
+            <div className="text-[10px] mt-0.5" style={{ color: DIM }}>{m.hint}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Delta bias bar */}
+      <div className="mt-3">
+        <div className="flex items-center justify-between text-[9px] mb-1" style={{ color: DIM }}>
+          <span>Bearish</span>
+          <span>Neutral</span>
+          <span>Bullish</span>
+        </div>
+        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'oklch(0.25 0.010 258)' }}>
+          {/* Clamp delta to -1..+1 range for display */}
+          {(() => {
+            const clamped = Math.max(-1, Math.min(1, portfolioDelta));
+            const pct = ((clamped + 1) / 2) * 100;
+            const barColor = clamped > 0.3 ? AMBER : clamped < -0.3 ? RED : GREEN;
+            return (
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${pct}%`, background: barColor }}
+              />
+            );
+          })()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Mini P&L sparkline (SVG) ─────────────────────────────────────────────────
+
+function PnLSparkline({ values, color }: { values: number[]; color: string }) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const w = 80, h = 24;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        opacity="0.8"
+      />
+    </svg>
+  );
+}
+
 // ─── Delta cell ───────────────────────────────────────────────────────────────
 
 function DeltaCell({ delta, direction, threshold }: { delta: number | null; direction: string; threshold: number }) {
@@ -59,15 +190,12 @@ function DeltaCell({ delta, direction, threshold }: { delta: number | null; dire
   const isShort = direction === 'short';
   const absDelta = Math.abs(delta);
   const isAlert = isShort && absDelta >= threshold;
-  const isWarn = isShort && absDelta >= threshold * 0.85;
+  const isWarn  = isShort && absDelta >= threshold * 0.85;
 
   return (
-    <span
-      className="font-mono-data text-xs"
-      style={{
-        color: isAlert ? 'oklch(0.65 0.22 25)' : isWarn ? 'oklch(0.78 0.18 85)' : delta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
-      }}
-    >
+    <span className="font-mono-data text-xs" style={{
+      color: isAlert ? RED : isWarn ? AMBER : delta > 0 ? GREEN : RED,
+    }}>
       {delta > 0 ? '+' : ''}{delta.toFixed(3)}
       {isAlert && <AlertTriangle className="inline w-3 h-3 ml-1" />}
     </span>
@@ -79,14 +207,13 @@ function DeltaCell({ delta, direction, threshold }: { delta: number | null; dire
 function DteCell({ expiry, rollDays, dteTriage }: { expiry: string | null; rollDays: number; dteTriage: number }) {
   if (!expiry) return <span className="font-mono-data text-xs" style={{ color: 'oklch(0.45 0.010 258)' }}>—</span>;
   const dte = calcDte(expiry);
-  const isRoll = dte <= rollDays;
+  const isRoll   = dte <= rollDays;
   const isUrgent = dte <= dteTriage;
 
   return (
-    <span
-      className="font-mono-data text-xs"
-      style={{ color: isUrgent ? 'oklch(0.65 0.22 25)' : isRoll ? 'oklch(0.78 0.18 85)' : 'oklch(0.65 0.010 258)' }}
-    >
+    <span className="font-mono-data text-xs" style={{
+      color: isUrgent ? RED : isRoll ? AMBER : 'oklch(0.65 0.010 258)',
+    }}>
       {dte}d
       {isRoll && !isUrgent && <span className="ml-1 text-[10px]">↻</span>}
       {isUrgent && <AlertTriangle className="inline w-3 h-3 ml-1" />}
@@ -116,77 +243,54 @@ function LegRow({
         background: hasAlert ? 'oklch(0.65 0.22 25 / 4%)' : 'transparent',
       }}
     >
-      {/* Type */}
       <td className="px-4 py-2.5">
         {leg.sec_type === 'OPT' ? (
-          <span
-            className="font-mono-data text-xs font-semibold px-1.5 py-0.5 rounded"
-            style={{
-              background: leg.right === 'C' ? 'oklch(0.72 0.18 145 / 15%)' : 'oklch(0.65 0.22 25 / 15%)',
-              color: leg.right === 'C' ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)',
-            }}
-          >
+          <span className="font-mono-data text-xs font-semibold px-1.5 py-0.5 rounded" style={{
+            background: leg.right === 'C' ? 'oklch(0.72 0.18 145 / 15%)' : 'oklch(0.65 0.22 25 / 15%)',
+            color: leg.right === 'C' ? GREEN : RED,
+          }}>
             {leg.right} {leg.leg_direction === 'short' ? '↓' : '↑'}
           </span>
         ) : (
-          <span className="font-mono-data text-xs px-1.5 py-0.5 rounded" style={{ background: 'oklch(0.80 0.15 200 / 15%)', color: 'oklch(0.80 0.15 200)' }}>
+          <span className="font-mono-data text-xs px-1.5 py-0.5 rounded" style={{ background: 'oklch(0.80 0.15 200 / 15%)', color: CYAN }}>
             STK
           </span>
         )}
       </td>
-
-      {/* Strike */}
-      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: 'oklch(0.85 0.005 258)' }}>
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: BRIGHT }}>
         {leg.strike > 0 ? `$${leg.strike.toLocaleString()}` : '—'}
       </td>
-
-      {/* Expiry + DTE */}
       <td className="px-4 py-2.5">
-        <div className="font-mono-data text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>
-          {leg.expiry ?? '—'}
-        </div>
+        <div className="font-mono-data text-xs" style={{ color: DIM }}>{leg.expiry ?? '—'}</div>
         <DteCell expiry={leg.expiry} rollDays={strategy.rollDteDays} dteTriage={dteTriage} />
       </td>
-
-      {/* Qty */}
-      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.qty > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }}>
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.qty > 0 ? GREEN : RED }}>
         {leg.qty > 0 ? '+' : ''}{leg.qty}
       </td>
-
-      {/* Delta */}
       <td className="px-4 py-2.5 text-right">
         <DeltaCell delta={leg.current_delta} direction={leg.leg_direction} threshold={strategy.deltaAlertThreshold} />
       </td>
-
-      {/* Mkt Val */}
-      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.market_value >= 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }}>
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: DIM }}>
+        {leg.current_theta !== undefined ? `$${leg.current_theta.toFixed(2)}/d` : '—'}
+      </td>
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.market_value >= 0 ? GREEN : RED }}>
         {formatDollar(leg.market_value)}
       </td>
-
-      {/* IV */}
-      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: 'oklch(0.65 0.010 258)' }}>
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: DIM }}>
         {leg.current_iv !== undefined ? `${leg.current_iv.toFixed(0)}%` : '—'}
       </td>
-
-      {/* % Net Liq */}
       <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{
-        color: leg.net_liq_pct > strategy.maxSingleNamePct
-          ? 'oklch(0.65 0.22 25)'
-          : leg.net_liq_pct > strategy.maxSingleNamePct * 0.8
-          ? 'oklch(0.78 0.18 85)'
-          : 'oklch(0.65 0.010 258)',
+        color: leg.net_liq_pct > strategy.maxSingleNamePct ? RED
+          : leg.net_liq_pct > strategy.maxSingleNamePct * 0.8 ? AMBER
+          : DIM,
       }}>
         {leg.net_liq_pct.toFixed(1)}%
       </td>
-
-      {/* Alerts */}
       <td className="px-4 py-2.5">
         {hasAlert ? (
           <div className="flex flex-col gap-0.5">
             {alerts.map((a, i) => (
-              <span key={i} className="text-[10px]" style={{ color: 'oklch(0.78 0.18 85)' }}>
-                ⚠ {a}
-              </span>
+              <span key={i} className="text-[10px]" style={{ color: AMBER }}>⚠ {a}</span>
             ))}
           </div>
         ) : (
@@ -205,7 +309,10 @@ interface TickerGroupData {
   totalMktVal: number;
   totalPctNL: number;
   netDelta: number;
+  netTheta: number;
   alertCount: number;
+  /** Simulated P&L series: market_value per leg over time (we use per-leg values as proxy) */
+  pnlSeries: number[];
 }
 
 function TickerGroupCard({
@@ -221,59 +328,107 @@ function TickerGroupCard({
   const isConcentrated = group.totalPctNL > strategy.maxSingleNamePct;
   const hasAlerts = group.alertCount > 0;
 
+  const pnlColor = group.totalMktVal >= 0 ? GREEN : RED;
+  const PnLIcon = group.totalMktVal >= 0 ? TrendingUp : TrendingDown;
+
   return (
     <div
       className="rounded border overflow-hidden"
       style={{
-        borderColor: isConcentrated ? 'oklch(0.65 0.22 25 / 35%)' : hasAlerts ? 'oklch(0.78 0.18 85 / 30%)' : 'oklch(1 0 0 / 9%)',
+        borderColor: isConcentrated ? 'oklch(0.65 0.22 25 / 35%)'
+          : hasAlerts ? 'oklch(0.78 0.18 85 / 30%)'
+          : BORDER,
       }}
     >
+      {/* Group header */}
       <button
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[oklch(1_0_0_/_3%)] transition-colors"
         style={{ background: 'oklch(0.20 0.010 258)' }}
         onClick={() => setExpanded(e => !e)}
       >
         {expanded
-          ? <ChevronDown className="w-4 h-4 flex-shrink-0" style={{ color: 'oklch(0.55 0.010 258)' }} />
-          : <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'oklch(0.55 0.010 258)' }} />
+          ? <ChevronDown className="w-4 h-4 flex-shrink-0" style={{ color: DIM }} />
+          : <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: DIM }} />
         }
-        <span className="font-display text-sm font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>
+
+        {/* Ticker */}
+        <span className="font-display text-sm font-bold w-14" style={{ color: BRIGHT }}>
           {group.ticker}
         </span>
-        <span className="text-xs" style={{ color: 'oklch(0.55 0.010 258)' }}>
+        <span className="text-xs" style={{ color: DIM }}>
           {group.legs.length} leg{group.legs.length !== 1 ? 's' : ''}
         </span>
-        <div className="ml-auto flex items-center gap-4">
-          <span className="font-mono-data text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>
+
+        {/* Alert badge */}
+        {hasAlerts && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+            style={{ background: 'oklch(0.78 0.18 85 / 12%)', color: AMBER }}>
+            {group.alertCount} alert{group.alertCount !== 1 ? 's' : ''}
+          </span>
+        )}
+
+        {/* Right side: sparkline + metrics */}
+        <div className="ml-auto flex items-center gap-5">
+          {/* P&L sparkline */}
+          {group.pnlSeries.length >= 2 && (
+            <PnLSparkline values={group.pnlSeries} color={pnlColor} />
+          )}
+
+          {/* Net delta */}
+          <span className="font-mono-data text-xs" style={{ color: DIM }}>
             Net Δ:{' '}
-            <span style={{ color: group.netDelta > 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }}>
+            <span style={{ color: group.netDelta > 0 ? GREEN : RED }}>
               {group.netDelta > 0 ? '+' : ''}{group.netDelta.toFixed(3)}
             </span>
           </span>
-          <span className="font-mono-data text-xs" style={{ color: 'oklch(0.65 0.010 258)' }}>
-            MktVal:{' '}
-            <span style={{ color: group.totalMktVal >= 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }}>
+
+          {/* Net theta */}
+          {group.netTheta !== 0 && (
+            <span className="font-mono-data text-xs" style={{ color: DIM }}>
+              Θ:{' '}
+              <span style={{ color: group.netTheta >= 0 ? GREEN : RED }}>
+                ${group.netTheta.toFixed(2)}/d
+              </span>
+            </span>
+          )}
+
+          {/* Mkt Val */}
+          <div className="flex items-center gap-1">
+            <PnLIcon className="w-3 h-3" style={{ color: pnlColor }} />
+            <span className="font-mono-data text-xs font-semibold" style={{ color: pnlColor }}>
               {formatDollar(group.totalMktVal)}
             </span>
-          </span>
-          <span
-            className="font-mono-data text-xs font-semibold"
-            style={{ color: isConcentrated ? 'oklch(0.65 0.22 25)' : 'oklch(0.65 0.010 258)' }}
-          >
+          </div>
+
+          {/* % NL */}
+          <span className="font-mono-data text-xs font-semibold"
+            style={{ color: isConcentrated ? RED : DIM }}>
             {group.totalPctNL.toFixed(1)}% NL
             {isConcentrated && <AlertTriangle className="inline w-3 h-3 ml-1" />}
           </span>
+
+          {/* Trade Builder shortcut */}
+          <Link
+            href={`/trade-builder`}
+            onClick={e => e.stopPropagation()}
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)]"
+            style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 25%)' }}
+          >
+            <Zap className="w-3 h-3" />
+            Build
+          </Link>
         </div>
       </button>
 
+      {/* Expanded leg table */}
       {expanded && (
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr style={{ borderBottom: '1px solid oklch(1 0 0 / 8%)', background: 'oklch(0.15 0.010 258)' }}>
-                {['Type', 'Strike', 'Expiry / DTE', 'Qty', 'Delta', 'Mkt Val', 'IV', '% NL', 'Alerts'].map(h => (
+                {['Type', 'Strike', 'Expiry / DTE', 'Qty', 'Delta', 'Theta', 'Mkt Val', 'IV', '% NL', 'Alerts'].map(h => (
                   <th key={h} className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-right first:text-left last:text-left"
-                    style={{ color: 'oklch(0.50 0.010 258)' }}>
+                    style={{ color: DIM }}>
                     {h}
                   </th>
                 ))}
@@ -297,9 +452,9 @@ export default function PositionsPage() {
   const { data, loading, error, refresh, lastUpdated } = usePositions();
   const { data: stopData } = useStopLossAll();
   const { data: rollData } = useRollAll();
+  const { data: briefing } = useBriefing();
   const { config } = useConfig();
 
-  // Build sets of position IDs that have active stop-loss / roll signals
   const stopLossAct = useMemo(() => new Set(
     stopData?.positions.filter(p => p.verdict === 'ACT').map(p => p.synthesized_id) ?? []
   ), [stopData]);
@@ -308,7 +463,6 @@ export default function PositionsPage() {
     rollData?.positions.filter(p => p.roll_needed).map(p => p.synthesized_id) ?? []
   ), [rollData]);
 
-  // Group positions by ticker client-side
   const groups = useMemo<TickerGroupData[]>(() => {
     const positions = data?.positions ?? [];
     const byTicker = new Map<string, Position[]>();
@@ -319,31 +473,35 @@ export default function PositionsPage() {
     });
     return Array.from(byTicker.entries()).map(([ticker, legs]) => {
       const totalMktVal = legs.reduce((s, l) => s + l.market_value, 0);
-      const totalPctNL = legs.reduce((s, l) => s + l.net_liq_pct, 0);
-      const netDelta = legs.reduce((s, l) => s + (l.current_delta ?? 0) * l.qty, 0);
-      const alertCount = legs.filter(l => evaluatePositionLeg(l, config.strategy, stopLossAct, rollNeeded).length > 0).length;
-      return { ticker, legs, totalMktVal, totalPctNL, netDelta, alertCount };
+      const totalPctNL  = legs.reduce((s, l) => s + l.net_liq_pct, 0);
+      const netDelta    = legs.reduce((s, l) => s + (l.current_delta ?? 0) * l.qty, 0);
+      const netTheta    = legs.reduce((s, l) => s + (l.current_theta ?? 0) * l.qty, 0);
+      const alertCount  = legs.filter(l => evaluatePositionLeg(l, config.strategy, stopLossAct, rollNeeded).length > 0).length;
+      // P&L sparkline: use per-leg market values as a rough proxy series
+      const pnlSeries   = legs.map(l => l.market_value);
+      return { ticker, legs, totalMktVal, totalPctNL, netDelta, netTheta, alertCount, pnlSeries };
     }).sort((a, b) => Math.abs(b.totalMktVal) - Math.abs(a.totalMktVal));
   }, [data, config.strategy, stopLossAct, rollNeeded]);
 
-  const positions = data?.positions ?? [];
-  const totalMktVal = positions.reduce((s, p) => s + p.market_value, 0);
-  const alertCount = groups.reduce((s, g) => s + g.alertCount, 0);
+  const positions    = data?.positions ?? [];
+  const totalMktVal  = positions.reduce((s, p) => s + p.market_value, 0);
+  const alertCount   = groups.reduce((s, g) => s + g.alertCount, 0);
+
+  // Portfolio Greeks from briefing (most accurate source)
+  const greeks = briefing?.greeks;
 
   return (
     <div className="min-h-screen">
       <PageHeader
-        title="Positions"
+        title="Portfolio"
         subtitle="Layer 3 — Per-leg evaluation: delta, DTE, concentration, stop-loss"
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         refreshing={loading}
       >
         {alertCount > 0 && (
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-semibold"
-            style={{ color: 'oklch(0.78 0.18 85)', borderColor: 'oklch(0.78 0.18 85 / 40%)', background: 'oklch(0.78 0.18 85 / 10%)' }}
-          >
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-semibold"
+            style={{ color: AMBER, borderColor: 'oklch(0.78 0.18 85 / 40%)', background: 'oklch(0.78 0.18 85 / 10%)' }}>
             <AlertTriangle className="w-3.5 h-3.5" />
             {alertCount} alert{alertCount !== 1 ? 's' : ''}
           </div>
@@ -351,6 +509,7 @@ export default function PositionsPage() {
       </PageHeader>
 
       <div className="p-6 space-y-4">
+        {/* Summary stat cards */}
         <div className="grid grid-cols-4 gap-3">
           <StatCard label="Total Legs" value={positions.length.toString()} subValue={`${groups.length} tickers`} loading={loading} />
           <StatCard label="Total Mkt Value" value={loading ? '—' : formatDollar(totalMktVal)} signal={totalMktVal >= 0 ? 'green' : 'red'} loading={loading} />
@@ -358,14 +517,34 @@ export default function PositionsPage() {
           <StatCard label="Delta Threshold" value={`${config.strategy.deltaAlertThreshold}`} subValue={`Roll at ${config.strategy.rollDteDays}d DTE`} signal="cyan" />
         </div>
 
+        {/* Portfolio Greeks bar */}
+        {greeks && (
+          <GreeksBar
+            portfolioDelta={greeks.portfolio_delta}
+            portfolioTheta={greeks.portfolio_theta}
+            portfolioVega={greeks.portfolio_vega}
+            positionsWithGreeks={greeks.positions_with_greeks}
+            positionsTotal={greeks.positions_total}
+          />
+        )}
+
+        {/* States */}
         {error && !loading && <EmptyState type="error" title="Failed to load positions" description={error} />}
         {loading && !data && <EmptyState type="loading" title="Loading positions…" />}
         {!config.apiToken && !loading && <EmptyState type="no-config" title="API token required" description="Configure your API URL and token in Settings to load live positions." />}
 
+        {/* Ticker groups */}
         {!loading && groups.length > 0 && (
           <div className="space-y-3">
             {groups.map(group => (
-              <TickerGroupCard key={group.ticker} group={group} strategy={config.strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} dteTriage={config.dteTriage ?? 7} />
+              <TickerGroupCard
+                key={group.ticker}
+                group={group}
+                strategy={config.strategy}
+                stopLossAct={stopLossAct}
+                rollNeeded={rollNeeded}
+                dteTriage={config.dteTriage ?? 7}
+              />
             ))}
           </div>
         )}
@@ -374,9 +553,10 @@ export default function PositionsPage() {
           <EmptyState type="empty" title="No positions found" description="Sync IBKR to load your current positions." />
         )}
 
-        <div className="rounded p-3 text-xs" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 8%)' }}>
-          <span className="font-semibold" style={{ color: 'oklch(0.65 0.010 258)' }}>Active thresholds: </span>
-          <span className="font-mono-data" style={{ color: 'oklch(0.55 0.010 258)' }}>
+        {/* Threshold legend */}
+        <div className="rounded p-3 text-xs" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+          <span className="font-semibold" style={{ color: DIM }}>Active thresholds: </span>
+          <span className="font-mono-data" style={{ color: 'oklch(0.50 0.010 258)' }}>
             Δ alert ≥ {config.strategy.deltaAlertThreshold} · Roll at ≤ {config.strategy.rollDteDays}d · Max single-name {config.strategy.maxSingleNamePct}% NL · Max sector {config.strategy.maxSectorPct}% NL
           </span>
         </div>
