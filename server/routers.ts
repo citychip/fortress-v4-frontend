@@ -5,6 +5,7 @@ import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { getUserPrefs, upsertUserPrefs } from "./db";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,6 +37,37 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+
+  // ─── User preferences (server-side persistence) ──────────────────────────
+
+  prefs: router({
+    /**
+     * Load saved preferences for the current user.
+     * Falls back to null if no prefs stored yet (client uses localStorage defaults).
+     * Uses openId from JWT if authenticated; falls back to a stable anonymous key.
+     */
+    get: publicProcedure.query(async ({ ctx }) => {
+      const openId = ctx.user?.openId ?? '__anon__';
+      const prefs = await getUserPrefs(openId);
+      return { prefs };
+    }),
+
+    /**
+     * Save preferences for the current user.
+     * Strips apiToken before persisting for security.
+     */
+    save: publicProcedure
+      .input(z.object({
+        prefs: z.record(z.string(), z.unknown()),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const openId = ctx.user?.openId ?? '__anon__';
+        // Never persist the API token server-side
+        const { apiToken: _stripped, ...safePrefs } = input.prefs as Record<string, unknown> & { apiToken?: unknown };
+        await upsertUserPrefs(openId, safePrefs);
+        return { success: true };
+      }),
   }),
 
   // ─── Fortress integrations ─────────────────────────────────────────────────

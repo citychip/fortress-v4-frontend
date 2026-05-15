@@ -275,6 +275,7 @@ export interface TradeReportExitCandidate {
   ticker: string;
   strategy: string;
   expiry: string;
+  dte: number | null;          // days to expiry — may be absent on older API versions
   short_strike: number | null;
   net_market_value: number;
   net_liq_pct: number;
@@ -806,24 +807,50 @@ export function usePnL(period: 'daily' | 'weekly' | 'monthly') {
 }
 
 export function useChartData(ticker: string | null) {
-  return useApiData<ChartData>(
+  const raw = useApiData<ChartData>(
     ticker ? `/api/chart/${ticker}` : null,
     [ticker],
   );
+  // Normalise: guarantee arrays are never undefined so components can safely call .length/.map
+  const data = raw.data ? {
+    ...raw.data,
+    candles: raw.data.candles ?? [],
+    levels: {
+      dp_floors: raw.data.levels?.dp_floors ?? [],
+      gex_calls: raw.data.levels?.gex_calls ?? [],
+      gex_puts: raw.data.levels?.gex_puts ?? [],
+    },
+  } : null;
+  return { ...raw, data };
 }
 
 export function useChartLevels(ticker: string | null) {
-  return useApiData<ChartLevelsResponse>(
+  const raw = useApiData<ChartLevelsResponse>(
     ticker ? `/api/chart/${ticker}/levels` : null,
     [ticker],
   );
+  const data = raw.data ? {
+    ...raw.data,
+    dp_floors: raw.data.dp_floors ?? [],
+    support: raw.data.support ?? [],
+    resistance: raw.data.resistance ?? [],
+  } : null;
+  return { ...raw, data };
 }
 
 export function useOrderFlow(ticker: string | null) {
-  return useApiData<OrderFlowResponse>(
+  const raw = useApiData<OrderFlowResponse>(
     ticker ? `/api/chart/${ticker}/order_flow` : null,
     [ticker],
   );
+  const data = raw.data ? {
+    ...raw.data,
+    bars: raw.data.bars ?? [],
+    net_delta: raw.data.net_delta ?? 0,
+    buy_pct: raw.data.buy_pct ?? 0,
+    sell_pct: raw.data.sell_pct ?? 0,
+  } : null;
+  return { ...raw, data };
 }
 
 export function useHealth() {

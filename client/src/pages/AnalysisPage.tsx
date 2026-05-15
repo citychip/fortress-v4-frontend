@@ -386,9 +386,9 @@ function OrderFlowPanel({ ticker }: { ticker: string }) {
           </div>
         ))}
       </div>
-      {data.bars.length > 0 && (
+      {(data.bars?.length ?? 0) > 0 && (
         <div className="mt-3 pt-3" style={{ borderTop: '1px solid oklch(1 0 0 / 8%)' }}>
-          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{data.bars.length} flow bars loaded</div>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'oklch(0.50 0.010 258)' }}>{data.bars?.length ?? 0} flow bars loaded</div>
         </div>
       )}
     </div>

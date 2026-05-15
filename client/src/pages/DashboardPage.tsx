@@ -134,21 +134,55 @@ function TradeReportPanel() {
       ))}
 
       {/* Exit candidates */}
-      {report.exit_candidates?.slice(0, 3).map((e, i) => (
-        <div key={i} className="flex items-center gap-3 p-3 rounded border"
-          style={{ background: 'oklch(0.78 0.18 85 / 6%)', borderColor: 'oklch(0.78 0.18 85 / 25%)' }}>
-          <TrendingDown className="w-4 h-4 flex-shrink-0" style={{ color: AMBER }} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-mono-data text-xs font-bold" style={{ color: BRIGHT }}>{e.ticker}</span>
-              <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: AMBER, background: 'oklch(0.78 0.18 85 / 12%)' }}>
-                {e.net_liq_pct.toFixed(1)}% net liq
-              </span>
+      {report.exit_candidates?.slice(0, 3).map((e, i) => {
+        // DTE countdown ring: treat 45 days as 100% full; ring empties as expiry approaches
+        const maxDte = 45;
+        const dte = e.dte ?? null;
+        const dtePct = dte != null ? Math.max(0, Math.min(1, dte / maxDte)) : null;
+        const R = 14; // ring radius
+        const circumference = 2 * Math.PI * R;
+        const dashOffset = dtePct != null ? circumference * (1 - dtePct) : circumference;
+        const ringColor = dte == null ? DIM : dte <= 7 ? RED : dte <= 21 ? AMBER : GREEN;
+        return (
+          <div key={i} className="flex items-center gap-3 p-3 rounded border"
+            style={{ background: 'oklch(0.78 0.18 85 / 6%)', borderColor: 'oklch(0.78 0.18 85 / 25%)' }}>
+            {/* DTE countdown ring */}
+            <div className="flex-shrink-0 relative" style={{ width: 36, height: 36 }}>
+              <svg width="36" height="36" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                {/* Track */}
+                <circle cx="18" cy="18" r={R} fill="none" stroke="oklch(1 0 0 / 8%)" strokeWidth="3" />
+                {/* Progress */}
+                {dtePct != null && (
+                  <circle cx="18" cy="18" r={R} fill="none" stroke={ringColor} strokeWidth="3"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashOffset}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+                  />
+                )}
+              </svg>
+              {/* DTE label in centre */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="font-mono-data font-bold" style={{ fontSize: 9, color: ringColor, lineHeight: 1 }}>
+                  {dte != null ? dte : '—'}
+                </span>
+              </div>
             </div>
-            <div className="text-[10px] mt-0.5 truncate" style={{ color: DIM }}>{e.action} · {e.note}</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-mono-data text-xs font-bold" style={{ color: BRIGHT }}>{e.ticker}</span>
+                <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: AMBER, background: 'oklch(0.78 0.18 85 / 12%)' }}>
+                  {e.net_liq_pct.toFixed(1)}% net liq
+                </span>
+                {dte != null && dte <= 7 && (
+                  <span className="text-[9px] font-mono-data px-1 py-0.5 rounded animate-pulse" style={{ color: RED, background: 'oklch(0.65 0.22 25 / 15%)' }}>EXPIRING</span>
+                )}
+              </div>
+              <div className="text-[10px] mt-0.5 truncate" style={{ color: DIM }}>{e.action} · {e.note}</div>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {report.macro && (
         <div className="flex items-center gap-4 text-[10px] font-mono-data pt-1" style={{ color: DIM }}>

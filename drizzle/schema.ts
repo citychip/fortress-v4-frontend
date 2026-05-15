@@ -25,4 +25,13 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// User preferences — stores serialised AppConfig JSON keyed by openId
+export const userPrefs = mysqlTable("user_prefs", {
+  id: int("id").autoincrement().primaryKey(),
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  prefs: text("prefs").notNull(), // JSON-serialised AppConfig (minus apiToken for security)
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserPrefs = typeof userPrefs.$inferSelect;
+export type InsertUserPrefs = typeof userPrefs.$inferInsert;

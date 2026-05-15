@@ -452,16 +452,39 @@ function StrategySection() {
 
         <Field
           label="Roll Window (DTE)"
-          hint="Trigger roll evaluation when DTE ≤ this value. Default: 45"
+          hint="Trigger roll evaluation when DTE ≤ this value. Paired with the DTE Triage Threshold in General settings."
         >
-          <NumberInput
-            value={s.rollDteDays}
-            onChange={v => updateStrategy({ rollDteDays: v })}
-            min={7}
-            max={90}
-            step={1}
-            suffix="days"
-          />
+          {(() => {
+            const ROLL_OPTIONS = [14, 21, 30, 45] as const;
+            return (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  {ROLL_OPTIONS.map(days => (
+                    <button
+                      key={days}
+                      onClick={() => updateStrategy({ rollDteDays: days })}
+                      className="flex-1 py-2 rounded border text-xs font-mono-data font-semibold transition-all"
+                      style={s.rollDteDays === days ? {
+                        background: 'oklch(0.80 0.15 200 / 15%)',
+                        borderColor: 'oklch(0.80 0.15 200 / 60%)',
+                        color: 'oklch(0.80 0.15 200)',
+                      } : {
+                        background: 'transparent',
+                        borderColor: 'oklch(1 0 0 / 12%)',
+                        color: 'oklch(0.55 0.010 258)',
+                      }}
+                    >
+                      {days}d
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 rounded" style={{ background: 'oklch(0.80 0.15 200 / 8%)', border: '1px solid oklch(0.80 0.15 200 / 20%)' }}>
+                  <span className="font-mono-data text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'oklch(0.80 0.15 200 / 20%)', color: 'oklch(0.80 0.15 200)' }}>↻ ROLL</span>
+                  <span className="text-[11px]" style={{ color: 'oklch(0.65 0.010 258)' }}>signal fires at DTE ≤ <strong style={{ color: 'oklch(0.80 0.15 200)' }}>{s.rollDteDays}d</strong></span>
+                </div>
+              </div>
+            );
+          })()}
         </Field>
 
         <Field

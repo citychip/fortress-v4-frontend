@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, userPrefs } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,25 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ─── User Preferences ────────────────────────────────────────────────────────
+
+export async function getUserPrefs(openId: string): Promise<Record<string, unknown> | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(userPrefs).where(eq(userPrefs.openId, openId)).limit(1);
+  if (!result.length || !result[0]) return null;
+  try {
+    return JSON.parse(result[0].prefs) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export async function upsertUserPrefs(openId: string, prefs: Record<string, unknown>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const json = JSON.stringify(prefs);
+  await db.insert(userPrefs)
+    .values({ openId, prefs: json })
+    .onDuplicateKeyUpdate({ set: { prefs: json } });
+}

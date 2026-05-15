@@ -5,7 +5,8 @@
  * parameters are fully editable via the Settings tab.
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { trpc } from '@/lib/trpc';
 
 export interface StrategyConfig {
   /** Delta threshold for short leg alert (default 0.40) */
@@ -112,12 +113,47 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     return DEFAULT_CONFIG;
   });
 
+  // ─── Server-side persistence ───────────────────────────────────────────────
+  // Load prefs from server on mount (merges over localStorage, preserving local apiToken)
+  const serverPrefs = trpc.prefs.get.useQuery(undefined, { retry: false });
+  const savePrefs = trpc.prefs.save.useMutation();
+  const serverPrefsApplied = useRef(false);
+
+  useEffect(() => {
+    if (serverPrefsApplied.current) return;
+    if (!serverPrefs.data?.prefs) return;
+    serverPrefsApplied.current = true;
+    const remote = serverPrefs.data.prefs as Partial<AppConfig>;
+    setConfig(prev => ({
+      ...DEFAULT_CONFIG,
+      ...remote,
+      strategy: { ...DEFAULT_CONFIG.strategy, ...(remote.strategy ?? {}) },
+      // Always keep the local apiToken — never overwrite with server value (it's stripped on save)
+      apiToken: prev.apiToken,
+    }));
+  }, [serverPrefs.data]);
+
+  // Persist to localStorage on every change
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     } catch {
       // ignore storage errors
     }
+  }, [config]);
+
+  // Debounced save to server (1 s after last change, skip initial mount)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const { apiToken: _skip, ...safePrefs } = config;
+      savePrefs.mutate({ prefs: safePrefs as unknown as Record<string, unknown> });
+    }, 1000);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
   const updateConfig = useCallback((patch: Partial<AppConfig>) => {
