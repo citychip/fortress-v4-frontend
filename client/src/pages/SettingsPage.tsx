@@ -5,7 +5,7 @@
  * Supports export (without token) and import for backup/restore.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useConfig, DEFAULT_CONFIG, type PrefsSaveStatus } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { useHealth, useServerSettings, useTraderPresets, useUniverse, useUniverseActions, apiFetch, type TraderPreset, type IbkrStatus } from '@/hooks/useApi';
@@ -1215,6 +1215,166 @@ function ConnectionHealthSection() {
   );
 }
 
+
+// ─── QuantData Credentials Section ───────────────────────────────────────────
+
+const ACCENT = 'oklch(0.80 0.15 200)';
+const BRIGHT = 'oklch(0.93 0.005 258)';
+const DIM    = 'oklch(0.55 0.010 258)';
+
+function QuantDataCredentialsSection() {
+  const { config } = useConfig();
+  const [expanded, setExpanded] = useState(false);
+  const [authToken, setAuthToken] = useState('');
+  const [cookie, setCookie] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
+  const [credStatus, setCredStatus] = useState<{ exists: boolean; token_preview: string | null; cookie_preview: string | null; mtime: string | null } | null>(null);
+
+  useEffect(() => {
+    const base = config.apiUrl || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.apiToken) headers['Authorization'] = `Bearer ${config.apiToken}`;
+    fetch(`${base}/api/settings/quantdata_credentials_status`, { headers })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setCredStatus(d))
+      .catch(() => {});
+  }, [config.apiUrl, config.apiToken]);
+
+  async function handleSave() {
+    if (!authToken.trim() || !cookie.trim()) {
+      setSaveStatus('error');
+      setSaveMessage('Both fields are required.');
+      return;
+    }
+    setSaving(true);
+    setSaveStatus('idle');
+    try {
+      const base = config.apiUrl || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (config.apiToken) headers['Authorization'] = `Bearer ${config.apiToken}`;
+      const res = await fetch(`${base}/api/settings/quantdata_credentials`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ auth_token: authToken.trim(), cookie: cookie.trim() }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        setSaveStatus('success');
+        setSaveMessage('Credentials saved. QuantData is now active.');
+        setAuthToken('');
+        setCookie('');
+        setExpanded(false);
+        fetch(`${base}/api/settings/quantdata_credentials_status`, { headers })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => d && setCredStatus(d))
+          .catch(() => {});
+      } else {
+        setSaveStatus('error');
+        setSaveMessage(result.message || 'Failed to save credentials.');
+      }
+    } catch (e: unknown) {
+      setSaveStatus('error');
+      setSaveMessage(e instanceof Error ? e.message : 'Failed to save credentials.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Section title="QuantData Credentials" description="Update your QuantData session token and cookie to restore live market data.">
+      {/* Current status */}
+      <div className="flex items-center gap-3 mb-4">
+        <span
+          className="w-2 h-2 rounded-full flex-shrink-0"
+          style={{ background: credStatus?.exists ? 'oklch(0.75 0.18 145)' : 'oklch(0.65 0.20 25)' }}
+        />
+        <span className="text-xs" style={{ color: DIM }}>
+          {credStatus?.exists
+            ? <>Token: <span className="font-mono-data" style={{ color: BRIGHT }}>{credStatus.token_preview}</span>{credStatus.mtime ? ` · Updated ${new Date(credStatus.mtime).toLocaleDateString()}` : ''}</>
+            : 'No credentials configured on server'}
+        </span>
+      </div>
+
+      {!expanded ? (
+        <button
+          onClick={() => setExpanded(true)}
+          className="text-xs px-3 py-1.5 rounded border transition-all hover:opacity-80"
+          style={{ borderColor: ACCENT, color: ACCENT, background: 'transparent' }}
+        >
+          Update Credentials
+        </button>
+      ) : (
+        <div className="space-y-4">
+          {/* Instructions */}
+          <div
+            className="rounded border p-3 text-xs space-y-1.5"
+            style={{ borderColor: 'oklch(0.80 0.15 200 / 25%)', background: 'oklch(0.80 0.15 200 / 6%)' }}
+          >
+            <p className="font-semibold" style={{ color: ACCENT }}>How to get fresh credentials:</p>
+            <ol className="list-decimal list-inside space-y-1" style={{ color: DIM }}>
+              <li>Open <a href="https://v3.quantdata.us" target="_blank" rel="noreferrer" style={{ color: ACCENT }}>v3.quantdata.us</a> and log in</li>
+              <li>Open DevTools (F12) → Network tab → filter for <code className="px-1 rounded" style={{ background: 'oklch(0.25 0.01 258)' }}>core-lb-prod</code></li>
+              <li>Click any request → Request Headers → copy the <code className="px-1 rounded" style={{ background: 'oklch(0.25 0.01 258)' }}>authorization</code> value</li>
+              <li>Copy the full <code className="px-1 rounded" style={{ background: 'oklch(0.25 0.01 258)' }}>cookie</code> request header value</li>
+            </ol>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs mb-1" style={{ color: DIM }}>Auth Token (authorization header value)</label>
+              <input
+                type="password"
+                value={authToken}
+                onChange={e => setAuthToken(e.target.value)}
+                placeholder="Bearer eyJ..."
+                className="w-full rounded border px-3 py-2 text-xs font-mono outline-none"
+                style={{ background: 'oklch(0.18 0.01 258)', borderColor: 'oklch(0.35 0.01 258)', color: BRIGHT }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: DIM }}>Cookie (full cookie header value)</label>
+              <textarea
+                value={cookie}
+                onChange={e => setCookie(e.target.value)}
+                placeholder="session=...; auth=..."
+                rows={3}
+                className="w-full rounded border px-3 py-2 text-xs font-mono resize-none outline-none"
+                style={{ background: 'oklch(0.18 0.01 258)', borderColor: 'oklch(0.35 0.01 258)', color: BRIGHT }}
+              />
+            </div>
+          </div>
+
+          {saveStatus !== 'idle' && (
+            <p className="text-xs" style={{ color: saveStatus === 'success' ? 'oklch(0.75 0.18 145)' : 'oklch(0.65 0.20 25)' }}>
+              {saveMessage}
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="text-xs px-3 py-1.5 rounded transition-all disabled:opacity-50"
+              style={{ background: ACCENT, color: 'oklch(0.12 0.01 258)' }}
+            >
+              {saving ? 'Saving…' : 'Save Credentials'}
+            </button>
+            <button
+              onClick={() => { setExpanded(false); setSaveStatus('idle'); setAuthToken(''); setCookie(''); }}
+              className="text-xs px-3 py-1.5 rounded border transition-all"
+              style={{ borderColor: 'oklch(0.35 0.01 258)', color: DIM, background: 'transparent' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 // ─── Security Section — Bearer Token Rotation ───────────────────────────────────
 
 function SecuritySection() {
@@ -1376,6 +1536,7 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         <GeneralSection />
         <ApiSection />
         <ConnectionHealthSection />
+        <QuantDataCredentialsSection />
         <TickerSection />
         <StrategySection />
         <RefreshSection />
