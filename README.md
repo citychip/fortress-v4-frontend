@@ -6,6 +6,20 @@ A fully configurable, browser-based options portfolio management terminal. Built
 
 ---
 
+## Downloads
+
+The following documents are available for download directly from this repository:
+
+| Document | Format | Description |
+|---|---|---|
+| [Fortress V3 Presentation](docs/Fortress_V3_Presentation.pdf) | PDF | 15-slide deck — value proposition, features, MCP/API integration, tech stack |
+| [Fortress V3 Sales Brochure](docs/Fortress_V3_Sales_Brochure.pdf) | PDF | 7-page A4 brochure — the problem, decision engine, data sources, key features, REST API |
+| [Portfolio Strategy v3.7](docs/Portfolio_Strategy_v3_7.md) | Markdown | Full trading strategy document — all rules, workflows, risk management, and tool stack |
+
+> **To download:** click the document link above → click the **Download raw file** button (↓) in the top-right of the GitHub file viewer.
+
+---
+
 ## Overview
 
 Fortress v3 implements the four-layer morning workflow for options portfolio management:
