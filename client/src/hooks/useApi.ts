@@ -1507,3 +1507,97 @@ export interface VolAnalyticsResponse {
 export function useVolAnalytics(ticker: string) {
   return useApiData<VolAnalyticsResponse>(`/api/options/vol-analytics?ticker=${ticker}`);
 }
+
+// ---------------------------------------------------------------------------
+// Position Limits — max profit, max loss, breakevens (Gap 1)
+// ---------------------------------------------------------------------------
+export interface PositionLimitsResponse {
+  ticker: string;
+  spot: number;
+  max_profit: number | null;   // null = unlimited
+  max_loss: number | null;     // null = unlimited
+  net_premium: number;
+  breakevens: number[];
+}
+
+// ---------------------------------------------------------------------------
+// Forward P&L — P&L at future price/date/IV (Gap 2)
+// ---------------------------------------------------------------------------
+export interface ForwardPnLCurvePoint {
+  price: number;
+  pnl: number;
+}
+export interface ForwardPnLResponse {
+  ticker: string;
+  spot: number;
+  target_price: number;
+  target_date: string;
+  iv_adj: number;
+  target_pnl: number;
+  max_profit: number | null;
+  max_loss: number | null;
+  net_premium: number;
+  breakevens: number[];
+  curve: ForwardPnLCurvePoint[];
+}
+
+export interface LegInput {
+  right: 'C' | 'P';
+  strike: number;
+  qty: number;
+  premium: number;
+  expiry: string;
+}
+
+export function usePositionLimits(ticker: string, legs: LegInput[], enabled = true) {
+  const { config } = useConfig();
+  const [data, setData] = useState<PositionLimitsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !ticker || legs.length === 0) return;
+    if (!config.apiUrl || !config.apiToken) return;
+    setLoading(true);
+    setError(null);
+    const legsJson = encodeURIComponent(JSON.stringify(legs));
+    apiFetch(config.apiUrl, config.apiToken, `/api/options/position-limits?ticker=${ticker}&legs=${legsJson}`)
+      .then(d => setData(d as PositionLimitsResponse))
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed'))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, enabled, config.apiUrl, config.apiToken]);
+
+  return { data, loading, error };
+}
+
+export function useForwardPnL(
+  ticker: string,
+  legs: LegInput[],
+  targetPrice: number,
+  targetDate: string,
+  ivAdj: number,
+  enabled = true
+) {
+  const { config } = useConfig();
+  const [data, setData] = useState<ForwardPnLResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(() => {
+    if (!enabled || !ticker || legs.length === 0 || !targetPrice || !targetDate) return;
+    if (!config.apiUrl || !config.apiToken) return;
+    setLoading(true);
+    setError(null);
+    const legsJson = encodeURIComponent(JSON.stringify(legs));
+    const params = `ticker=${ticker}&legs=${legsJson}&target_price=${targetPrice}&target_date=${targetDate}&iv_adj=${ivAdj}`;
+    apiFetch(config.apiUrl, config.apiToken, `/api/options/forward-pnl?${params}`)
+      .then(d => setData(d as ForwardPnLResponse))
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed'))
+      .finally(() => setLoading(false));
+  }, [ticker, legs, targetPrice, targetDate, ivAdj, enabled, config.apiUrl, config.apiToken]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  return { data, loading, error, refresh: fetchData };
+}

@@ -150,3 +150,39 @@
 - [x] TokenRotation: Add POST /api/manage/rotate-token endpoint to VPS FastAPI backend
 - [x] TokenRotation: Add "Rotate Token" section to Settings page with confirmation dialog
 - [x] TokenRotation: On rotation success, update localStorage and show success badge
+
+## Sprint v5.0: OptionStrat-Inspired Gaps (Forward P&L + Position Limits + Optimizer + Flow + Watchlist)
+
+### Gap 1 — Max Profit / Max Loss / Breakeven Badges on Position Cards (quick win)
+- [ ] PositionCard: compute max profit, max loss, and breakeven price(s) from position legs using BS model (short put: max profit = premium, max loss = strike - premium; PMCC: max profit = short call strike - long call strike - net debit; etc.)
+- [ ] PositionCard: render structural limits as a compact badge row below the greeks row — "Max profit $420 · Max loss $180 · BE $412.50"
+- [ ] PositionCard: amber warning badge when current spot is within 2% of any breakeven price
+
+### Gap 2 — Forward P&L Simulator on Position Cards (highest leverage)
+- [ ] ForwardPnL: Add GET /api/options/forward-pnl endpoint to VPS — accepts legs JSON + target_price + target_date + iv_adjustment; returns P&L at target using Black-Scholes with time decay
+- [ ] ForwardPnL: Add ForwardPnLPanel component inside each position accordion — target price slider (±30% of spot), target date picker (today → expiry), IV adjustment slider (−50% to +50%); renders P&L at target and a mini P&L-vs-price curve
+- [ ] ForwardPnL: Add earnings IV-crush scenario toggle — sets post-earnings expiry IV to 60% of current and re-renders curve
+- [ ] ForwardPnL: Show "if MSFT reaches 450 by Jun 20, this PMCC earns +$1,240" one-liner badge on the collapsed position card header
+
+### Gap 3 — Trade Optimizer (goal-first strategy suggestion)
+- [ ] Optimizer: Add GET /api/options/optimize endpoint to VPS — accepts ticker + target_price + target_date + mode (max_return|max_chance); scans PMCC, PCS, naked put, iron condor, covered call structures via yfinance chain; returns top 10 ranked by expected return or PoP
+- [ ] Optimizer: Add OptimizerPage (route /optimizer) with ticker input, target price input, DTE selector, mode toggle
+- [ ] Optimizer: Render ranked strategy cards — each shows strategy name, legs (strikes/expiry), max profit, max loss, PoP%, cost/credit, and "Open in Trade Builder" button
+- [ ] Optimizer: Add sidebar nav item and link from Candidates page actionable row CTA
+
+### Gap 4 — Multi-Leg Flow Consolidation in Market Intel
+- [ ] FlowConsolidation: Update VPS whale_flow endpoint to consolidate multi-leg sweeps (same ticker, ±60s timestamp, different strikes/expiries) into a single strategy record with total notional
+- [ ] FlowConsolidation: Label consolidated flow as spread / condor / straddle / ratio based on leg count and structure; add urgency flag (sweep = cross-exchange, block = off-exchange)
+- [ ] FlowConsolidation: Update MarketIntelPage flow table to show consolidated strategy label, total notional, urgency badge, and bullish/bearish/neutral sentiment tag
+
+### Gap 5 — Watchlist Trade Tracker (paper trade ideas)
+- [ ] WatchlistTrades: Add watchlist_trades table to drizzle schema — id, ticker, strategy_type, legs_json, entry_date_utc, entry_price, status (open/closed), close_date_utc, close_price, notes
+- [ ] WatchlistTrades: Add tRPC procedures — watchlistTrades.add, watchlistTrades.close, watchlistTrades.list, watchlistTrades.delete
+- [ ] WatchlistTrades: Add VPS endpoint GET /api/options/mark-to-market?legs= to compute current value of a hypothetical position for live P&L tracking
+- [ ] WatchlistTrades: Add WatchlistTradesPanel to CandidatesPage — "Track this idea" button on candidate rows; panel shows open hypothetical trades with current P&L vs entry, max profit reached, and days held
+
+## Sprint v5.0 Addendum: vollib / py_vollib Infrastructure
+- [x] Install py_vollib (Python 3 fork of vollib / LetsBeRational) on VPS — verified IV round-trip precision
+- [ ] Replace hand-rolled BS pricing in VPS options.py with py_vollib for accurate IV inversion and Greeks
+- [ ] 3D Volatility Surface upgrade: use py_vollib IV solver to build full strike×expiry IV grid from yfinance chain, render as interactive 3D surface in VolAnalyticsPanel using ECharts GL or react-three-fiber
+- [ ] Batch Greeks endpoint: GET /api/options/batch-greeks?ticker= — returns delta/gamma/theta/vega for all live positions in one call using py_vollib vectorised over position legs

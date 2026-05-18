@@ -10,6 +10,8 @@ import {
   type Position,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
+import PositionLimitsBadge from '@/components/PositionLimitsBadge';
+import ForwardPnLPanel from '@/components/ForwardPnLPanel';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { StatCard } from '@/components/StatCard';
