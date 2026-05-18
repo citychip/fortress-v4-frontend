@@ -1,59 +1,151 @@
-# Fortress v3 — Options Trading Dashboard
+<div align="center">
 
-A fully configurable, browser-based options portfolio management terminal. Built with React 19, Tailwind CSS 4, tRPC 11, Drizzle ORM, and Recharts. Connects to the Fortress REST API server (FastAPI/Python, port 8080) via an nginx same-origin proxy on port 3000. Includes Manus OAuth authentication, a MySQL/TiDB database layer, and a full server-side Express/tRPC backend.
+# ⚡ FORTRESS V3
 
-**Live instance:** http://76.13.138.194:3000
+### Options Trading Command Centre
+
+**React 19 · FastAPI · QuantData MCP · IBKR Web API**
+
+[![Strategy](https://img.shields.io/badge/Strategy-v3.7-00d4aa?style=flat-square)](docs/Portfolio_Strategy_v3_7.md)
+[![Sprint](https://img.shields.io/badge/Sprint-v7.1-6366f1?style=flat-square)](#changelog)
+[![Stack](https://img.shields.io/badge/Stack-React_19_%2B_FastAPI-0ea5e9?style=flat-square)](#tech-stack)
+[![Live](https://img.shields.io/badge/Live-76.13.138.194%3A3000-22c55e?style=flat-square)](http://76.13.138.194:3000)
+[![MCP](https://img.shields.io/badge/MCP-29_tools-f59e0b?style=flat-square)](https://github.com/citychip/fortress-mcp)
+
+*Stop spending 50 minutes every morning on manual data gathering. Fortress synthesises GEX walls, dark pool floors, IV rank, and live Greeks into a single prioritised action list — before the market opens.*
+
+</div>
 
 ---
 
 ## Downloads
 
-The following documents are available for download directly from this repository:
+> Click the link → then click the **Download raw file** (↓) button in the GitHub file viewer.
 
 | Document | Format | Description |
 |---|---|---|
-| [Fortress V3 Presentation](docs/Fortress_V3_Presentation.pdf) | PDF | 15-slide deck — value proposition, features, MCP/API integration, tech stack |
-| [Fortress V3 Sales Brochure](docs/Fortress_V3_Sales_Brochure.pdf) | PDF | 7-page A4 brochure — the problem, decision engine, data sources, key features, REST API |
-| [Portfolio Strategy v3.7](docs/Portfolio_Strategy_v3_7.md) | Markdown | Full trading strategy document — all rules, workflows, risk management, and tool stack |
-
-> **To download:** click the document link above → click the **Download raw file** button (↓) in the top-right of the GitHub file viewer.
+| [**Fortress V3 Presentation**](docs/Fortress_V3_Presentation.pdf) | PDF | 15-slide deck — value proposition, features, MCP/API architecture, tech stack |
+| [**Fortress V3 Sales Brochure**](docs/Fortress_V3_Sales_Brochure.pdf) | PDF | 7-page A4 brochure — shareable overview for partners and collaborators |
+| [**Portfolio Strategy v3.7**](docs/Portfolio_Strategy_v3_7.md) | Markdown | The complete trading rulebook — delta targets, position sizing, roll criteria, earnings playbook |
 
 ---
 
-## Overview
+## The Problem
 
-Fortress v3 implements the four-layer morning workflow for options portfolio management:
+Every morning, a premium-selling options trader faces the same 50-minute grind:
 
-| Layer | Tab | What it does |
-|---|---|---|
-| 1 — Macro Regime Gate | **Dashboard** | SPY regime score, account metrics, SPY hedge coverage, IBKR live account data, quick-action cards |
-| 2 — Per-Ticker Flow | **Market Intel** | Per-ticker GEX walls, DP floor/ceiling, Net Drift, directional bias |
-| 3 — Position Evaluation | **Positions** | Per-leg evaluation: delta breach, DTE roll window, stop-loss, concentration alerts; max profit/loss/breakeven badges; forward P&L simulator |
-| 4 — Order Execution | **Trade → Orders** | Prioritised order list: URGENT → THIS WEEK → WATCH; alert snooze/dismiss; pending orders panel |
+- Open QuantData → manually check GEX walls for 19 tickers
+- Open IBKR → check Greeks on every open position
+- Open a spreadsheet → calculate delta bias, concentration, stop-loss distances
+- Check the earnings calendar → flag blackout windows
+- Decide what to do — with no unified view
 
-**8-item sidebar (v6.0):**
+**Fortress eliminates all of it.**
 
-| Nav Item | Tabs / Content |
+---
+
+## The 4-Layer Decision Engine
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 1 — REGIME GATE                                          │
+│  Is the macro environment safe to sell premium?                 │
+│  VIX level · SPY gamma regime · Net Drift bias                  │
+├─────────────────────────────────────────────────────────────────┤
+│  LAYER 2 — MARKET INTELLIGENCE                                  │
+│  Where are the structural levels for this ticker?               │
+│  GEX call/put walls · Dark pool floors · Flip zone              │
+├─────────────────────────────────────────────────────────────────┤
+│  LAYER 3 — POSITION EVALUATION                                  │
+│  What does the existing book need?                              │
+│  Greeks · Concentration · Stop-loss status · Roll triggers      │
+├─────────────────────────────────────────────────────────────────┤
+│  LAYER 4 — PRIORITY ORDERS                                      │
+│  What is the single most important action right now?            │
+│  Ranked list: close · roll · hedge · enter                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Dashboard Pages
+
+| Page | What You See |
 |---|---|
-| **Dashboard** | Regime gate, account metrics, quick-action cards |
-| **Market Intel** | Per-ticker GEX/DP/drift intel |
-| **Positions** | Live positions with greeks, limits badges, P&L simulator |
-| **Trade** | Scan (Morning Brief) • Candidates (IV screener) • Orders (alerts + pending) |
-| **Analysis** | Per-ticker chart, levels, order flow, vol analytics |
-| **Performance** | P&L (unrealised P&L) • Journal (trade log) |
-| **Earnings** | Earnings calendar with Outlook sync |
-| **Config** | Strategy (persona + playbook + sandbox) • Settings (universe + entry + sizing + API) • Scripts (automation runner) |
+| **Dashboard** | Portfolio briefing · Account metrics · Concentration alerts · Delta bias · Priority action list |
+| **Market Intel** | Per-ticker cards: GEX walls, DP floors, Net Drift, regime score · Sort by score/bias/alpha · Per-card refresh · Metric tooltips |
+| **Trade → Candidates** | IV Rank Heatmap (19 tickers) · Actionable signals at top · Monitoring universe below divider |
+| **Analysis** | Chart with DP floor and GEX level overlays · Order flow panel · Vol analytics |
+| **Positions** | Open positions · Per-leg Greeks · Stop-loss status · Roll triggers · Forward P&L simulator |
+| **Performance** | Unrealised P&L · Trade journal with auto-suggest from IBKR sync |
+| **Earnings** | Calendar with countdown timers · CRUD · Outlook Calendar sync |
+| **Settings** | Strategy config · QuantData credentials manager · Alert thresholds · Security toggles |
 
 ---
 
-## Stack
+## Data Sources
 
-- **React 19** + **Wouter** (client-side routing)
-- **Tailwind CSS 4** with OKLCH design tokens ("Obsidian Edge" dark theme)
-- **shadcn/ui** component primitives
-- **Recharts** for P&L and Analysis charts
-- **Vite 7** build tooling
-- **Fonts:** Syne (display), JetBrains Mono (data), Inter (body) via Google Fonts CDN
+| Source | What It Provides | Integration |
+|---|---|---|
+| **QuantData** | GEX by strike, Dark Pool levels, Net Drift, IV Rank, Order Flow | REST API (widget-UUID endpoints) + MCP server |
+| **IBKR Web API** | Live Greeks (Δ/Γ/Θ/V), positions, account metrics | CP Gateway (voyz/ibeam) via Docker |
+| **yFinance** | Price data, option chains (fallback when IBKR unavailable) | Python library |
+
+---
+
+## MCP Integration
+
+The Fortress MCP server exposes **29 tools** to Claude Desktop (or any MCP-compatible agent), enabling natural-language control of the entire dashboard.
+
+```
+Claude Desktop  →  fortress_mcp.py  →  Fortress API  →  QuantData / IBKR
+```
+
+**Example prompts:**
+
+> *"Run my morning preflight: briefing, SPY hedge coverage, today's calendar, and any stop-loss triggers."*
+
+> *"Show me market intelligence for AMD. Then run the pre-trade gate for a PMCC."*
+
+> *"Post-earnings playbook: NVDA gap −8%, IV crush 42%. Thesis confirmed."*
+
+> *"What is the regime on SPY? Show me the GEX walls and dark pool floors."*
+
+**MCP Repository:** [citychip/fortress-mcp](https://github.com/citychip/fortress-mcp)
+
+---
+
+## REST API
+
+All endpoints are protected by Bearer token authentication.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/health` | GET | Liveness check (no auth required) |
+| `/api/briefing` | GET | Portfolio summary, alerts, staleness state |
+| `/api/positions` | GET | Open positions with live Greeks |
+| `/api/candidates` | GET | IV Crush workflow results (IVR, signal, entry criteria) |
+| `/api/market-intelligence` | GET | Full regime analysis for a ticker (GEX, DP, Net Drift, score) |
+| `/api/chart/{ticker}` | GET | OHLCV data with DP floor and GEX overlay levels |
+| `/api/settings` | GET / POST | Strategy configuration |
+| `/api/settings/quantdata-credentials` | POST | Update QuantData auth token + cookie |
+| `/api/ibkr/sync` | POST | Trigger IBKR position sync |
+
+Full API reference (63 endpoints across 14 groups) is documented in [`docs/02_Trading_Dashboard_Build_Spec_v2_0.md`](https://github.com/citychip/fortress-app/blob/main/docs/02_Trading_Dashboard_Build_Spec_v2_0.md).
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 19 · Tailwind CSS 4 · tRPC 11 · shadcn/ui · Recharts · Wouter |
+| **Backend** | Python · FastAPI · Uvicorn |
+| **Broker** | IBKR Web API via CP Gateway (voyz/ibeam, Docker) |
+| **Data** | QuantData REST API (widget-UUID endpoints) · yFinance |
+| **Hosting** | VPS (Ubuntu 22.04) · nginx (port 3000) · systemd |
+| **MCP** | `fortress_mcp.py` — 29 tools · Claude Desktop |
+| **Design** | "Obsidian Edge" dark theme · Syne (display) · JetBrains Mono (data) · Inter (body) |
 
 ---
 
@@ -62,335 +154,105 @@ Fortress v3 implements the four-layer morning workflow for options portfolio man
 ### Prerequisites
 
 - Node.js ≥ 18 and pnpm installed
-- Fortress REST API server running and accessible (default: port 8080)
+- Fortress REST API server running (default: port 8080)
 
-### Local development
+### Local Development
 
 ```bash
-git clone https://github.com/citychip/fortress-v2.git
-cd fortress-v2
+git clone https://github.com/citychip/fortress-app.git
+cd fortress-app
 pnpm install
 pnpm dev
 # → http://localhost:3000
 ```
 
-Open **Settings → API Connection** and enter your bearer token. The API URL defaults to a relative path (same-origin proxy) — leave it blank when running behind nginx.
-
-### Production build
+### Production Build + Deploy
 
 ```bash
+# Build
 pnpm build
-# Output: dist/public/
+
+# Deploy to VPS
+scp -r dist/* ubuntu@<VPS_IP>:/home/ubuntu/Fortress_Dashboard/app/static/
+ssh ubuntu@<VPS_IP> "sudo systemctl restart nginx"
 ```
 
----
-
-## Deployment (nginx on VPS)
-
-The dashboard is a pure static SPA. nginx serves `dist/public/` on port 3000 and proxies `/api/*` to the Fortress API server on port 8080.
-
-### nginx site config (`/etc/nginx/sites-available/fortress-v2`)
-
-```nginx
-server {
-    listen 3000;
-    server_name _;
-    root /var/www/fortress-v2;
-    index index.html;
-
-    # Proxy all API calls to the Fortress server
-    location /api/ {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    # SPA fallback — all routes serve index.html
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Cache static assets aggressively
-    location /assets/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-```
+### VPS Services
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/fortress-v2 /etc/nginx/sites-enabled/
+# Backend (FastAPI on port 8080)
+sudo systemctl status fortress-dashboard
+sudo systemctl restart fortress-dashboard
+journalctl -u fortress-dashboard -f
+
+# Frontend (nginx on port 3000)
+sudo systemctl status nginx
 sudo nginx -t && sudo systemctl reload nginx
-```
 
-### Redeploy one-liner (from the Manus sandbox)
-
-```bash
-cd /home/ubuntu/fortress-v2 && pnpm build && \
-  tar czf /tmp/fortress-v2-dist.tar.gz -C dist/public . && \
-  scp -i ~/.ssh/fortress_vps /tmp/fortress-v2-dist.tar.gz ubuntu@76.13.138.194:/tmp/ && \
-  ssh -i ~/.ssh/fortress_vps ubuntu@76.13.138.194 \
-    "sudo rm -rf /var/www/fortress-v2/* && \
-     sudo tar xzf /tmp/fortress-v2-dist.tar.gz -C /var/www/fortress-v2/"
+# IBKR Gateway (Docker)
+cd /home/ubuntu/Fortress_Dashboard/cp-gateway
+docker compose ps
+docker compose restart
 ```
 
 ---
 
-## Configuration
+## QuantData Credential Refresh
 
-All **local** configuration (API URL, bearer token, display preferences) is stored in browser `localStorage` under `fortress-v2-config`. No secrets are ever committed to the repository.
+When the IV Rank Heatmap shows "no data" or Candidates shows 0 rows, the QuantData session has expired.
 
-**Server-side** configuration (trader profile, active strategies, risk tolerance, position sizing thresholds) is read from and written to the Fortress API server via `/api/settings`.
+**Via Dashboard (no SSH required):**
 
-### API Connection (localStorage)
+1. Open **Settings → QuantData Credentials → Update Credentials**
+2. Go to [v3.quantdata.us](https://v3.quantdata.us) → DevTools → Network → filter `core-lb-prod`
+3. Copy the `authorization` and `cookie` header values from any request
+4. Paste into the Settings form → **Save Credentials**
 
-| Field | Description | Default |
-|---|---|---|
-| API URL | Base URL of the Fortress REST server. Leave blank to use the same-origin nginx proxy. | *(blank — uses proxy)* |
-| Bearer Token | `FORTRESS_API_TOKEN` from the server's systemd environment | *(blank — enter manually)* |
-| Auto-refresh interval | How often to poll the API (seconds) | `60` |
-
-> **Security:** The bearer token is **never stored in source code or committed to the repository**. It lives exclusively in browser `localStorage`. The config export feature explicitly excludes the token.
-
-### Ticker Universe
-
-The dashboard syncs the ticker universe from `/api/universe` (Tier 1, Tier 2, Macro, Excluded). The Universe Manager in Settings allows adding, removing, moving between tiers, and excluding tickers with a reason. Default universe: `MSFT, AVGO, NFLX, VST, GOOGL, AMZN, AMD, MSTR, UNH` (Tier 1), `META, AAPL, NVDA` (Tier 2), `SPX, SPY` (Macro).
-
-### Trader Presets (server-side)
-
-Five built-in profiles selectable from Settings:
-
-| Preset | Strategies | Risk |
-|---|---|---|
-| Income Seeker | Wheel, Covered Call, Cash-Secured Put, PMCC, PCS | Conservative |
-| Speculator | Long Call/Put, Vertical Spreads | Aggressive |
-| Volatility Trader | Iron Condor, Strangle, Straddle, Butterfly | Moderate |
-| Portfolio Protector | Collar, Protective Put, SPY Hedge, Covered Call | Conservative |
-| Custom | Manual configuration | Any |
+Full recovery procedure: [`operations/04_Incident_Recovery_Playbook.md §5`](https://github.com/citychip/fortress-app/blob/main/docs/operations/04_Incident_Recovery_Playbook.md)
 
 ---
 
-## API Endpoints Reference
+## Documentation
 
-All requests include `Authorization: Bearer <token>`. The full Fortress server exposes 63 routes across 14 groups. The table below covers all endpoints consumed or planned for the dashboard.
+Full documentation is in `docs/` on the VPS. Key files:
 
-### Briefing & Core Data
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/health` | GET | Settings — Connection Test |
-| `/api/briefing` | GET | Dashboard |
-| `/api/positions` | GET | Positions, P&L |
-| `/api/market-intelligence` | GET | Market Intel, Analysis |
-| `/api/candidates` | GET | Candidates |
-
-### Trade Management
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/manage/trade_report` | GET | Dashboard — Trade Report panel |
-| `/api/manage/pretrade_all` | GET | Candidates — Pre-Trade Gate badges |
-| `/api/manage/pre_trade_check?ticker=X` | GET | Analysis — single-ticker gate |
-| `/api/manage/stop_loss_all` | GET | Orders — URGENT section |
-| `/api/manage/roll_all` | GET | Orders — THIS WEEK section |
-| `/api/manage/stop_loss/{position_id}` | GET | Positions — per-leg evaluation |
-| `/api/manage/roll/{position_id}` | GET | Positions — per-leg evaluation |
-| `/api/manage/spy_hedge_coverage` | GET | Dashboard — hedge coverage widget |
-| `/api/manage/monitor_alerts` | POST | Orders — Refresh Alerts button |
-| `/api/manage/validate_jade_lizard` | POST | Candidates — Jade Lizard validation |
-
-### Alerts
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/alerts` | GET | Orders — alert list |
-| `/api/alerts` | POST | Orders — create alert |
-| `/api/alerts/{alert_id}` | PATCH | Orders — snooze alert |
-| `/api/alerts/{alert_id}` | DELETE | Orders — dismiss alert |
-
-### Earnings Calendar
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/calendar` | GET | Earnings tab |
-| `/api/calendar/{ticker}` | PUT | Earnings tab — edit date |
-| `/api/calendar/{ticker}` | DELETE | Earnings tab — remove entry |
-| `/api/calendar/{ticker}/confirm` | POST | Earnings tab — confirm date |
-| `/api/calendar/fetch-earnings` | POST | Earnings tab — auto-fetch from yfinance |
-
-### Universe Management
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/universe` | GET | Settings — Universe Manager |
-| `/api/universe/add` | POST | Settings — add ticker |
-| `/api/universe/{tier}/{ticker}` | DELETE | Settings — remove ticker |
-| `/api/universe/move` | POST | Settings — move between tiers |
-| `/api/universe/exclude` | POST | Settings — exclude with reason |
-| `/api/universe/exclude/{ticker}` | DELETE | Settings — un-exclude |
-
-### IBKR Integration
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/ibkr/status` | GET | Settings — IBKR Status panel |
-| `/api/ibkr/sync` | POST | Sidebar — Sync IBKR button |
-| `/api/ibkr/capability` | GET | Settings — backend info |
-| `/api/ibkr/preview` | GET | Dashboard — live account data |
-
-### Chart & Technical Analysis
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/chart/{ticker}` | GET | Analysis — OHLCV chart |
-| `/api/chart/{ticker}/levels` | GET | Analysis — support/resistance overlay |
-| `/api/chart/{ticker}/order_flow` | GET | Analysis — order flow panel |
-
-### Journal
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/journal` | GET | Journal tab |
-| `/api/journal` | POST | Journal tab — new entry |
-| `/api/journal/suggest` | GET | Journal tab — auto-suggest from IBKR sync |
-| `/api/journal/{entry_id}` | DELETE | Journal tab — delete entry |
-
-### Script Runner
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/run/scripts` | GET | Scripts tab — list available scripts |
-| `/api/run/{script_key}` | POST | Scripts tab — run a script |
-| `/api/run/time_of_day` | GET | Scripts tab — time-of-day context |
-| `/api/run/group/{group_name}` | POST | Scripts tab — run a script group |
-
-### Settings (Server-Side)
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/settings` | GET | Settings tab |
-| `/api/settings/schema` | GET | Settings tab — dynamic form |
-| `/api/settings/trader_presets` | GET | Settings tab — preset selector |
-| `/api/settings/apply_preset` | POST | Settings tab — apply preset |
-| `/api/settings/{section}` | PUT | Settings tab — save section |
-| `/api/settings/narrative` | GET | Settings tab — AI narrative |
-| `/api/settings/reset` | POST | Settings tab — reset to defaults |
-| `/api/settings/backup` | GET | Settings tab — download backup |
-| `/api/settings/restore` | POST | Settings tab — restore backup |
-| `/api/settings/test_quantdata` | POST | Settings tab — test QuantData connection |
-
-### Uploads & OCR
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/uploads/ibkr` | POST | Settings — IBKR screenshot upload |
-| `/api/uploads/ibkr/{upload_id}/confirm` | POST | Settings — confirm OCR parse |
-| `/api/uploads/chart` | POST | Analysis — chart image upload |
-| `/api/uploads` | GET | Settings — upload history |
-
-### Playbook
-
-| Endpoint | Method | Used in |
-|---|---|---|
-| `/api/playbook/post_earnings` | POST | Candidates / Analysis — post-earnings playbook |
-
----
-
-## Project Structure
-
-```
-client/
-  src/
-    pages/
-      DashboardPage.tsx     ← Layer 1: regime gate, account metrics, hedge coverage, quick-action cards
-      PositionsPage.tsx     ← Layer 3: per-leg evaluation + limits badges + forward P&L simulator
-      MarketIntelPage.tsx   ← Layer 2: per-ticker GEX/DP/Drift with hydration cache overlay
-      TradePage.tsx         ← Tabbed: Scan (MorningBrief) | Candidates | Orders
-      MorningBriefPage.tsx  ← Daily trade report, IV heatmap, SPY chart, portfolio Greeks panel
-      CandidatesPage.tsx    ← IV rank screener with pre-trade gate overlay
-      OrdersPage.tsx        ← URGENT/THIS WEEK/WATCH + alert management + pending orders
-      TradeBuilderPage.tsx  ← GEX/market context, strategy suggester, PoP calculator, order queue
-      PnLJournalPage.tsx    ← Tabbed: P&L (unrealised P&L) | Journal (trade log)
-      PnLPage.tsx           ← Sortable/filterable unrealised P&L from /api/positions
-      JournalPage.tsx       ← Trade journal with realised P&L metrics and auto-suggest
-      AnalysisPage.tsx      ← Per-ticker chart + levels + order flow + vol analytics
-      EarningsPage.tsx      ← Earnings calendar with countdown, CRUD, Outlook Calendar sync
-      ConfigPage.tsx        ← Tabbed: Strategy | Settings | Scripts
-      StrategyPage.tsx      ← Strategy Workspace: persona, regime playbook, parameters, payoff sandbox
-      SettingsPage.tsx      ← Server settings sync, trader presets, universe manager, IBKR status
-      ScriptsPage.tsx       ← Workflow script runner (10 scripts, terminal output)
-    components/
-      PageHeader.tsx        ← Shared page header with refresh button
-      StatCard.tsx          ← Metric display card
-      RegimeBadge.tsx       ← Macro regime score badge
-      UrgencyBadge.tsx      ← Order urgency badge (URGENT/THIS WEEK/WATCH)
-      EmptyState.tsx        ← No-data / no-config / error states
-      PendingOrdersPanel.tsx ← Queued trade setups (localStorage)
-      DashboardLayout.tsx   ← Sidebar layout with collapsed icon-only mode
-    contexts/
-      ConfigContext.tsx     ← Full strategy config: persona, strategies, risk, signal mode, backup/restore
-      PendingOrdersContext.tsx ← Pending trade setups (localStorage)
-    hooks/
-      useApi.ts             ← All API hooks + TypeScript types
-    lib/
-      utils.ts              ← cn() and shared helpers
-server/
-  routers.ts              ← tRPC procedures (auth + features)
-  db.ts                   ← Drizzle query helpers
-  sandbox.payoff.test.ts  ← 23 vitest unit tests for payoff math helpers
-drizzle/
-  schema.ts               ← Database tables & types
-```
-
----
-
-## Security
-
-- The bearer token is **never stored in source code or committed to the repository**. It lives exclusively in browser `localStorage`.
-- The config export feature explicitly excludes the token.
-- All API calls use `Authorization: Bearer <token>` headers sent through the nginx same-origin proxy — the token never crosses origins.
-- The nginx config does not expose any server-side secrets.
-
----
-
-## Related Repositories
-
-| Repo | Description |
+| Document | Purpose |
 |---|---|
-| [citychip/fortress-mcp](https://github.com/citychip/fortress-mcp) | Fortress MCP server — 57 tools (47 read + 10 write) covering positions, briefing, market intelligence, stop-loss, roll, pre-trade gate, journal, vol analytics, forward P&L, chart data, and QuantData live data |
-| [citychip/fortress-dashboard](https://github.com/citychip/fortress-dashboard) | Original Fortress dashboard (v1) |
+| [`01_Portfolio_Strategy_v3_7.md`](docs/Portfolio_Strategy_v3_7.md) | Trading rules — the source of truth |
+| `02_Trading_Dashboard_Build_Spec_v2_0.md` | API contract, schema, frontend architecture |
+| `03_Trading_Workflow_v2_9.md` | Daily operating procedure |
+| `04_VPS_Implementation_Guide_v1_6.md` | VPS setup, deployment, nginx, systemd |
+| `05_Implementation_Status.md` | What is live, known issues, backlog |
+| `07_MCP_Workflow_and_Prompts_v1_3.md` | MCP prompt library and failure modes |
+| `08_Market_Intelligence_Skill_v1_1.md` | GEX/DP/Net Drift agentic workflow |
+| `operations/03_Quick_Start_and_Daily_Cheatsheet.md` | One-page daily reference |
+| `operations/04_Incident_Recovery_Playbook.md` | Recovery procedures for all failure modes |
 
 ---
 
 ## Changelog
 
-| Version | Date | Changes |
+| Sprint | Date | Highlights |
 |---|---|---|
-| v2.0 | 2026-05-10 | Initial build: Dashboard, Positions, Market Intel, Orders, Analysis, Settings |
-| v2.1 | 2026-05-11 | Added Candidates tab (IV rank screener, SuggestedTradePanel, Send to Orders) |
-| v2.2 | 2026-05-11 | Added P&L tab (unrealised P&L from /api/positions, bar chart, best/worst callouts) |
-| v2.3 | 2026-05-12 | Fixed all TypeScript/API field mapping errors; redeployed to VPS |
-| v2.4 | 2026-05-12 | Fixed same-origin proxy (removed hardcoded API URL from localStorage) |
-| v2.5 | 2026-05-12 | Added Connection Test button with latency + server version to Settings |
-| v2.6 | 2026-05-13 | Added PendingOrdersContext, DP-floor-anchored strikes, Pending Orders panel in Orders |
-| v2.7 | 2026-05-13 | Fixed AnalysisPage DP floor/ceiling derivation from dark_pool.floors[] array |
-| v2.8 | 2026-05-14 | P&L tab: full sorting (ticker/P&L/pct/DTE/qty/marketValue) and filtering (ticker/side/right/P&L sign) |
-| v2.9 | 2026-05-14 | Tier 1+2: Trade Report, Pre-Trade Gate, Alert CRUD, Earnings Calendar, IBKR Live Preview, Server Settings, Universe Manager, Script Runner, Trade Journal, Chart Levels + Order Flow, SPY Hedge widget |
-| v3.0 | 2026-05-14 | Fortress v3 rebuild: tRPC + Drizzle ORM + Manus OAuth backend; persistent 5px status bar; collapsed icon-only sidebar; Morning Brief landing page; full Settings migration |
-| v3.1 | 2026-05-14 | Morning Brief: IV heatmap fallback, enriched trade report rows (IVR/GEX/bias badges), regime strip with gamma flip price, beta-weighted delta, theta efficiency, taller SPY chart, market status pill |
-| v3.2 | 2026-05-14 | Dashboard: hydrated Macro Regime Gate (GEX/DP/drift from SPY intel), concentration-locked entry rows, hedge coverage target fix, Send Briefing owner notification |
-| v3.3 | 2026-05-14 | Trade Builder: ticker asset regime label, GEX/DP metric hydration, pre-trade advisory banner, expiry dates on suggested setups. Dashboard: Macro Regime Gate data-pipe fixes |
-| v3.4 | 2026-05-14 | Analysis page: Net Drift NaN fix, GEX Call Wall blank fix, Order Flow empty-state, SPY Hedge → per-ticker Position Risk Context panel |
-| v3.5 | 2026-05-15 | Portfolio view: theta sign fix, alert badge counts, Auto-Roll button. Orders: JSON copy button on URGENT rows. Script Runner: terminal output, exit code badge, duration. Morning Brief: suppress stop-loss tickers from entry candidates. Regime labels standardized to title-case |
-| v3.6 | 2026-05-15 | Hydration pipeline: Python scripts POST GEX/DP/drift to /api/manage/hydrate-asset after execution; Market Intel overlays cached values with "Cached" badge |
-| v3.7 | 2026-05-15 | Strategy Workspace: Trader Persona cards (5), Volatility Regime Playbook matrix (IV×GEX), full strategy parameters grid, signal mode (Strict/Advisory/Sandbox), backup/restore. Trade Builder: signal mode advisory banner wired in |
-| v3.7.1 | 2026-05-16 | Strategy Sandbox (Zone 3): interactive DTE slider (7–120d) + Delta slider (0.05–0.50Δ), Recharts payoff diagram with GEX Call/Put Wall + DP Floor/Ceiling reference lines, breakeven proximity warning badge, 6-metric panel (PoP, Max Profit, Max Loss, θ/day, Gamma Risk score, θ Efficiency). Export to Trade Builder passes sandbox params as query params. 23 vitest unit tests for normalCDF/calcPoP/buildPayoffData |
-| v4.0 | 2026-05-17 | SSE smart refresh (replaces 250ms polling for briefing/positions/alerts); 2D Vol Analytics panel on Analysis page (IV skew, term structure, ATM IV ladder); Bearer Token Rotation UI in Settings → Security section; VPS endpoints: /api/stream, /api/options/vol-analytics, /api/manage/rotate-token |
-| v5.0 | 2026-05-17 | vollib (py_vollib) installed on VPS; Position Limits Badge (max profit/max loss/breakeven/net premium) on every position card; Forward P&L Simulator (BS model, price slider, date picker, IV multiplier, P&L curve) in position accordion; VPS endpoints: /api/options/position-limits, /api/options/forward-pnl; null-guard fix for breakeven toFixed crash |
-| v6.0 | 2026-05-18 | Nav restructure 14→8 items: TradePage (Scan/Candidates/Orders), PnLJournalPage (P&L/Journal), ConfigPage (Strategy/Settings/Scripts); Dashboard simplified (trade report removed, quick-action cards); legacy deep-link routes preserved; README updated |
+| **v7.1** | May 18, 2026 | Market Intel: sort dropdown, per-card refresh, metric tooltips. Candidates All-tab frontend fallback. QuantData credentials manager in Settings. `chart.py` invalid tool ID fix (no more 400 errors). |
+| **v7.0** | May 17, 2026 | Candidates All-tab redesign: full 19-ticker universe. Actionable signals at top; monitoring universe below divider. |
+| **v6.x** | May 15, 2026 | Market Intel null crash fix (`current_price`). IV Crush workflow debugging. |
+| **Phase 8** | May 13, 2026 | Trade Reports tab. 13 UX improvements (A-M). Market Intelligence endpoint + MCP tool. |
+| **v1.8.2** | May 9, 2026 | Security section in Settings. `use_ibkr_web_api` / `use_quantdata` toggles. |
+| **v1.8** | May 5, 2026 | MCP server (29 tools). Bearer token auth. CP Gateway primary broker path. |
 
 ---
 
-## License
+## Security
 
-Private repository — all rights reserved.
+The bearer token is **never stored in source code or committed to this repository**. It lives exclusively in browser `localStorage`. All API calls use `Authorization: Bearer <token>` headers sent through the nginx same-origin proxy — the token never crosses origins.
+
+---
+
+<div align="center">
+
+*"The edge isn't the data. The edge is the system."*
+
+**Fortress V3 · Sprint v7.1 · May 2026**
+
+</div>
