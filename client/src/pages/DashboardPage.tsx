@@ -4,7 +4,7 @@
  * Account health + Macro Regime Gate + SPY Hedge Coverage + Priority orders + Position alerts.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
@@ -25,6 +25,12 @@ import {
   DollarSign, Shield, Zap, TrendingDown, CheckCircle, XCircle, Target,
   Mail, X, RefreshCw, Database,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+} from 'recharts';
+import { useChartData } from '@/hooks/useApi';
 
 const GREEN  = 'oklch(0.72 0.18 145)';
 const RED    = 'oklch(0.65 0.22 25)';
@@ -38,6 +44,44 @@ function navigateToAnalysis(ticker: string, navigate: (path: string) => void) {
 }
 const DIM    = 'oklch(0.55 0.010 258)';
 const BRIGHT = 'oklch(0.93 0.005 258)';
+
+// ─── Mini Sparkline ──────────────────────────────────────────────────────────
+// Tiny 60×24px price sparkline for entry candidate rows
+// Uses last 20 closes from useChartData; shows trend color (green/red)
+
+function MiniSparkline({ ticker }: { ticker: string }) {
+  const { data: chartData } = useChartData(ticker);
+
+  const sparkData = useMemo(() => {
+    if (!chartData?.candles?.length) return [];
+    return chartData.candles.slice(-20).map((c, i) => ({ i, v: c.close }));
+  }, [chartData]);
+
+  if (sparkData.length < 2) {
+    return <div className="w-[60px] h-[24px] rounded" style={{ background: 'oklch(1 0 0 / 5%)' }} />;
+  }
+
+  const first = sparkData[0].v;
+  const last = sparkData[sparkData.length - 1].v;
+  const trendColor = last >= first ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)';
+
+  return (
+    <div className="flex-shrink-0" style={{ width: 60, height: 24 }}>
+      <ResponsiveContainer width={60} height={24}>
+        <LineChart data={sparkData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+          <Line
+            type="monotone"
+            dataKey="v"
+            stroke={trendColor}
+            strokeWidth={1.5}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 // ─── Regime badge ─────────────────────────────────────────────────────────────
 
@@ -164,6 +208,7 @@ function TradeReportPanel() {
                 {isLocked ? `Entry locked — reduce ${c.ticker} below 20% of Net Liq before adding` : `${c.action} · ${c.earnings_state} · ${c.days_to_earnings}d to earnings`}
               </div>
             </div>
+            <MiniSparkline ticker={c.ticker} />
           </div>
         );
       })}

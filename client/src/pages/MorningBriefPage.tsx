@@ -94,6 +94,165 @@ function MarketStatusPill() {
   );
 }
 
+// ─── VIX 30-day Sparkline ────────────────────────────────────────────────────
+
+function VixSparklineWidget() {
+  const { data: chartData, loading } = useChartData('^VIX');
+  const { data: briefing } = useBriefing();
+  const vix = briefing?.macro_regime?.vix ?? null;
+  const vixState = briefing?.macro_regime?.vix_state ?? null;
+
+  const sparkData = useMemo(() => {
+    if (!chartData?.candles?.length) return [];
+    return chartData.candles.slice(-30).map(c => ({
+      date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: c.close,
+    }));
+  }, [chartData]);
+
+  const minV = sparkData.length ? Math.min(...sparkData.map(d => d.value)) * 0.97 : 10;
+  const maxV = sparkData.length ? Math.max(...sparkData.map(d => d.value)) * 1.03 : 40;
+
+  const vixColor = vix == null ? DIM
+    : vix < 15 ? GREEN
+    : vix < 20 ? CYAN
+    : vix < 25 ? AMBER
+    : RED;
+
+  const stateLabel = vixState?.replace(/_/g, ' ').toLowerCase() ?? null;
+
+  return (
+    <div className="rounded border p-4" style={{ background: CARD, borderColor: BORDER }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4" style={{ color: vixColor }} />
+          <span className="font-display text-sm" style={{ color: BRIGHT }}>VIX — 30d Trend</span>
+          {vix != null && (
+            <span className="font-mono-data text-xs font-bold" style={{ color: vixColor }}>
+              {vix.toFixed(2)}
+            </span>
+          )}
+        </div>
+        {stateLabel && (
+          <span className="text-[9px] font-mono-data px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider"
+            style={{ color: vixColor, background: `${vixColor.replace(')', ' / 12%)')}`, border: `1px solid ${vixColor.replace(')', ' / 30%)')}` }}>
+            {stateLabel}
+          </span>
+        )}
+      </div>
+      {loading ? (
+        <div className="h-24 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />
+      ) : sparkData.length === 0 ? (
+        <div className="h-24 flex items-center justify-center">
+          <span className="text-xs" style={{ color: DIM }}>No VIX data — ^VIX not supported by backend</span>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={96}>
+          <LineChart data={sparkData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <YAxis domain={[minV, maxV]} hide />
+            <Tooltip
+              contentStyle={{ background: 'oklch(0.14 0.010 258)', border: '1px solid oklch(1 0 0 / 12%)', borderRadius: 6 }}
+              labelStyle={{ color: DIM, fontSize: 10 }}
+              itemStyle={{ color: vixColor, fontSize: 11, fontFamily: 'var(--font-mono-data)' }}
+              formatter={(v: number) => [v.toFixed(2), 'VIX']}
+            />
+            <ReferenceLine y={20} stroke={AMBER} strokeDasharray="3 3" strokeOpacity={0.4} />
+            <ReferenceLine y={25} stroke={RED} strokeDasharray="3 3" strokeOpacity={0.4} />
+            <Line type="monotone" dataKey="value" stroke={vixColor} strokeWidth={1.5} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+      <div className="flex gap-3 mt-2">
+        {[{ level: 20, label: 'Caution', color: AMBER }, { level: 25, label: 'Danger', color: RED }].map(({ level, label, color }) => (
+          <div key={level} className="flex items-center gap-1">
+            <div className="w-4 h-px" style={{ background: color, opacity: 0.6 }} />
+            <span className="text-[9px] font-mono-data" style={{ color: DIM }}>{level} {label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Macro Regime Gauge ───────────────────────────────────────────────────────
+
+function MacroRegimeGauge() {
+  const { data: briefing } = useBriefing();
+  const { data: spyIntel } = useMarketIntelligence('SPY');
+
+  const regime = briefing?.macro_regime?.regime ?? null;
+  const score = spyIntel?.regime?.score ?? null;
+  const { label: regimeLabel, color: regimeColor } = regimeInfo(regime ?? 'neutral');
+  const colorMap: Record<string, string> = { red: RED, amber: AMBER, green: GREEN, cyan: CYAN };
+  const regimeHex = colorMap[regimeColor] ?? DIM;
+
+  // Arc gauge: score -5 to +5 mapped to 0..180 degrees (left to right)
+  const normalised = score != null ? Math.max(-5, Math.min(5, score)) : 0;
+  const angleDeg = ((normalised + 5) / 10) * 180;
+  const cx = 80; const cy = 80; const r = 56;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const startAngle = 180;
+  const endAngle = startAngle - angleDeg;
+  const x1 = cx + r * Math.cos(toRad(startAngle));
+  const y1 = cy + r * Math.sin(toRad(startAngle));
+  const x2 = cx + r * Math.cos(toRad(endAngle));
+  const y2 = cy + r * Math.sin(toRad(endAngle));
+  const largeArc = angleDeg > 180 ? 1 : 0;
+  const needleAngle = startAngle - angleDeg;
+  const nx = cx + (r - 8) * Math.cos(toRad(needleAngle));
+  const ny = cy + (r - 8) * Math.sin(toRad(needleAngle));
+
+  return (
+    <div className="rounded border p-4" style={{ background: CARD, borderColor: BORDER }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4" style={{ color: regimeHex }} />
+          <span className="font-display text-sm" style={{ color: BRIGHT }}>Macro Regime Gauge</span>
+        </div>
+        {score != null && (
+          <span className="font-mono-data text-xs font-bold" style={{ color: regimeHex }}>
+            {score > 0 ? '+' : ''}{score}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col items-center">
+        <svg width="160" height="90" viewBox="0 0 160 90">
+          {/* Background arc track */}
+          <path
+            d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke="oklch(1 0 0 / 8%)" strokeWidth={10} strokeLinecap="round"
+          />
+          {/* Filled arc */}
+          {score != null && angleDeg > 0 && (
+            <path
+              d={`M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 0 ${x2} ${y2}`}
+              fill="none" stroke={regimeHex} strokeWidth={10} strokeLinecap="round"
+              style={{ filter: `drop-shadow(0 0 4px ${regimeHex})` }}
+            />
+          )}
+          {/* Needle dot */}
+          {score != null && (
+            <circle cx={nx} cy={ny} r={4} fill={regimeHex} />
+          )}
+          {/* Center label */}
+          <text x={cx} y={cy - 4} textAnchor="middle" fontSize={11}
+            fill={score != null ? regimeHex : DIM}
+            fontFamily="var(--font-mono-data)" fontWeight="bold">
+            {score != null ? regimeLabel : '—'}
+          </text>
+          {/* Scale labels */}
+          <text x={cx - r - 4} y={cy + 4} textAnchor="end" fontSize={8} fill={DIM} fontFamily="var(--font-mono-data)">-5</text>
+          <text x={cx + r + 4} y={cy + 4} textAnchor="start" fontSize={8} fill={DIM} fontFamily="var(--font-mono-data)">+5</text>
+          <text x={cx} y={cy + 16} textAnchor="middle" fontSize={8} fill={DIM} fontFamily="var(--font-mono-data)">0</text>
+        </svg>
+        <div className="text-[10px] font-mono-data mt-1" style={{ color: DIM }}>
+          SPY regime score · {spyIntel ? 'live' : 'no data'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── SPY Chart with 50/200 SMA ────────────────────────────────────────────────
 
 function SpyChartWidget() {
@@ -872,11 +1031,17 @@ export default function MorningBriefPage() {
               <CompactTradeReport />
             </div>
 
-            {/* Indicator widgets — 3-col grid below trade report */}
+            {/* Indicator widgets — row 1: SPY chart, Greeks, IV heatmap */}
             <div className="grid grid-cols-3 gap-4">
               <SpyChartWidget />
               <PortfolioGreeksWidget />
               <IvRankHeatmap />
+            </div>
+
+            {/* Indicator widgets — row 2: VIX sparkline, Macro regime gauge */}
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <VixSparklineWidget />
+              <MacroRegimeGauge />
             </div>
 
             {/* Quick links */}
