@@ -820,7 +820,7 @@ function QuickNav() {
     { href: '/performance',  label: 'Performance',    sub: 'P&L · Journal',               icon: DollarSign,    color: CYAN },
     { href: '/earnings',     label: 'Earnings',       sub: 'Calendar & blackout windows', icon: BookOpen,      color: GREEN },
     { href: '/config',       label: 'Config',         sub: 'Strategy · Settings · Scripts', icon: Zap,         color: AMBER },
-    { href: '/config',       label: 'Settings',       sub: 'Config & universe',           icon: Shield,        color: DIM },
+    { href: '/scripts',      label: 'Scripts',        sub: 'Automation & tools',          icon: Shield,        color: DIM },
   ];
 
   return (

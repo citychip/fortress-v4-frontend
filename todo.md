@@ -29,6 +29,8 @@
 3. **Nav bloat** — never add sidebar items without explicit user request; check the 8-item list above
 4. **Commit message vs code mismatch** — if a commit says "14→8 items", verify the code actually changed before marking done
 5. **deploy.sh user bug** — deploy.sh was written with `ubuntu@` user; always use `root@` manually or fix deploy.sh
+6. **Unguarded `.toFixed()` / `.toFixed()` on null** — ALWAYS use `value != null ? value.toFixed(n) : '—'` pattern. NEVER call `.toFixed()` directly on a value that could be null/undefined. Before every build, run: `grep -rn '\.toFixed(' client/src/pages/ | grep -v '!= null\|?\.' | grep -v '//\|\?\.'` to catch unguarded calls.
+7. **Silent React crashes** — when a section is missing from the UI, open browser DevTools console FIRST before assuming a deployment or URL mismatch. A null crash inside a component is swallowed by the ErrorBoundary and renders a blank section with no visible error.
 
 - [x] Tiered universe view in Settings (Tier 1/2/Macro Index/Excluded with per-ticker tags)
 - [x] IBKR sync history table (last 5 syncs: timestamp, backend, positions, status)

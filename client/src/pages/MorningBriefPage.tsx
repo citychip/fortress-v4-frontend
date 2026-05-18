@@ -453,9 +453,9 @@ function PortfolioGreeksWidget() {
           {/* Primary Greeks grid */}
           <div className="grid grid-cols-2 gap-2 mb-3">
             {[
-              { label: 'Net Δ Delta', value: greeks.delta.toFixed(1), color: greeks.delta >= 0 ? GREEN : RED, sub: greeks.delta > 0 ? 'long bias' : 'short bias' },
-              { label: 'Net Θ Theta/day', value: `$${greeks.theta.toFixed(0)}`, color: greeks.theta >= 0 ? GREEN : RED, sub: greeks.theta >= 0 ? 'collecting' : 'paying' },
-              { label: 'Net V Vega', value: greeks.vega.toFixed(1), color: 'oklch(0.65 0.22 280)', sub: greeks.vega > 0 ? 'long vol' : 'short vol' },
+              { label: 'Net Δ Delta', value: greeks.delta != null ? greeks.delta.toFixed(1) : '—', color: (greeks.delta ?? 0) >= 0 ? GREEN : RED, sub: (greeks.delta ?? 0) > 0 ? 'long bias' : 'short bias' },
+              { label: 'Net Θ Theta/day', value: greeks.theta != null ? `$${greeks.theta.toFixed(0)}` : '—', color: (greeks.theta ?? 0) >= 0 ? GREEN : RED, sub: (greeks.theta ?? 0) >= 0 ? 'collecting' : 'paying' },
+              { label: 'Net V Vega', value: greeks.vega != null ? greeks.vega.toFixed(1) : '—', color: 'oklch(0.65 0.22 280)', sub: (greeks.vega ?? 0) > 0 ? 'long vol' : 'short vol' },
               { label: 'Legs', value: String(greeks.count), color: CYAN, sub: 'option legs' },
             ].map(({ label, value, color, sub }) => (
               <div key={label} className="rounded p-2.5" style={{ background: 'oklch(0.22 0.010 258)' }}>
@@ -585,7 +585,7 @@ function IvRankHeatmap() {
                     borderColor: row.isPlaceholder ? BORDER : c.border,
                     opacity: row.isPlaceholder ? 0.6 : 1,
                   }}
-                  title={row.isPlaceholder ? `${row.ticker} — not in screener` : `${row.ticker} — IVR ${row.ivr.toFixed(0)}, IV ${(row.current_iv ?? 0).toFixed(0)}%, ${row.signal}`}
+                  title={row.isPlaceholder ? `${row.ticker} — not in screener` : `${row.ticker} — IVR ${row.ivr != null ? row.ivr.toFixed(0) : '—'}, IV ${(row.current_iv ?? 0).toFixed(0)}%, ${row.signal}`}
                 >
                   <div className="font-mono-data text-xs font-bold" style={{ color: row.isPlaceholder ? DIM : BRIGHT }}>{row.ticker}</div>
                   <div className="font-mono-data text-sm font-bold mt-0.5" style={{ color: row.isPlaceholder ? DIM : c.text }}>
