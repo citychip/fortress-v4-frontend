@@ -6,6 +6,7 @@ import { z } from "zod";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getUserPrefs, upsertUserPrefs } from "./db";
+import { monitoringRouter } from "./routers/monitoring";
 
 const execFileAsync = promisify(execFile);
 
@@ -30,6 +31,7 @@ async function mcpCall(toolName: string, server: string, input: Record<string, u
 
 export const appRouter = router({
   system: systemRouter,
+  monitoring: monitoringRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

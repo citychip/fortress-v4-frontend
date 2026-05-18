@@ -4,18 +4,20 @@
  * Replaces three separate nav items with one coherent configuration page.
  */
 import { useState } from 'react';
-import { Target, Settings, Zap } from 'lucide-react';
+import { Target, Settings, Zap, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import StrategyPage from './StrategyPage';
 import SettingsPage from './SettingsPage';
 import ScriptsPage from './ScriptsPage';
+import MonitoringPage from './MonitoringPage';
 
-type ConfigTab = 'strategy' | 'settings' | 'scripts';
+type ConfigTab = 'strategy' | 'settings' | 'scripts' | 'monitoring';
 
 const TABS: { id: ConfigTab; label: string; icon: React.ElementType; subtitle: string }[] = [
-  { id: 'strategy', label: 'Strategy', icon: Target,   subtitle: 'Persona, regime matrix, signal mode, payoff sandbox' },
-  { id: 'settings', label: 'Settings', icon: Settings, subtitle: 'Universe, entry criteria, position sizing, API config' },
-  { id: 'scripts',  label: 'Scripts',  icon: Zap,      subtitle: 'Workflow automation — premarket, IV crush, EOD review' },
+  { id: 'strategy',   label: 'Strategy',  icon: Target,   subtitle: 'Persona, regime matrix, signal mode, payoff sandbox' },
+  { id: 'settings',   label: 'Settings',  icon: Settings, subtitle: 'Universe, entry criteria, position sizing, API config' },
+  { id: 'scripts',    label: 'Scripts',   icon: Zap,      subtitle: 'Workflow automation — premarket, IV crush, EOD review' },
+  { id: 'monitoring', label: 'Monitor',   icon: Activity, subtitle: 'Automated regression checks — VPS, backend, nav, features' },
 ];
 
 export default function ConfigPage() {
@@ -77,9 +79,10 @@ export default function ConfigPage() {
 
       {/* ── Tab Content ── */}
       <div>
-        {tab === 'strategy' && <StrategyPage embedded />}
-        {tab === 'settings' && <SettingsPage embedded />}
-        {tab === 'scripts'  && <ScriptsPage  embedded />}
+        {tab === 'strategy'   && <StrategyPage   embedded />}
+        {tab === 'settings'   && <SettingsPage   embedded />}
+        {tab === 'scripts'    && <ScriptsPage    embedded />}
+        {tab === 'monitoring' && <MonitoringPage embedded />}
       </div>
     </div>
   );
