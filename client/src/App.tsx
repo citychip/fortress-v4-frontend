@@ -20,25 +20,16 @@ import {
   LayoutDashboard,
   BookOpen,
   TrendingUp,
-  ListOrdered,
   BarChart2,
   Settings,
   RefreshCw,
   Wifi,
   WifiOff,
   Shield,
-  Crosshair,
   DollarSign,
   CalendarDays,
-  NotebookPen,
-  Zap,
   Activity,
   Clock,
-  Target,
-  Briefcase,
-  ClipboardCheck,
-  Terminal,
-  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -58,36 +49,22 @@ import NotFound from "./pages/NotFound";
 import MorningBriefPage from "./pages/MorningBriefPage";
 import TradeBuilderPage from "./pages/TradeBuilderPage";
 import StrategyPage from "./pages/StrategyPage";
-import ActionCenterPage from "./pages/ActionCenterPage";
-import BuildCenterPage from "./pages/BuildCenterPage";
-import PortfolioCenterPage from "./pages/PortfolioCenterPage";
-import ApprovalsPage from "./pages/ApprovalsPage";
+import TradePage from "./pages/TradePage";
+import PnLJournalPage from "./pages/PnLJournalPage";
+import ConfigPage from "./pages/ConfigPage";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
+// ─── 8-item sidebar nav (LOCKED — do not add items without explicit request) ──
 const NAV_ITEMS = [
-  { path: '/morning-brief', label: 'Morning Brief',  icon: Activity },
-  { path: '/trade-builder', label: 'Trade Builder',  icon: Zap },
-  { path: '/strategy',      label: 'Strategy',       icon: Target },
-  { path: '/',              label: 'Dashboard',     icon: LayoutDashboard },
-  { path: '/positions',     label: 'Positions',     icon: BookOpen },
-  { path: '/market-intel',  label: 'Market Intel',  icon: TrendingUp },
-  { path: '/orders',        label: 'Orders',        icon: ListOrdered },
-  { path: '/candidates',    label: 'Candidates',    icon: Crosshair },
-  { path: '/pnl',           label: 'P&L',           icon: DollarSign },
-  { path: '/analysis',      label: 'Analysis',      icon: BarChart2 },
-  { path: '/earnings',      label: 'Earnings',      icon: CalendarDays },
-  { path: '/journal',       label: 'Journal',       icon: NotebookPen },
-  { path: '/scripts',       label: 'Scripts',       icon: Zap },
-  { path: '/settings',      label: 'Settings',      icon: Settings },
-];
-
-// ─── Cockpits group (separate from main nav) ─────────────────────────────────
-const COCKPIT_ITEMS = [
-  { path: '/action',    label: 'Action Center',    icon: Terminal },
-  { path: '/build',     label: 'Build Center',     icon: Briefcase },
-  { path: '/portfolio', label: 'Portfolio Center', icon: ClipboardCheck },
-  { path: '/approvals', label: 'Approvals',        icon: CheckSquare },
+  { path: '/',            label: 'Dashboard',   icon: LayoutDashboard },
+  { path: '/market-intel',label: 'Market Intel',icon: TrendingUp },
+  { path: '/positions',   label: 'Positions',   icon: BookOpen },
+  { path: '/trade',       label: 'Trade',       icon: Activity },
+  { path: '/analysis',    label: 'Analysis',    icon: BarChart2 },
+  { path: '/performance', label: 'Performance', icon: DollarSign },
+  { path: '/earnings',    label: 'Earnings',    icon: CalendarDays },
+  { path: '/config',      label: 'Config',      icon: Settings },
 ];
 
 // ─── Persistent Status Bar ────────────────────────────────────────────────────
@@ -363,53 +340,7 @@ function Sidebar() {
             </Link>
           );
         })}
-        {/* Cockpits group */}
-        <div style={{ borderTop: '1px solid oklch(1 0 0 / 8%)', marginTop: '4px', paddingTop: '4px' }}>
-          {expanded && (
-            <div style={{ padding: '4px 14px 2px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.08em', color: 'oklch(0.45 0.010 258)', textTransform: 'uppercase' }}>Cockpits</div>
-          )}
-          {COCKPIT_ITEMS.map(({ path, label, icon: Icon }) => {
-            const isActive = location.startsWith(path);
-            return (
-              <Link key={path} href={path}>
-                <div
-                  className={cn(
-                    'flex items-center transition-all duration-150 relative cursor-pointer',
-                    isActive
-                      ? 'text-[oklch(0.80_0.15_200)]'
-                      : 'text-[oklch(0.55_0.010_258)] hover:text-[oklch(0.85_0.005_258)] hover:bg-[oklch(1_0_0_/_5%)]'
-                  )}
-                  style={{
-                    height: '40px',
-                    padding: '0 14px',
-                    gap: '12px',
-                    ...(isActive ? {
-                      background: 'oklch(0.80 0.15 200 / 12%)',
-                      borderLeft: '2px solid oklch(0.80 0.15 200)',
-                      paddingLeft: '12px',
-                    } : {}),
-                  }}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <AnimatePresence>
-                    {expanded && (
-                      <motion.span
-                        initial={{ opacity: 0, width: 0 }}
-                        animate={{ opacity: 1, width: 'auto' }}
-                        exit={{ opacity: 0, width: 0 }}
-                        transition={{ duration: 0.12 }}
-                        className="text-sm whitespace-nowrap overflow-hidden"
-                        style={{ fontWeight: isActive ? 500 : 400 }}
-                      >
-                        {label}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+
       </nav>
       {/* Bottom: IBKR sync */}
       <div
@@ -470,24 +401,25 @@ function Router() {
         className="h-full"
       >
         <Switch>
-          <Route path="/morning-brief" component={MorningBriefPage} />
-          <Route path="/trade-builder" component={TradeBuilderPage} />
+          {/* 8-item nav routes */}
           <Route path="/"             component={DashboardPage} />
-          <Route path="/positions"    component={PositionsPage} />
           <Route path="/market-intel" component={MarketIntelPage} />
-          <Route path="/orders"       component={OrdersPage} />
+          <Route path="/positions"    component={PositionsPage} />
+          <Route path="/trade"        component={() => <TradePage />} />
           <Route path="/analysis"     component={AnalysisPage} />
-          <Route path="/candidates"   component={CandidatesPage} />
-          <Route path="/pnl"          component={PnLPage} />
+          <Route path="/performance"  component={() => <PnLJournalPage />} />
           <Route path="/earnings"     component={EarningsPage} />
-          <Route path="/journal"      component={JournalPage} />
-          <Route path="/scripts"      component={ScriptsPage} />
-          <Route path="/strategy"     component={StrategyPage} />
-          <Route path="/settings"     component={SettingsPage} />
-          <Route path="/action"       component={ActionCenterPage} />
-          <Route path="/build"        component={BuildCenterPage} />
-          <Route path="/portfolio"    component={PortfolioCenterPage} />
-          <Route path="/approvals"    component={ApprovalsPage} />
+          <Route path="/config"       component={() => <ConfigPage />} />
+          {/* Deep-link routes (not in sidebar) */}
+          <Route path="/morning-brief" component={() => <MorningBriefPage />} />
+          <Route path="/trade-builder" component={() => <TradeBuilderPage />} />
+          <Route path="/candidates"   component={() => <CandidatesPage />} />
+          <Route path="/orders"       component={() => <OrdersPage />} />
+          <Route path="/pnl"          component={() => <PnLPage />} />
+          <Route path="/journal"      component={() => <JournalPage />} />
+          <Route path="/strategy"     component={() => <StrategyPage />} />
+          <Route path="/settings"     component={() => <SettingsPage />} />
+          <Route path="/scripts"      component={() => <ScriptsPage />} />
           <Route                      component={NotFound} />
         </Switch>
       </motion.div>

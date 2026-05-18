@@ -1,4 +1,35 @@
 
+## ⚠️ PERMANENT OPS NOTES — Read before every deploy or SSH command
+
+### VPS SSH
+- **Key:** `/home/ubuntu/.ssh/fortress_vps`
+- **User:** `root` (NOT `ubuntu` — ubuntu user does NOT accept the key, will hang on password prompt)
+- **Always use:** `ssh -i /home/ubuntu/.ssh/fortress_vps -o BatchMode=yes root@76.13.138.194`
+- **Never use:** `ubuntu@76.13.138.194` (wrong user, key rejected, hangs)
+
+### VPS Deployment
+- **Static root (nginx):** `/var/www/fortress-v2/` — ONLY correct deploy target
+- **Backend (uvicorn):** `localhost:8080` — proxied via nginx on port 3000
+- **Use deploy.sh:** `pnpm deploy` or `bash deploy.sh` — already hardcoded to correct path
+- **Manual deploy:** `scp -i /home/ubuntu/.ssh/fortress_vps -o BatchMode=yes -r /home/ubuntu/fortress-v2/dist/public/* root@76.13.138.194:/var/www/fortress-v2/`
+- **DO NOT deploy to:** `/home/ubuntu/Fortress_Dashboard/app/static/` (old/wrong path, nginx never reads it)
+- **Verify after deploy:** `curl -s http://76.13.138.194:3000/ | grep -o 'index-[a-zA-Z0-9_]*.js'` — must match local `dist/public/assets/` filename
+
+### Nav Structure (LOCKED — do not add items without explicit request)
+- **8 sidebar items only:** Dashboard · Market Intel · Positions · Trade · Analysis · Performance · Earnings · Config
+- **Trade** (`/trade`) = tabbed wrapper: Scan (MorningBrief) · Candidates · Orders
+- **Performance** (`/performance`) = tabbed wrapper: P&L · Journal
+- **Config** (`/config`) = tabbed wrapper: Strategy · Settings · Scripts
+- **No Cockpits section** — Action Center, Build Center, Portfolio Center, Approvals were never requested; do not add them back
+- Individual routes (`/morning-brief`, `/candidates`, etc.) remain as deep-links but do NOT appear in sidebar
+
+### Common Mistakes to Never Repeat
+1. **Wrong SSH user** — always `root@`, never `ubuntu@` with this key
+2. **Wrong deploy target** — always `/var/www/fortress-v2/`, never the Fortress_Dashboard path
+3. **Nav bloat** — never add sidebar items without explicit user request; check the 8-item list above
+4. **Commit message vs code mismatch** — if a commit says "14→8 items", verify the code actually changed before marking done
+5. **deploy.sh user bug** — deploy.sh was written with `ubuntu@` user; always use `root@` manually or fix deploy.sh
+
 - [x] Tiered universe view in Settings (Tier 1/2/Macro Index/Excluded with per-ticker tags)
 - [x] IBKR sync history table (last 5 syncs: timestamp, backend, positions, status)
 - [x] Scheduled morning briefing heartbeat at 08:00 on trading days (requires new dedicated task — see instructions)
