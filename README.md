@@ -1,158 +1,365 @@
-# Fortress Dashboard — React Frontend
+# Fortress v3 — Options Trading Dashboard
 
-> A React 19 + tRPC + Tailwind 4 dashboard for systematic options portfolio management. Connects to the [Fortress API](https://github.com/citychip/fortress-api) backend and provides a full-featured trading operations interface — from morning briefing to trade construction, position management, and strategy configuration.
+A fully configurable, browser-based options portfolio management terminal. Built with React 19, Tailwind CSS 4, tRPC 11, Drizzle ORM, and Recharts. Connects to the Fortress REST API server (FastAPI/Python, port 8080) via an nginx same-origin proxy on port 3000. Includes Manus OAuth authentication, a MySQL/TiDB database layer, and a full server-side Express/tRPC backend.
 
----
-
-## What It Does
-
-Fortress is a personal trading operations platform built for options sellers who run systematic, rules-based strategies. The frontend is a single-page application that consumes the Fortress REST API and presents a structured workflow: start each session with the Morning Brief, review the trade report, evaluate candidates, manage positions, and route orders through the Approvals queue.
-
-The app is built on the Manus web-app template (React 19 + tRPC 11 + Drizzle ORM + Manus OAuth) and is designed to be deployed as a static build served by nginx on the same VPS as the API.
+**Live instance:** http://76.13.138.194:3000
 
 ---
 
-## Pages and Navigation
+## Overview
 
-The sidebar is organized into two groups:
+Fortress v3 implements the four-layer morning workflow for options portfolio management:
 
-### Main Navigation
-
-| Page | Route | Description |
+| Layer | Tab | What it does |
 |---|---|---|
-| **Morning Brief** | `/` | Landing page: VIX 30d sparkline, SPY chart with SMAs, portfolio Greeks bar chart, IV rank heatmap, Macro Regime Gauge, and the daily trade report with entry candidates |
-| **Trade Builder** | `/trade-builder` | Strategy selector, leg construction, Greeks snapshot, pre-trade advisory banner, and Export to Approvals |
-| **Strategy** | `/strategy` | Trader Persona cards (5 profiles), Volatility Regime Playbook matrix (IV × GEX), 24 strategy parameters, signal mode (Strict / Advisory / Sandbox), backup/restore |
-| **Dashboard** | `/dashboard` | Macro Regime Gate, concentration limits, hedge coverage, mini sparklines per-ticker, entry candidate rows |
-| **Positions** | `/positions` | Live option book with Greeks, strategy labels, Roll→ deep-link, Auto-Roll, alert badge counts |
-| **Market Intel** | `/market-intel` | Per-ticker GEX walls, DP floors, net drift, order flow — with "Cached" badge when sourced from hydration cache |
-| **Orders** | `/orders` | Pending orders panel, JSON copy on URGENT rows, order status management |
-| **Candidates** | `/candidates` | IV crush candidate scanner with IVR/GEX/bias badges |
-| **P&L** | `/pnl` | Realized + unrealized P&L, per-ticker breakdown, sorting and filtering |
-| **Analysis** | `/analysis` | OHLCV chart with DP/GEX overlays, MACD crossover marker dots, Position Risk Context panel |
-| **Earnings** | `/earnings` | Earnings calendar with post-earnings playbook matrix |
-| **Journal** | `/journal` | Trade log with strategy tags and outcome tracking |
-| **Scripts** | `/scripts` | Workflow script runner with terminal output, exit code badge, and duration |
-| **Settings** | `/settings` | IBKR config, QuantData credentials, universe manager, UI preferences, backup/restore |
+| 1 — Macro Regime Gate | **Dashboard** | Trade Report action list, SPY regime score, account metrics, SPY hedge coverage, IBKR live account data |
+| 2 — Per-Ticker Flow | **Market Intel** | Per-ticker GEX walls, DP floor/ceiling, Net Drift, directional bias |
+| 3 — Position Evaluation | **Positions** | Per-leg evaluation: delta breach, DTE roll window, stop-loss, concentration alerts |
+| 4 — Order Execution | **Orders** | Prioritised order list: URGENT → THIS WEEK → WATCH; alert snooze/dismiss; pending orders panel |
 
-### Cockpits
-
-| Page | Route | Description |
-|---|---|---|
-| **Action Center** | `/action` | Per-ticker pre-trade cockpit: pre-trade gate, GEX/DP levels, order flow, chart levels, PoP calculator, breakeven vs GEX wall badge |
-| **Build Center** | `/build` | Trade construction cockpit: strategy selector, leg construction, Greeks snapshot, IBKR whatif preview, Route to Approvals |
-| **Portfolio Center** | `/portfolio` | Tabbed aggregate view combining Positions, P&L, Earnings, and Journal |
-| **Approvals** | `/approvals` | Human-in-the-loop order queue: Approve/Decline buttons, Greeks snapshot, IBKR whatif preview |
+Additional tabs: **Candidates** (IV rank screener with pre-trade gate), **Trade Builder** (GEX context, strategy suggester, PoP calculator, pending-order queue), **P&L** (sortable/filterable position P&L), **Analysis** (per-ticker chart + levels + order flow + Pine Script indicators), **Morning Brief** (daily trade report with regime context, IV heatmap, Greeks panel), **Strategy Workspace** (trader persona, regime playbook, strategy parameters, payoff sandbox), **Earnings** (calendar with Outlook sync), **Journal** (trade log with realised P&L), **Scripts** (workflow script runner), **Settings** (full server + local config).
 
 ---
 
-## Tech Stack
+## Stack
 
-| Layer | Technology |
-|---|---|
-| UI framework | React 19 + TypeScript |
-| Styling | Tailwind CSS 4 + shadcn/ui |
-| API client | tRPC 11 + TanStack Query |
-| Charts | Recharts |
-| Backend | Express 4 + tRPC server (thin proxy layer) |
-| Database | Drizzle ORM + MySQL (Manus-hosted) |
-| Auth | Manus OAuth |
-| Build | Vite 6 |
+- **React 19** + **Wouter** (client-side routing)
+- **Tailwind CSS 4** with OKLCH design tokens ("Obsidian Edge" dark theme)
+- **shadcn/ui** component primitives
+- **Recharts** for P&L and Analysis charts
+- **Vite 7** build tooling
+- **Fonts:** Syne (display), JetBrains Mono (data), Inter (body) via Google Fonts CDN
 
 ---
 
-## Development
+## Quick Start
 
 ### Prerequisites
 
-- Node.js 22+
-- pnpm
+- Node.js ≥ 18 and pnpm installed
+- Fortress REST API server running and accessible (default: port 8080)
 
-### Quick Start
+### Local development
 
 ```bash
-git clone https://github.com/citychip/fortress-app.git
-cd fortress-app
+git clone https://github.com/citychip/fortress-v2.git
+cd fortress-v2
 pnpm install
 pnpm dev
+# → http://localhost:3000
 ```
 
-The dev server starts on port 3000 and proxies `/api/` to the Fortress API backend. Set `VITE_API_BASE_URL` in `.env.local` to point to your running Fortress API instance.
+Open **Settings → API Connection** and enter your bearer token. The API URL defaults to a relative path (same-origin proxy) — leave it blank when running behind nginx.
 
-### Key Files
+### Production build
+
+```bash
+pnpm build
+# Output: dist/public/
+```
+
+---
+
+## Deployment (nginx on VPS)
+
+The dashboard is a pure static SPA. nginx serves `dist/public/` on port 3000 and proxies `/api/*` to the Fortress API server on port 8080.
+
+### nginx site config (`/etc/nginx/sites-available/fortress-v2`)
+
+```nginx
+server {
+    listen 3000;
+    server_name _;
+    root /var/www/fortress-v2;
+    index index.html;
+
+    # Proxy all API calls to the Fortress server
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # SPA fallback — all routes serve index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache static assets aggressively
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/fortress-v2 /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Redeploy one-liner (from the Manus sandbox)
+
+```bash
+cd /home/ubuntu/fortress-v2 && pnpm build && \
+  tar czf /tmp/fortress-v2-dist.tar.gz -C dist/public . && \
+  scp -i ~/.ssh/fortress_vps /tmp/fortress-v2-dist.tar.gz ubuntu@76.13.138.194:/tmp/ && \
+  ssh -i ~/.ssh/fortress_vps ubuntu@76.13.138.194 \
+    "sudo rm -rf /var/www/fortress-v2/* && \
+     sudo tar xzf /tmp/fortress-v2-dist.tar.gz -C /var/www/fortress-v2/"
+```
+
+---
+
+## Configuration
+
+All **local** configuration (API URL, bearer token, display preferences) is stored in browser `localStorage` under `fortress-v2-config`. No secrets are ever committed to the repository.
+
+**Server-side** configuration (trader profile, active strategies, risk tolerance, position sizing thresholds) is read from and written to the Fortress API server via `/api/settings`.
+
+### API Connection (localStorage)
+
+| Field | Description | Default |
+|---|---|---|
+| API URL | Base URL of the Fortress REST server. Leave blank to use the same-origin nginx proxy. | *(blank — uses proxy)* |
+| Bearer Token | `FORTRESS_API_TOKEN` from the server's systemd environment | *(blank — enter manually)* |
+| Auto-refresh interval | How often to poll the API (seconds) | `60` |
+
+> **Security:** The bearer token is **never stored in source code or committed to the repository**. It lives exclusively in browser `localStorage`. The config export feature explicitly excludes the token.
+
+### Ticker Universe
+
+The dashboard syncs the ticker universe from `/api/universe` (Tier 1, Tier 2, Macro, Excluded). The Universe Manager in Settings allows adding, removing, moving between tiers, and excluding tickers with a reason. Default universe: `MSFT, AVGO, NFLX, VST, GOOGL, AMZN, AMD, MSTR, UNH` (Tier 1), `META, AAPL, NVDA` (Tier 2), `SPX, SPY` (Macro).
+
+### Trader Presets (server-side)
+
+Five built-in profiles selectable from Settings:
+
+| Preset | Strategies | Risk |
+|---|---|---|
+| Income Seeker | Wheel, Covered Call, Cash-Secured Put, PMCC, PCS | Conservative |
+| Speculator | Long Call/Put, Vertical Spreads | Aggressive |
+| Volatility Trader | Iron Condor, Strangle, Straddle, Butterfly | Moderate |
+| Portfolio Protector | Collar, Protective Put, SPY Hedge, Covered Call | Conservative |
+| Custom | Manual configuration | Any |
+
+---
+
+## API Endpoints Reference
+
+All requests include `Authorization: Bearer <token>`. The full Fortress server exposes 63 routes across 14 groups. The table below covers all endpoints consumed or planned for the dashboard.
+
+### Briefing & Core Data
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/health` | GET | Settings — Connection Test |
+| `/api/briefing` | GET | Dashboard |
+| `/api/positions` | GET | Positions, P&L |
+| `/api/market-intelligence` | GET | Market Intel, Analysis |
+| `/api/candidates` | GET | Candidates |
+
+### Trade Management
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/manage/trade_report` | GET | Dashboard — Trade Report panel |
+| `/api/manage/pretrade_all` | GET | Candidates — Pre-Trade Gate badges |
+| `/api/manage/pre_trade_check?ticker=X` | GET | Analysis — single-ticker gate |
+| `/api/manage/stop_loss_all` | GET | Orders — URGENT section |
+| `/api/manage/roll_all` | GET | Orders — THIS WEEK section |
+| `/api/manage/stop_loss/{position_id}` | GET | Positions — per-leg evaluation |
+| `/api/manage/roll/{position_id}` | GET | Positions — per-leg evaluation |
+| `/api/manage/spy_hedge_coverage` | GET | Dashboard — hedge coverage widget |
+| `/api/manage/monitor_alerts` | POST | Orders — Refresh Alerts button |
+| `/api/manage/validate_jade_lizard` | POST | Candidates — Jade Lizard validation |
+
+### Alerts
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/alerts` | GET | Orders — alert list |
+| `/api/alerts` | POST | Orders — create alert |
+| `/api/alerts/{alert_id}` | PATCH | Orders — snooze alert |
+| `/api/alerts/{alert_id}` | DELETE | Orders — dismiss alert |
+
+### Earnings Calendar
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/calendar` | GET | Earnings tab |
+| `/api/calendar/{ticker}` | PUT | Earnings tab — edit date |
+| `/api/calendar/{ticker}` | DELETE | Earnings tab — remove entry |
+| `/api/calendar/{ticker}/confirm` | POST | Earnings tab — confirm date |
+| `/api/calendar/fetch-earnings` | POST | Earnings tab — auto-fetch from yfinance |
+
+### Universe Management
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/universe` | GET | Settings — Universe Manager |
+| `/api/universe/add` | POST | Settings — add ticker |
+| `/api/universe/{tier}/{ticker}` | DELETE | Settings — remove ticker |
+| `/api/universe/move` | POST | Settings — move between tiers |
+| `/api/universe/exclude` | POST | Settings — exclude with reason |
+| `/api/universe/exclude/{ticker}` | DELETE | Settings — un-exclude |
+
+### IBKR Integration
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/ibkr/status` | GET | Settings — IBKR Status panel |
+| `/api/ibkr/sync` | POST | Sidebar — Sync IBKR button |
+| `/api/ibkr/capability` | GET | Settings — backend info |
+| `/api/ibkr/preview` | GET | Dashboard — live account data |
+
+### Chart & Technical Analysis
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/chart/{ticker}` | GET | Analysis — OHLCV chart |
+| `/api/chart/{ticker}/levels` | GET | Analysis — support/resistance overlay |
+| `/api/chart/{ticker}/order_flow` | GET | Analysis — order flow panel |
+
+### Journal
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/journal` | GET | Journal tab |
+| `/api/journal` | POST | Journal tab — new entry |
+| `/api/journal/suggest` | GET | Journal tab — auto-suggest from IBKR sync |
+| `/api/journal/{entry_id}` | DELETE | Journal tab — delete entry |
+
+### Script Runner
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/run/scripts` | GET | Scripts tab — list available scripts |
+| `/api/run/{script_key}` | POST | Scripts tab — run a script |
+| `/api/run/time_of_day` | GET | Scripts tab — time-of-day context |
+| `/api/run/group/{group_name}` | POST | Scripts tab — run a script group |
+
+### Settings (Server-Side)
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/settings` | GET | Settings tab |
+| `/api/settings/schema` | GET | Settings tab — dynamic form |
+| `/api/settings/trader_presets` | GET | Settings tab — preset selector |
+| `/api/settings/apply_preset` | POST | Settings tab — apply preset |
+| `/api/settings/{section}` | PUT | Settings tab — save section |
+| `/api/settings/narrative` | GET | Settings tab — AI narrative |
+| `/api/settings/reset` | POST | Settings tab — reset to defaults |
+| `/api/settings/backup` | GET | Settings tab — download backup |
+| `/api/settings/restore` | POST | Settings tab — restore backup |
+| `/api/settings/test_quantdata` | POST | Settings tab — test QuantData connection |
+
+### Uploads & OCR
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/uploads/ibkr` | POST | Settings — IBKR screenshot upload |
+| `/api/uploads/ibkr/{upload_id}/confirm` | POST | Settings — confirm OCR parse |
+| `/api/uploads/chart` | POST | Analysis — chart image upload |
+| `/api/uploads` | GET | Settings — upload history |
+
+### Playbook
+
+| Endpoint | Method | Used in |
+|---|---|---|
+| `/api/playbook/post_earnings` | POST | Candidates / Analysis — post-earnings playbook |
+
+---
+
+## Project Structure
 
 ```
 client/
   src/
-    pages/          ← Page-level components (one file per route)
-    components/     ← Reusable UI components
-    hooks/
-      useApi.ts     ← All API hooks and TypeScript types
+    pages/
+      DashboardPage.tsx     ← Layer 1: Trade Report, regime gate, account metrics, hedge coverage
+      PositionsPage.tsx     ← Layer 3: Per-leg evaluation with delta/DTE/concentration alerts
+      MarketIntelPage.tsx   ← Layer 2: Per-ticker GEX/DP/Drift with hydration cache overlay
+      OrdersPage.tsx        ← Layer 4: URGENT/THIS WEEK/WATCH + alert management + pending orders
+      CandidatesPage.tsx    ← IV rank screener with pre-trade gate overlay
+      TradeBuilderPage.tsx  ← GEX/market context, strategy suggester, PoP calculator, order queue
+      PnLPage.tsx           ← Sortable/filterable unrealised P&L from /api/positions
+      AnalysisPage.tsx      ← Per-ticker chart + levels + order flow + Pine Script indicators (SMA/BB/RSI/MACD)
+      MorningBriefPage.tsx  ← Daily trade report, IV heatmap, SPY chart, portfolio Greeks panel
+      StrategyPage.tsx      ← Strategy Workspace: persona, regime playbook, parameters, payoff sandbox
+      EarningsPage.tsx      ← Earnings calendar with countdown, CRUD, Outlook Calendar sync
+      JournalPage.tsx       ← Trade journal with realised P&L metrics and auto-suggest
+      ScriptsPage.tsx       ← Workflow script runner (10 scripts, terminal output)
+      SettingsPage.tsx      ← Server settings sync, trader presets, universe manager, IBKR status
+    components/
+      PageHeader.tsx        ← Shared page header with refresh button
+      StatCard.tsx          ← Metric display card
+      RegimeBadge.tsx       ← Macro regime score badge
+      UrgencyBadge.tsx      ← Order urgency badge (URGENT/THIS WEEK/WATCH)
+      EmptyState.tsx        ← No-data / no-config / error states
+      PendingOrdersPanel.tsx ← Queued trade setups (localStorage)
+      DashboardLayout.tsx   ← Sidebar layout with collapsed icon-only mode
     contexts/
-      ConfigContext.tsx          ← Strategy config, persona, backup/restore
-      PendingOrdersContext.tsx   ← Pending trade setups
-    lib/trpc.ts     ← tRPC client binding
-    App.tsx         ← Routes and sidebar nav
+      ConfigContext.tsx     ← Full strategy config: persona, strategies, risk, signal mode, backup/restore
+      PendingOrdersContext.tsx ← Pending trade setups (localStorage)
+    hooks/
+      useApi.ts             ← All API hooks + TypeScript types
+    lib/
+      utils.ts              ← cn() and shared helpers
 server/
-  routers.ts        ← tRPC procedures
-  db.ts             ← Drizzle query helpers
+  routers.ts              ← tRPC procedures (auth + features)
+  db.ts                   ← Drizzle query helpers
+  sandbox.payoff.test.ts  ← 23 vitest unit tests for payoff math helpers
 drizzle/
-  schema.ts         ← Database tables and types
+  schema.ts               ← Database tables & types
 ```
-
-### Running Tests
-
-```bash
-pnpm test
-```
-
-The test suite covers payoff math helpers (normalCDF, calcPoP, buildPayoffData) with 23 vitest unit tests in `server/sandbox.payoff.test.ts`.
-
-### Building for Production
-
-```bash
-pnpm build
-```
-
-The build output is in `dist/public/`. Copy this directory to `/var/www/fortress-v2` on your VPS and configure nginx to serve it with `/api/` proxied to port 8080.
 
 ---
 
 ## Security
 
-The bearer token is never stored in source code or committed to the repository. It lives exclusively in browser `localStorage`. The config export feature explicitly excludes the token. All API calls use `Authorization: Bearer <token>` headers sent through the nginx same-origin proxy — the token never crosses origins.
+- The bearer token is **never stored in source code or committed to the repository**. It lives exclusively in browser `localStorage`.
+- The config export feature explicitly excludes the token.
+- All API calls use `Authorization: Bearer <token>` headers sent through the nginx same-origin proxy — the token never crosses origins.
+- The nginx config does not expose any server-side secrets.
 
 ---
 
 ## Related Repositories
 
-| Repository | Description |
+| Repo | Description |
 |---|---|
-| [citychip/fortress-api](https://github.com/citychip/fortress-api) | FastAPI backend — the data source for all dashboard pages |
-| [citychip/fortress-mcp](https://github.com/citychip/fortress-mcp) | MCP server — connects Claude Desktop to the Fortress API with 40 tools |
+| [citychip/fortress-mcp](https://github.com/citychip/fortress-mcp) | Fortress MCP server — 29 tools covering positions, briefing, market intelligence, stop-loss, roll, pre-trade gate, journal, and QuantData live data |
+| [citychip/fortress-dashboard](https://github.com/citychip/fortress-dashboard) | Original Fortress dashboard (v1) |
 
 ---
 
 ## Changelog
 
-| Version | Date | Summary |
+| Version | Date | Changes |
 |---|---|---|
-| v3.9 | 2026-05-18 | Morning Brief: VIX 30d sparkline + Macro Regime Gauge; Dashboard: mini sparklines per-ticker in trade report rows |
-| v3.8 | 2026-05-17 | Analysis: MACD crossover marker dots; Positions: Roll→ deep-link to Trade Builder; Trade Builder: full ticker gallery on load |
-| v3.7.2 | 2026-05-16 | Cockpits group: Action Center, Build Center, Portfolio Center, Approvals |
-| v3.7.1 | 2026-05-16 | Strategy Sandbox: DTE/Delta sliders, Recharts payoff diagram with GEX/DP reference lines, 6-metric panel, Export to Trade Builder; 23 vitest unit tests |
-| v3.7 | 2026-05-15 | Strategy Workspace: Trader Persona cards, Volatility Regime Playbook matrix, 24 strategy parameters, signal mode, backup/restore |
-| v3.6 | 2026-05-15 | Hydration pipeline: Market Intel overlays cached GEX/DP values with "Cached" badge |
-| v3.5 | 2026-05-15 | Portfolio: theta sign fix, alert badge counts, Auto-Roll; Orders: JSON copy on URGENT rows; Script Runner: terminal output, exit code, duration |
-| v3.4 | 2026-05-14 | Analysis: Net Drift NaN fix, GEX Call Wall blank fix, Order Flow empty-state, per-ticker Position Risk Context panel |
-| v3.3 | 2026-05-14 | Trade Builder: asset regime label, GEX/DP hydration, pre-trade advisory banner, expiry dates |
-| v3.2 | 2026-05-14 | Dashboard: Macro Regime Gate hydration, concentration-locked entry rows, Send Briefing notification |
-| v3.1 | 2026-05-14 | Morning Brief: IV heatmap fallback, enriched trade report rows, regime strip, beta-weighted delta, theta efficiency |
-| v3.0 | 2026-05-14 | Fortress v3 rebuild: tRPC + Drizzle ORM + Manus OAuth; persistent status bar; collapsed sidebar; Morning Brief landing page |
-| v2.x | 2026-05-10–14 | Initial builds: Dashboard, Positions, Market Intel, Orders, Analysis, Candidates, P&L, Settings, Trade Builder, Strategy |
+| v2.0 | 2026-05-10 | Initial build: Dashboard, Positions, Market Intel, Orders, Analysis, Settings |
+| v2.1 | 2026-05-11 | Added Candidates tab (IV rank screener, SuggestedTradePanel, Send to Orders) |
+| v2.2 | 2026-05-11 | Added P&L tab (unrealised P&L from /api/positions, bar chart, best/worst callouts) |
+| v2.3 | 2026-05-12 | Fixed all TypeScript/API field mapping errors; redeployed to VPS |
+| v2.4 | 2026-05-12 | Fixed same-origin proxy (removed hardcoded API URL from localStorage) |
+| v2.5 | 2026-05-12 | Added Connection Test button with latency + server version to Settings |
+| v2.6 | 2026-05-13 | Added PendingOrdersContext, DP-floor-anchored strikes, Pending Orders panel in Orders |
+| v2.7 | 2026-05-13 | Fixed AnalysisPage DP floor/ceiling derivation from dark_pool.floors[] array |
+| v2.8 | 2026-05-14 | P&L tab: full sorting (ticker/P&L/pct/DTE/qty/marketValue) and filtering (ticker/side/right/P&L sign) |
+| v2.9 | 2026-05-14 | Tier 1+2: Trade Report, Pre-Trade Gate, Alert CRUD, Earnings Calendar, IBKR Live Preview, Server Settings, Universe Manager, Script Runner, Trade Journal, Chart Levels + Order Flow, SPY Hedge widget |
+| v3.0 | 2026-05-14 | Fortress v3 rebuild: tRPC + Drizzle ORM + Manus OAuth backend; persistent 5px status bar; collapsed icon-only sidebar; Morning Brief landing page; full Settings migration |
+| v3.1 | 2026-05-14 | Morning Brief: IV heatmap fallback, enriched trade report rows (IVR/GEX/bias badges), regime strip with gamma flip price, beta-weighted delta, theta efficiency, taller SPY chart, market status pill |
+| v3.2 | 2026-05-14 | Dashboard: hydrated Macro Regime Gate (GEX/DP/drift from SPY intel), concentration-locked entry rows, hedge coverage target fix, Send Briefing owner notification |
+| v3.3 | 2026-05-14 | Trade Builder: ticker asset regime label, GEX/DP metric hydration, pre-trade advisory banner, expiry dates on suggested setups. Dashboard: Macro Regime Gate data-pipe fixes |
+| v3.4 | 2026-05-14 | Analysis page: Net Drift NaN fix, GEX Call Wall blank fix, Order Flow empty-state, SPY Hedge → per-ticker Position Risk Context panel |
+| v3.5 | 2026-05-15 | Portfolio view: theta sign fix, alert badge counts, Auto-Roll button. Orders: JSON copy button on URGENT rows. Script Runner: terminal output, exit code badge, duration. Morning Brief: suppress stop-loss tickers from entry candidates. Regime labels standardized to title-case |
+| v3.6 | 2026-05-15 | Hydration pipeline: Python scripts POST GEX/DP/drift to /api/manage/hydrate-asset after execution; Market Intel overlays cached values with "Cached" badge |
+| v3.7 | 2026-05-15 | Strategy Workspace: Trader Persona cards (5), Volatility Regime Playbook matrix (IV×GEX), full strategy parameters grid, signal mode (Strict/Advisory/Sandbox), backup/restore. Trade Builder: signal mode advisory banner wired in |
+| v3.7.1 | 2026-05-16 | Strategy Sandbox (Zone 3): interactive DTE slider (7–120d) + Delta slider (0.05–0.50Δ), Recharts payoff diagram with GEX Call/Put Wall + DP Floor/Ceiling reference lines, breakeven proximity warning badge, 6-metric panel (PoP, Max Profit, Max Loss, θ/day, Gamma Risk score, θ Efficiency). Export to Trade Builder passes sandbox params as query params. 23 vitest unit tests for normalCDF/calcPoP/buildPayoffData |
 
 ---
 
-## Disclaimer
+## License
 
-This software is for informational and educational purposes only. It is not financial advice. Trading options involves significant risk. Always verify data and candidates before executing trades in your brokerage account.
+Private repository — all rights reserved.

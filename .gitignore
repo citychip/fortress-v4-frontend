@@ -114,3 +114,4 @@ client/public/__manus__/version.json
 
 # Manus dev logs (sandbox only)
 .manus-logs/
+.project-config.json
