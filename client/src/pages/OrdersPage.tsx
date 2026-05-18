@@ -318,7 +318,7 @@ function OrderSection({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function OrdersPage() {
+export default function OrdersPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: stopData, loading: stopLoading, error: stopError, refresh: refreshStop, lastUpdated } = useStopLossAll();
   const { data: rollData, loading: rollLoading, refresh: refreshRoll } = useRollAll();
   const { data: alertData, refresh: refreshAlerts } = useAlerts();

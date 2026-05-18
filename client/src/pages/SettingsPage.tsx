@@ -1348,7 +1348,7 @@ function SyncBadge({ status }: { status: PrefsSaveStatus }) {
   );
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { prefsSaveStatus } = useConfig();
   return (
     <div className="min-h-screen">

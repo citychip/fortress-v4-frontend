@@ -188,7 +188,7 @@ function LegRow({ leg, onTriageClick, dteTriage }: { leg: LegPnL; onTriageClick:
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function PnLPage() {
+export default function PnLPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, loading, error, refresh, lastUpdated } = usePositions();
   const { config } = useConfig();
   const [, setLocation] = useLocation();
@@ -297,8 +297,8 @@ export default function PnLPage() {
   );
 
   return (
-    <div className="min-h-screen">
-      <PageHeader title="P&L" subtitle="Unrealised profit &amp; loss — computed from avg_cost vs market_value per leg" lastUpdated={lastUpdated} onRefresh={refresh} refreshing={loading} />
+    <div className={embedded ? '' : 'min-h-screen'}>
+      {!embedded && <PageHeader title="P&L" subtitle="Unrealised profit &amp; loss — computed from avg_cost vs market_value per leg" lastUpdated={lastUpdated} onRefresh={refresh} refreshing={loading} />}
       <div className="p-6 space-y-6">
 
         {/* ── Summary stats ── */}

@@ -813,14 +813,14 @@ function PositionAlertsSummary() {
 
 function QuickNav() {
   const links = [
-    { href: '/positions',    label: 'View Positions', sub: 'Per-leg evaluation',          icon: BookOpen,      color: CYAN },
-    { href: '/market-intel', label: 'Market Intel',   sub: 'GEX / DP / Drift',            icon: TrendingUp,    color: GREEN },
-    { href: '/candidates',   label: 'Candidates',     sub: 'IV rank screener',             icon: Crosshair,     color: AMBER },
-    { href: '/orders',       label: 'All Orders',     sub: 'URGENT / THIS WEEK / WATCH',  icon: AlertTriangle, color: RED },
-    { href: '/earnings',     label: 'Earnings',       sub: 'Calendar & blackout windows', icon: DollarSign,    color: CYAN },
-    { href: '/journal',      label: 'Journal',        sub: 'Realised P&L log',            icon: BookOpen,      color: GREEN },
-    { href: '/scripts',      label: 'Scripts',        sub: 'Workflow automation',         icon: Zap,           color: AMBER },
-    { href: '/settings',     label: 'Settings',       sub: 'Config & universe',           icon: Shield,        color: DIM },
+    { href: '/trade',        label: 'Trade',          sub: 'Scan · Candidates · Orders',  icon: Crosshair,     color: CYAN },
+    { href: '/positions',    label: 'Positions',      sub: 'Per-leg evaluation',          icon: BookOpen,      color: GREEN },
+    { href: '/market-intel', label: 'Market Intel',   sub: 'GEX / DP / Drift',            icon: TrendingUp,    color: AMBER },
+    { href: '/analysis',     label: 'Analysis',       sub: 'Ticker deep-dive + vol',      icon: AlertTriangle, color: RED },
+    { href: '/performance',  label: 'Performance',    sub: 'P&L · Journal',               icon: DollarSign,    color: CYAN },
+    { href: '/earnings',     label: 'Earnings',       sub: 'Calendar & blackout windows', icon: BookOpen,      color: GREEN },
+    { href: '/config',       label: 'Config',         sub: 'Strategy · Settings · Scripts', icon: Zap,         color: AMBER },
+    { href: '/config',       label: 'Settings',       sub: 'Config & universe',           icon: Shield,        color: DIM },
   ];
 
   return (
@@ -1000,7 +1000,7 @@ export default function DashboardPage() {
     <div className="min-h-screen">
       <PageHeader
         title="Dashboard"
-        subtitle="Morning workflow — Trade Report → Regime Gate → Position Review → Order List"
+        subtitle="Portfolio overview — account summary, quick navigation, and live alerts"
         lastUpdated={null}
         onRefresh={refresh}
         refreshing={loading}
@@ -1010,27 +1010,24 @@ export default function DashboardPage() {
         <IbkrSyncHistoryPanel />
         <QuickNav />
 
-        {/* Trade Report — the morning action list */}
-        <div className="rounded p-4" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 9%)' }}>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="font-display text-sm" style={{ color: BRIGHT }}>Morning Trade Report</h2>
-              <p className="text-xs mt-0.5" style={{ color: DIM }}>Prioritised action list from /api/manage/trade_report</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowBriefingModal(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-mono-data hover:opacity-80 transition-opacity"
-                style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
-              >
-                <Mail className="w-3 h-3" /> Send Briefing
-              </button>
-              <Link href="/candidates">
-                <span className="text-xs cursor-pointer" style={{ color: CYAN }}>All candidates →</span>
-              </Link>
-            </div>
+        {/* Morning briefing send button */}
+        <div className="rounded p-4 flex items-center justify-between" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 9%)' }}>
+          <div>
+            <h2 className="font-display text-sm" style={{ color: BRIGHT }}>Morning Workflow</h2>
+            <p className="text-xs mt-0.5" style={{ color: DIM }}>Trade scan, candidates, and order recommendations</p>
           </div>
-          <TradeReportPanel />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowBriefingModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-mono-data hover:opacity-80 transition-opacity"
+              style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
+            >
+              <Mail className="w-3 h-3" /> Send Briefing
+            </button>
+            <Link href="/trade">
+              <span className="text-xs cursor-pointer" style={{ color: CYAN }}>Open Trade page →</span>
+            </Link>
+          </div>
         </div>
 
         {/* Two-column: orders + alerts */}
@@ -1038,7 +1035,7 @@ export default function DashboardPage() {
           <div className="rounded p-4" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 9%)' }}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display text-sm" style={{ color: BRIGHT }}>Layer 4 — Priority Orders</h2>
-              <Link href="/orders">
+              <Link href="/trade">
                 <span className="text-xs cursor-pointer" style={{ color: CYAN }}>All orders →</span>
               </Link>
             </div>

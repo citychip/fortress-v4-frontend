@@ -989,7 +989,7 @@ function AccountStrip() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function MorningBriefPage() {
+export default function MorningBriefPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { config } = useConfig();
   const { data: briefing, loading, refresh } = useBriefing();
 

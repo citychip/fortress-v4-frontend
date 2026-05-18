@@ -172,7 +172,7 @@ function NewEntryForm({ onSave, onCancel }: { onSave: (entry: Partial<JournalEnt
   );
 }
 
-export default function JournalPage() {
+export default function JournalPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, loading, error, refresh, lastUpdated } = useJournal();
   const { data: suggest, loading: suggestLoading, refresh: refreshSuggest } = useJournalSuggest();
   const { createEntry, deleteEntry } = useJournalActions();
@@ -215,14 +215,14 @@ export default function JournalPage() {
   const entries = data?.entries ?? [];
 
   return (
-    <div className="min-h-screen">
-      <PageHeader
+    <div className={embedded ? '' : 'min-h-screen'}>
+      {!embedded && <PageHeader
         title="Trade Journal"
         subtitle="Realised P&L tracking, closed position log, and framework compliance"
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         refreshing={loading}
-      />
+      />}
       <div className="p-6 space-y-6">
 
         {/* Metrics row */}

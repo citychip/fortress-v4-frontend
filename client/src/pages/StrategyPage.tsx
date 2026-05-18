@@ -429,7 +429,7 @@ function ParamRow({
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function StrategyPage() {
+export default function StrategyPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { config, updateTraderProfile, updateStrategy, setSignalMode, resetStrategyToDefaults, importStrategyProfile } = useConfig();
   const { traderProfile, strategy } = config;
   const [, navigate] = useLocation();
@@ -596,9 +596,9 @@ export default function StrategyPage() {
   const allStrategyOptions = STRATEGY_GROUPS.flatMap(g => g.items);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className={`${embedded ? '' : 'min-h-screen'} bg-zinc-950 text-zinc-100`}>
       {/* ── Zone 0: Header Bar ─────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-zinc-900/95 backdrop-blur border-b border-white/10 px-6 py-3 flex items-center gap-4 flex-wrap">
+      {!embedded && <div className="sticky top-0 z-30 bg-zinc-900/95 backdrop-blur border-b border-white/10 px-6 py-3 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <BarChart2 className="w-4 h-4 text-cyan-400" />
           <span className="text-sm font-semibold text-zinc-100">Strategy Workspace</span>
@@ -646,7 +646,7 @@ export default function StrategyPage() {
           </Button>
           <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
         </div>
-      </div>
+      </div>}
 
       <div className="p-6 grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6">
         {/* ── LEFT COLUMN ──────────────────────────────────────────────────── */}

@@ -514,7 +514,7 @@ function EntryCriteriaPanel({ ivRankThreshold, ivHvSpreadThreshold }: { ivRankTh
 
 type FilterMode = 'all' | 'actionable' | 'watch';
 
-export default function CandidatesPage() {
+export default function CandidatesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, loading, error, refresh, lastUpdated } = useCandidates();
   const { data: pretradeData } = usePretradeAll();
   const { config } = useConfig();

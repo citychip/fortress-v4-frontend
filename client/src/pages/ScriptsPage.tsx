@@ -183,7 +183,7 @@ function ScriptCard({ scriptKey, onRun, running, result }: {
   );
 }
 
-export default function ScriptsPage() {
+export default function ScriptsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: scriptsData, loading: scriptsLoading, error: scriptsError, refresh } = useScripts();
   const { data: todData } = useTimeOfDay();
   const { runScript, running, results, error: runError } = useScriptRunner();
@@ -211,14 +211,14 @@ export default function ScriptsPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <PageHeader
+    <div className={embedded ? '' : 'min-h-screen'}>
+      {!embedded && <PageHeader
         title="Script Runner"
         subtitle="Workflow automation scripts — premarket scanner, IV crush, whale flow, EOD review and more"
         lastUpdated={null}
         onRefresh={refresh}
         refreshing={scriptsLoading}
-      />
+      />}
       <div className="p-6 space-y-6">
 
         {/* Time of day context */}
