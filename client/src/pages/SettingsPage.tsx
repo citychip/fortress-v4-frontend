@@ -1215,6 +1215,115 @@ function ConnectionHealthSection() {
   );
 }
 
+// ─── Security Section — Bearer Token Rotation ───────────────────────────────────
+
+function SecuritySection() {
+  const { config, updateConfig } = useConfig();
+  const [rotating, setRotating] = useState(false);
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  const [rotateSuccess, setRotateSuccess] = useState(false);
+
+  const maskedToken = config.apiToken
+    ? '••••••••••••••••' + config.apiToken.slice(-8)
+    : '(not set)';
+
+  const handleRotate = useCallback(async () => {
+    if (!config.apiToken || !config.apiUrl) {
+      toast.error('API URL and token must be configured before rotating.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'Rotate the bearer token?\n\nThe server will restart with a new token. ' +
+      'The new token will be saved to your browser automatically.'
+    );
+    if (!confirmed) return;
+
+    setRotating(true);
+    setRotateError(null);
+    setRotateSuccess(false);
+    try {
+      const result = await apiFetch<{ ok: boolean; new_token: string; message: string }>(
+        config.apiUrl,
+        config.apiToken,
+        '/api/manage/rotate-token',
+        { method: 'POST' },
+      );
+      if (result.ok && result.new_token) {
+        updateConfig({ apiToken: result.new_token });
+        setRotateSuccess(true);
+        toast.success('Token rotated. Saved to browser. Server is restarting.');
+      } else {
+        throw new Error('Unexpected response from server');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Token rotation failed';
+      setRotateError(msg);
+      toast.error(msg);
+    } finally {
+      setRotating(false);
+    }
+  }, [config.apiUrl, config.apiToken, updateConfig]);
+
+  return (
+    <Section
+      title="Security"
+      description="Rotate the server bearer token. The new token is automatically saved to your browser."
+    >
+      <div className="space-y-4">
+        <Field label="Current Token" hint="Last 8 characters shown for verification.">
+          <div
+            className="font-mono-data text-sm px-3 py-2 rounded border"
+            style={{
+              background: 'oklch(0.14 0.010 258)',
+              borderColor: 'oklch(1 0 0 / 10%)',
+              color: 'oklch(0.65 0.010 258)',
+              letterSpacing: '0.05em',
+            }}
+          >
+            {maskedToken}
+          </div>
+        </Field>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRotate}
+            disabled={rotating || !config.apiToken}
+            className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all disabled:opacity-50"
+            style={{
+              background: rotating ? 'oklch(0.65 0.22 25 / 15%)' : 'oklch(0.65 0.22 25 / 20%)',
+              color: 'oklch(0.75 0.20 25)',
+              border: '1px solid oklch(0.65 0.22 25 / 40%)',
+            }}
+          >
+            {rotating ? (
+              <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Rotating…</>
+            ) : (
+              <><Shield className="w-3.5 h-3.5" /> Rotate Token</>
+            )}
+          </button>
+
+          {rotateSuccess && (
+            <span className="flex items-center gap-1 text-xs" style={{ color: 'oklch(0.72 0.18 145)' }}>
+              <CheckCircle2 className="w-3.5 h-3.5" /> New token saved.
+            </span>
+          )}
+          {rotateError && (
+            <span className="flex items-center gap-1 text-xs" style={{ color: 'oklch(0.65 0.22 25)' }}>
+              <AlertCircle className="w-3.5 h-3.5" /> {rotateError}
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs" style={{ color: 'oklch(0.45 0.010 258)' }}>
+          Rotation generates a new 48-character hex token, updates the server systemd config,
+          and restarts the service. The dashboard will briefly show connection errors while the
+          server restarts (~5s). The new token is saved to your browser immediately.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
 // ─── Sync badge ─────────────────────────────────────────────────────────────────
 
 function SyncBadge({ status }: { status: PrefsSaveStatus }) {
@@ -1272,6 +1381,7 @@ export default function SettingsPage() {
         <RefreshSection />
         <ServerSettingsSection />
         <BackupSection />
+        <SecuritySection />
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { ConfigProvider, useConfig } from "./contexts/ConfigContext";
 import { PendingOrdersProvider } from "./contexts/PendingOrdersContext";
 import { useHealth, useIbkrSync, useBriefing, useMarketIntelligence } from "./hooks/useApi";
+import { useFortressStream } from "./hooks/useFortressStream";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback } from "react";
@@ -93,6 +94,8 @@ const COCKPIT_ITEMS = [
 
 function StatusBar() {
   const { config } = useConfig();
+  // SSE: open one persistent connection that feeds briefing/positions/alerts into the query cache
+  useFortressStream(config.apiToken || null);
   const { data: health, error: healthError } = useHealth();
   const { data: briefing } = useBriefing();
   const { data: spyIntel } = useMarketIntelligence(config.apiToken ? 'SPY' : null);

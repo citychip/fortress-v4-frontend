@@ -35,6 +35,7 @@ import {
   Cell,
 } from 'recharts';
 import { ExternalLink, TrendingUp, Activity, BarChart3, Layers, ShieldCheck, Sigma, AlertTriangle } from 'lucide-react';
+import VolAnalyticsPanel from '@/components/VolAnalyticsPanel';
 import { cn } from '@/lib/utils';
 
 // ─── Ticker selector ──────────────────────────────────────────────────────────
@@ -1457,6 +1458,7 @@ export default function AnalysisPage() {
               <OrderFlowPanel ticker={selectedTicker} />
             </div>
             <TickerIntelPanel ticker={selectedTicker} />
+            <VolAnalyticsPanel ticker={selectedTicker} />
             <PositionRiskContextPanel ticker={selectedTicker} />
             <TickerLegs ticker={selectedTicker} />
           </>

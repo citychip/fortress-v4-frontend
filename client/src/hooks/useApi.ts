@@ -1467,3 +1467,43 @@ export function usePendingOrderActions() {
 
   return { submitOrder, declineOrder, previewOrder, approveOrder, loading, error };
 }
+
+// ---------------------------------------------------------------------------
+// Vol Analytics — IV Skew, Term Structure, ATM IV Ladder
+// ---------------------------------------------------------------------------
+export interface SkewPoint {
+  strike: number;
+  moneyness: number;
+  iv: number;
+  type: 'call' | 'put';
+}
+
+export interface TermStructurePoint {
+  expiry: string;
+  dte: number;
+  atm_iv: number;
+}
+
+export interface AtmLadderRow {
+  expiry: string;
+  dte: number;
+  atm_strike: number;
+  call_iv: number | null;
+  put_iv: number | null;
+  avg_iv: number | null;
+  iv_spread: number | null;
+}
+
+export interface VolAnalyticsResponse {
+  ticker: string;
+  spot: number;
+  as_of: string;
+  skew: SkewPoint[];
+  skew_expiry: string | null;
+  term_structure: TermStructurePoint[];
+  atm_ladder: AtmLadderRow[];
+}
+
+export function useVolAnalytics(ticker: string) {
+  return useApiData<VolAnalyticsResponse>(`/api/options/vol-analytics?ticker=${ticker}`);
+}

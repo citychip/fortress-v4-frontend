@@ -135,3 +135,18 @@
 - [x] Backup/Restore: export strategy profile as JSON download, import from JSON file, reset to defaults
 - [x] Wire signal mode into TradeBuilderPage (advisory warning vs hard block vs sandbox)
 - [x] Register /strategy route in App.tsx and add sidebar nav item
+
+## Sprint v4.0: Smart Refresh + Vol Analytics + Token Rotation
+
+- [x] SSE: Add /api/stream endpoint to VPS FastAPI backend (pushes briefing/positions/alerts diffs on change)
+- [x] SSE: Add useFortressStream hook in sandbox that subscribes via EventSource and feeds queryClient.setQueryData()
+- [x] SSE: Replace 250ms/1s setInterval polling in useApi.ts with the SSE stream for briefing, positions, and alerts
+- [x] SSE: Keep 10s/30s/5min HTTP polls for lower-priority data (candidates, market-intel, pnl)
+- [x] SSE: Verify graceful fallback to HTTP polling if SSE connection drops
+- [x] VolAnalytics: Add IV skew curve chart (IV vs strike at fixed DTE) as new tab on Analysis page
+- [x] VolAnalytics: Add term structure chart (ATM IV vs DTE) on Analysis page
+- [x] VolAnalytics: Add ATM IV ladder table (per-ticker IV rank, ATM IV, 30d/60d/90d term) on Analysis page
+- [ ] VolAnalytics: Wire QuantData IV data from /api/quantdata/reports into the three vol panels (deferred — yfinance IV is live)
+- [x] TokenRotation: Add POST /api/manage/rotate-token endpoint to VPS FastAPI backend
+- [x] TokenRotation: Add "Rotate Token" section to Settings page with confirmation dialog
+- [x] TokenRotation: On rotation success, update localStorage and show success badge
