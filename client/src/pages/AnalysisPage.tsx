@@ -24,6 +24,7 @@ import {
   ComposedChart,
   Line,
   Bar,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -832,12 +833,21 @@ function MacdPanel({ ticker }: { ticker: string }) {
   const closes = useMemo(() => (data?.candles ?? []).map(c => c.close), [data]);
   const { macd, signal, histogram } = useMemo(() => calcMacd(closes, 12, 26, 9), [closes]);
 
-  const chartData = useMemo(() => (data?.candles ?? []).map((c, i) => ({
-    date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    macd: macd[i],
-    signal: signal[i],
-    histogram: histogram[i],
-  })), [data, macd, signal, histogram]);
+  const chartData = useMemo(() => (data?.candles ?? []).map((c, i) => {
+    const prevHist = i > 0 ? histogram[i - 1] : null;
+    const curHist = histogram[i];
+    // Crossover dot: histogram flips sign between this bar and previous
+    const isBullishCross = prevHist != null && curHist != null && prevHist < 0 && curHist >= 0;
+    const isBearishCross = prevHist != null && curHist != null && prevHist >= 0 && curHist < 0;
+    return {
+      date: new Date(c.time * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      macd: macd[i],
+      signal: signal[i],
+      histogram: histogram[i],
+      bullishDot: isBullishCross && macd[i] != null ? macd[i] : null,
+      bearishDot: isBearishCross && macd[i] != null ? macd[i] : null,
+    };
+  }), [data, macd, signal, histogram]);
 
   const lastMacd = macd.filter(v => v != null).slice(-1)[0] ?? null;
   const lastSignal = signal.filter(v => v != null).slice(-1)[0] ?? null;
@@ -875,7 +885,7 @@ function MacdPanel({ ticker }: { ticker: string }) {
           </span>
         )}
         <div className="flex items-center gap-3 ml-auto">
-          {[{ color: 'oklch(0.80 0.15 200)', label: 'MACD' }, { color: 'oklch(0.78 0.18 85)', label: 'Signal' }, { color: 'oklch(0.72 0.18 145)', label: 'Histogram' }].map(l => (
+          {[{ color: 'oklch(0.80 0.15 200)', label: 'MACD' }, { color: 'oklch(0.78 0.18 85)', label: 'Signal' }, { color: 'oklch(0.72 0.18 145)', label: 'Histogram' }, { color: 'oklch(0.72 0.18 145)', label: '● Bull X' }, { color: 'oklch(0.65 0.22 25)', label: '● Bear X' }].map(l => (
             <div key={l.label} className="flex items-center gap-1">
               <div className="w-3 h-0.5 rounded" style={{ background: l.color }} />
               <span className="font-mono-data text-[9px]" style={{ color: 'oklch(0.50 0.010 258)' }}>{l.label}</span>
@@ -905,6 +915,34 @@ function MacdPanel({ ticker }: { ticker: string }) {
           </Bar>
           <Line type="monotone" dataKey="macd" stroke="oklch(0.80 0.15 200)" strokeWidth={1.5} dot={false} connectNulls />
           <Line type="monotone" dataKey="signal" stroke="oklch(0.78 0.18 85)" strokeWidth={1} dot={false} connectNulls strokeDasharray="4 2" />
+          {/* Bullish crossover dots — green circles where histogram flips positive */}
+          <Line
+            type="monotone"
+            dataKey="bullishDot"
+            stroke="transparent"
+            dot={(props: any) => {
+              const { cx, cy, value } = props;
+              if (value == null || cx == null || cy == null) return <g key={props.key} />;
+              return <circle key={props.key} cx={cx} cy={cy} r={4} fill="oklch(0.72 0.18 145)" stroke="oklch(0.17 0.010 258)" strokeWidth={1.5} />;
+            }}
+            activeDot={false}
+            legendType="none"
+            connectNulls={false}
+          />
+          {/* Bearish crossover dots — red circles where histogram flips negative */}
+          <Line
+            type="monotone"
+            dataKey="bearishDot"
+            stroke="transparent"
+            dot={(props: any) => {
+              const { cx, cy, value } = props;
+              if (value == null || cx == null || cy == null) return <g key={props.key} />;
+              return <circle key={props.key} cx={cx} cy={cy} r={4} fill="oklch(0.65 0.22 25)" stroke="oklch(0.17 0.010 258)" strokeWidth={1.5} />;
+            }}
+            activeDot={false}
+            legendType="none"
+            connectNulls={false}
+          />
         </ComposedChart>
       </ResponsiveContainer>
     </div>

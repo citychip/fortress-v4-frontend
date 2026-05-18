@@ -5,7 +5,7 @@
  */
 
 import {
-  usePositions, useStopLossAll, useRollAll, useBriefing,
+  usePositions, useStopLossAll, useRollAll, useAlerts, useBriefing,
   formatDollar, calcDte,
   type Position,
 } from '@/hooks/useApi';
@@ -37,12 +37,18 @@ function evaluatePositionLeg(
   strategy: { deltaAlertThreshold: number; rollDteDays: number; maxSingleNamePct: number },
   stopLossAct: Set<string>,
   rollNeeded: Set<string>,
+  belowSma200: Set<string>,
 ): string[] {
   const alerts: string[] = [];
   const id = leg.local_symbol;
 
   if (stopLossAct.has(id)) alerts.push('Stop-loss signal active');
   if (rollNeeded.has(id)) alerts.push('Roll candidate');
+
+  // Technical violation: ticker trading below its 200-day SMA
+  if (belowSma200.has(leg.ticker)) {
+    alerts.push('Below SMA-200 — technical violation');
+  }
 
   if (leg.current_delta !== null && leg.leg_direction === 'short') {
     const absDelta = Math.abs(leg.current_delta);
@@ -224,15 +230,16 @@ function DteCell({ expiry, rollDays, dteTriage }: { expiry: string | null; rollD
 // ─── Leg row ──────────────────────────────────────────────────────────────────
 
 function LegRow({
-  leg, strategy, stopLossAct, rollNeeded, dteTriage,
+  leg, strategy, stopLossAct, rollNeeded, dteTriage, belowSma200,
 }: {
   leg: Position;
   strategy: { deltaAlertThreshold: number; rollDteDays: number; maxSingleNamePct: number };
   stopLossAct: Set<string>;
   rollNeeded: Set<string>;
   dteTriage: number;
+  belowSma200: Set<string>;
 }) {
-  const alerts = evaluatePositionLeg(leg, strategy, stopLossAct, rollNeeded);
+  const alerts = evaluatePositionLeg(leg, strategy, stopLossAct, rollNeeded, belowSma200);
   const hasAlert = alerts.length > 0;
 
   return (
@@ -292,10 +299,11 @@ function LegRow({
             {alerts.map((a, i) => (
               <span key={i} className="text-[10px]" style={{ color: AMBER }}>⚠ {a}</span>
             ))}
-            {/* Auto-Roll shortcut for legs in roll window */}
+            {/* Auto-Roll shortcut for legs in roll window — pre-selects ticker in Trade Builder */}
             {alerts.some(a => a.includes('roll window')) && (
               <Link
                 href="/trade-builder"
+                onClick={() => sessionStorage.setItem('fortress_tradebuilder_ticker', leg.ticker)}
                 className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border mt-0.5 hover:opacity-80"
                 style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
               >
@@ -327,13 +335,14 @@ interface TickerGroupData {
 }
 
 function TickerGroupCard({
-  group, strategy, stopLossAct, rollNeeded, dteTriage,
+  group, strategy, stopLossAct, rollNeeded, dteTriage, belowSma200,
 }: {
   group: TickerGroupData;
   strategy: { deltaAlertThreshold: number; rollDteDays: number; maxSingleNamePct: number };
   stopLossAct: Set<string>;
   rollNeeded: Set<string>;
   dteTriage: number;
+  belowSma200: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isConcentrated = group.totalPctNL > strategy.maxSingleNamePct;
@@ -418,10 +427,13 @@ function TickerGroupCard({
             {isConcentrated && <AlertTriangle className="inline w-3 h-3 ml-1" />}
           </span>
 
-          {/* Trade Builder shortcut */}
+          {/* Trade Builder shortcut — pre-selects this ticker */}
           <Link
-            href={`/trade-builder`}
-            onClick={e => e.stopPropagation()}
+            href="/trade-builder"
+            onClick={e => {
+              e.stopPropagation();
+              sessionStorage.setItem('fortress_tradebuilder_ticker', group.ticker);
+            }}
             className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)]"
             style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 25%)' }}
           >
@@ -447,7 +459,7 @@ function TickerGroupCard({
             </thead>
             <tbody>
               {group.legs.map((leg, i) => (
-                <LegRow key={i} leg={leg} strategy={strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} dteTriage={dteTriage} />
+                <LegRow key={i} leg={leg} strategy={strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} dteTriage={dteTriage} belowSma200={belowSma200} />
               ))}
             </tbody>
           </table>
@@ -463,6 +475,7 @@ export default function PositionsPage() {
   const { data, loading, error, refresh, lastUpdated } = usePositions();
   const { data: stopData } = useStopLossAll();
   const { data: rollData } = useRollAll();
+  const { data: alertsData } = useAlerts();
   const { data: briefing } = useBriefing();
   const { config } = useConfig();
 
@@ -473,6 +486,13 @@ export default function PositionsPage() {
   const rollNeeded = useMemo(() => new Set(
     rollData?.positions.filter(p => p.roll_needed).map(p => p.synthesized_id) ?? []
   ), [rollData]);
+
+  // Technical violations: tickers trading below their 200-day SMA
+  // Briefing actions array may contain objects with type 'below_sma200' and a ticker field
+  // Derive below-SMA-200 tickers from the typed alerts API (source = 'below_sma200', not snoozed)
+  const belowSma200 = useMemo(() => new Set<string>(
+    (alertsData?.alerts ?? []).filter(a => a.source === 'below_sma200' && !a.snoozed).map(a => a.ticker)
+  ), [alertsData]);
 
   const groups = useMemo<TickerGroupData[]>(() => {
     const positions = data?.positions ?? [];
@@ -487,13 +507,13 @@ export default function PositionsPage() {
       const totalPctNL  = legs.reduce((s, l) => s + l.net_liq_pct, 0);
       const netDelta    = legs.reduce((s, l) => s + (l.current_delta ?? 0) * l.qty, 0);
       const netTheta    = legs.reduce((s, l) => s + (l.current_theta ?? 0) * l.qty, 0);
-      const legAlertCount = legs.filter(l => evaluatePositionLeg(l, config.strategy, stopLossAct, rollNeeded).length > 0).length;
+      const legAlertCount = legs.filter(l => evaluatePositionLeg(l, config.strategy, stopLossAct, rollNeeded, belowSma200).length > 0).length;
       const alertCount  = legAlertCount + (totalPctNL > config.strategy.maxSingleNamePct ? 1 : 0);
       // P&L sparkline: use per-leg market values as a rough proxy series
       const pnlSeries   = legs.map(l => l.market_value);
       return { ticker, legs, totalMktVal, totalPctNL, netDelta, netTheta, alertCount, pnlSeries };
     }).sort((a, b) => Math.abs(b.totalMktVal) - Math.abs(a.totalMktVal));
-  }, [data, config.strategy, stopLossAct, rollNeeded]);
+  }, [data, config.strategy, stopLossAct, rollNeeded, belowSma200]);
 
   const positions    = data?.positions ?? [];
   const totalMktVal  = positions.reduce((s, p) => s + p.market_value, 0);
@@ -556,6 +576,7 @@ export default function PositionsPage() {
                 stopLossAct={stopLossAct}
                 rollNeeded={rollNeeded}
                 dteTriage={config.dteTriage ?? 7}
+                belowSma200={belowSma200}
               />
             ))}
           </div>

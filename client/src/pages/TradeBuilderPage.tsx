@@ -756,7 +756,15 @@ export default function TradeBuilderPage() {
   const { data: pretradeData } = usePretradeAll();
   const { addOrder, hasOrder } = usePendingOrders();
 
-  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(() => {
+    // Deep-link from Positions page Roll/Build shortcuts
+    const preselect = sessionStorage.getItem('fortress_tradebuilder_ticker');
+    if (preselect) {
+      sessionStorage.removeItem('fortress_tradebuilder_ticker');
+      return preselect;
+    }
+    return null;
+  });
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
 
   const candidates = candidatesData?.rows ?? [];

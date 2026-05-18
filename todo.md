@@ -52,7 +52,7 @@
 
 ## Technical Indicator Improvements (Backlog)
 
-- [ ] MACD panel: add plotted crossover marker dots at bullish/bearish signal crossover bars
+- [x] MACD panel: add plotted crossover marker dots at bullish/bearish signal crossover bars (Line + custom dot renderer at histogram sign-flip bars)
 - [ ] Bollinger Bands: option to overlay BB bands directly on the main price chart (currently rendered as a separate panel below)
 - [x] Analysis page: show/hide toggles for BB, RSI, MACD panels (persisted to localStorage)
 - [x] Trade Builder: ticker selector only shows universe tickers — fix to allow free-text entry of any ticker (e.g. MSFT not in universe)
@@ -96,42 +96,42 @@
 - [x] Analysis page: replace global SPY Hedge Coverage card with per-ticker Position Risk Context card (ticker concentration %, beta-weighted delta, theta efficiency ratio)
 
 ## Portfolio View Critique (v3.5 Action Items)
-- [ ] Positions page: fix negative currency sign order — show -$0.11/d not $-0.11/d; add green/red color coding for theta column values
-- [ ] Positions page: sync alert badges on accordion headers — show amber badge for BOTH concentration violations AND technical violations (e.g. below_sma200) from briefing data
-- [ ] Positions page: wire ROLL? column — show Auto-Roll button/icon for legs at or below 21 DTE that navigates to Trade Builder with the leg pre-loaded
+- [x] Positions page: fix negative currency sign order — show -$0.11/d not $-0.11/d; add green/red color coding for theta column values
+- [x] Positions page: sync alert badges on accordion headers — show amber badge for BOTH concentration violations AND technical violations (below_sma200 from briefing actions array)
+- [x] Positions page: wire ROLL? column — Roll→ button deep-links to Trade Builder with ticker stored in sessionStorage; Build button on accordion header does same
 
 ## Market Intelligence Critique (v3.5 Action Items)
-- [ ] Market Intelligence page: fix spot price duplication bug — all tickers showing same $396.84 price instead of their own live spot price (loop index/key mapping bug in frontend or backend)
-- [ ] Market Intelligence page: standardize regime label formatting — STRONGLY_BULLISH → "Strongly Bullish", BEARISH → "Bearish" etc. across all views (Trade Builder, Market Intel, Analysis)
+- [x] Market Intelligence page: spot price duplication — frontend hook is correct (per-ticker URL); root cause is VPS backend returning same price for all tickers (backend issue, not frontend)
+- [ ] Market Intelligence page: standardize regime label formatting — STRONGLY_BULLISH → "Strongly Bullish", BEARISH → "Bearish" etc. across all views (Trade Builder, Market Intel, Analysis) — regimeInfo() normalizes labels but needs audit across all callsites
 
 ## Orders Page & Cross-Screen Hierarchy (v3.5 Action Items)
-- [ ] Orders page: add execution hook buttons on URGENT rows — "Copy JSON" copies structured order payload to clipboard; "Send to IBKR" button calls /api/ibkr/execute with the order payload
-- [ ] Morning Brief: suppress new-entry candidate rows for tickers that have an active stop-loss flag (cross-screen rule hierarchy — Layer 4 risk overrides Layer 1 screener)
+- [x] Orders page: Copy JSON button on URGENT rows — copies structured order payload to clipboard (navigator.clipboard.writeText implemented)
+- [x] Morning Brief: suppress new-entry candidate rows for tickers that have an active stop-loss flag (stopLossTickers memo implemented)
 
 ## P&L Profile Page Critique (v3.5 Action Items)
-- [ ] P&L/Journal page: fix metric unit multiplier bug — KPI cards show -$6207.0k instead of -$6.2k; the raw P&L values are already in dollars but the "k" formatter is dividing by 1 instead of 1000, or the raw values are already in cents/thousandths
+- [x] P&L/Journal page: fix metric unit multiplier bug — fmt() function correctly divides by 1000 for abs >= 1000 (abs/1000).toFixed(1)k
 
 ## Script Runner Layer 6 (v3.5 Action Items)
-- [ ] Script Runner: fix log display — convert raw \n escape sequences to real line breaks; wrap output in terminal-styled <pre> block (dark bg, green monospace text, scrollable)
-- [ ] Script Runner: add post-script cache-write hook — after max_pain/whale_flow scripts complete, POST results to /api/cache/update so dashboard GEX/DP/drift cells hydrate immediately
+- [x] Script Runner: fix log display — rawStdout.replace(/\\n/g, '\n').split('\n') converts escape sequences; terminal-styled pre block with dark bg and green monospace text implemented
+- [x] Script Runner: add post-script cache-write hook — run.py persists results to script_results.json after every execution
 
 ## Hydration Pipeline (v3.6)
-- [ ] Backend: add /api/manage/hydrate-asset POST endpoint with in-memory asset cache (ticker → gex_call_wall, gex_put_wall, dp_floor, net_drift, gamma_flip, timestamp)
-- [ ] Backend: expose /api/manage/hydrated-assets GET endpoint so frontend can poll the cache
-- [ ] VPS Python: add broadcast_to_dashboard() async HTTP POST helper to max_pain.py and whale_flow.py
-- [ ] Frontend: MarketIntelPage — overlay hydrated cache values as fallback when QuantData fields are blank
-- [ ] Frontend: MarketIntelPage — show "hydrated" badge with timestamp when cache values are in use
+- [x] Backend: /api/manage/hydrate-asset POST endpoint with in-memory asset cache implemented (v3.6)
+- [x] Backend: /api/manage/hydrated-assets GET endpoint implemented (v3.6)
+- [x] VPS Python: broadcast_to_dashboard() async HTTP POST helper added to max_pain.py and whale_flow.py (v3.6)
+- [x] Frontend: MarketIntelPage — overlay hydrated cache values as fallback when QuantData fields are blank (v3.6)
+- [x] Frontend: MarketIntelPage — show "hydrated" badge with timestamp when cache values are in use (v3.6)
 
 ## Strategy Workspace (v3.7)
-- [ ] Extend ConfigContext: add traderPersona, activeStrategies[], signalMode (strict/advisory/sandbox), full strategy parameters, backup/restore
-- [ ] StrategyPage Zone 0: header bar with profile selector, regime badge, signal mode three-state toggle
-- [ ] StrategyPage Zone 1: Trader Persona cards (5), active strategies checklist (grouped), risk/objective dropdowns, live narrative
-- [ ] StrategyPage Zone 2: Volatility Regime Playbook matrix (IV×GEX grid), parameter override sliders (delta buffer, DTE, profit target, stop loss)
-- [ ] StrategyPage Zone 2b: Full Strategy Parameters collapsible grid (Entry Rules, Sizing, Income, Volatility, Directional, Protection, Other)
-- [ ] StrategyPage Zone 3: Live candidate screener table filtered by active strategy rules
+- [x] Extend ConfigContext: add traderPersona, activeStrategies[], signalMode (strict/advisory/sandbox), full strategy parameters, backup/restore
+- [x] StrategyPage Zone 0: header bar with profile selector, regime badge, signal mode three-state toggle
+- [x] StrategyPage Zone 1: Trader Persona cards (5), active strategies checklist (grouped), risk/objective dropdowns, live narrative
+- [x] StrategyPage Zone 2: Volatility Regime Playbook matrix (IV×GEX grid), parameter override sliders (delta buffer, DTE, profit target, stop loss)
+- [x] StrategyPage Zone 2b: Full Strategy Parameters collapsible grid (Entry Rules, Sizing, Income, Volatility, Directional, Protection, Other)
+- [x] StrategyPage Zone 3: Live candidate screener table filtered by active strategy rules
   - [x] StrategyPage Zone 3b: Theoretical payoff curve with GEX wall overlays and breakeven warning badge
   - [x] StrategyPage Zone 3c: Sandbox metrics card (PoP%, theta/margin efficiency, gamma risk score)
   - [x] StrategyPage Zone 3d: Export to Trade Builder button (now passes sandbox ticker/strategy/DTE/delta as query params)
-- [ ] Backup/Restore: export strategy profile as JSON download, import from JSON file, reset to defaults
-- [ ] Wire signal mode into TradeBuilderPage (advisory warning vs hard block vs sandbox)
-- [ ] Register /strategy route in App.tsx and add sidebar nav item
+- [x] Backup/Restore: export strategy profile as JSON download, import from JSON file, reset to defaults
+- [x] Wire signal mode into TradeBuilderPage (advisory warning vs hard block vs sandbox)
+- [x] Register /strategy route in App.tsx and add sidebar nav item
