@@ -34,6 +34,10 @@ import {
   Activity,
   Clock,
   Target,
+  Briefcase,
+  ClipboardCheck,
+  Terminal,
+  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,6 +57,10 @@ import NotFound from "./pages/NotFound";
 import MorningBriefPage from "./pages/MorningBriefPage";
 import TradeBuilderPage from "./pages/TradeBuilderPage";
 import StrategyPage from "./pages/StrategyPage";
+import ActionCenterPage from "./pages/ActionCenterPage";
+import BuildCenterPage from "./pages/BuildCenterPage";
+import PortfolioCenterPage from "./pages/PortfolioCenterPage";
+import ApprovalsPage from "./pages/ApprovalsPage";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
@@ -71,6 +79,14 @@ const NAV_ITEMS = [
   { path: '/journal',       label: 'Journal',       icon: NotebookPen },
   { path: '/scripts',       label: 'Scripts',       icon: Zap },
   { path: '/settings',      label: 'Settings',      icon: Settings },
+];
+
+// ─── Cockpits group (separate from main nav) ─────────────────────────────────
+const COCKPIT_ITEMS = [
+  { path: '/action',    label: 'Action Center',    icon: Terminal },
+  { path: '/build',     label: 'Build Center',     icon: Briefcase },
+  { path: '/portfolio', label: 'Portfolio Center', icon: ClipboardCheck },
+  { path: '/approvals', label: 'Approvals',        icon: CheckSquare },
 ];
 
 // ─── Persistent Status Bar ────────────────────────────────────────────────────
@@ -344,8 +360,54 @@ function Sidebar() {
             </Link>
           );
         })}
+        {/* Cockpits group */}
+        <div style={{ borderTop: '1px solid oklch(1 0 0 / 8%)', marginTop: '4px', paddingTop: '4px' }}>
+          {expanded && (
+            <div style={{ padding: '4px 14px 2px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.08em', color: 'oklch(0.45 0.010 258)', textTransform: 'uppercase' }}>Cockpits</div>
+          )}
+          {COCKPIT_ITEMS.map(({ path, label, icon: Icon }) => {
+            const isActive = location.startsWith(path);
+            return (
+              <Link key={path} href={path}>
+                <div
+                  className={cn(
+                    'flex items-center transition-all duration-150 relative cursor-pointer',
+                    isActive
+                      ? 'text-[oklch(0.80_0.15_200)]'
+                      : 'text-[oklch(0.55_0.010_258)] hover:text-[oklch(0.85_0.005_258)] hover:bg-[oklch(1_0_0_/_5%)]'
+                  )}
+                  style={{
+                    height: '40px',
+                    padding: '0 14px',
+                    gap: '12px',
+                    ...(isActive ? {
+                      background: 'oklch(0.80 0.15 200 / 12%)',
+                      borderLeft: '2px solid oklch(0.80 0.15 200)',
+                      paddingLeft: '12px',
+                    } : {}),
+                  }}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <AnimatePresence>
+                    {expanded && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: 'auto' }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.12 }}
+                        className="text-sm whitespace-nowrap overflow-hidden"
+                        style={{ fontWeight: isActive ? 500 : 400 }}
+                      >
+                        {label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
-
       {/* Bottom: IBKR sync */}
       <div
         className="flex-shrink-0"
@@ -419,6 +481,10 @@ function Router() {
           <Route path="/scripts"      component={ScriptsPage} />
           <Route path="/strategy"     component={StrategyPage} />
           <Route path="/settings"     component={SettingsPage} />
+          <Route path="/action"       component={ActionCenterPage} />
+          <Route path="/build"        component={BuildCenterPage} />
+          <Route path="/portfolio"    component={PortfolioCenterPage} />
+          <Route path="/approvals"    component={ApprovalsPage} />
           <Route                      component={NotFound} />
         </Switch>
       </motion.div>
