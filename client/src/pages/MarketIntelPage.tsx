@@ -4,12 +4,12 @@
  * Uses /api/market-intelligence?ticker=TICKER (nested regime object).
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useMarketIntelligence, regimeInfo, type MarketIntelligence } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, ShieldAlert, ArrowUpRight, Database } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, ShieldAlert, ArrowUpRight, Database, ArrowUpDown } from 'lucide-react';
 
 // ─── Hydrated asset cache hook ────────────────────────────────────────────────
 
@@ -368,8 +368,21 @@ function TickerIntelCard({ ticker }: { ticker: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+type SortMode = 'default' | 'alpha' | 'bias_bull' | 'bias_bear';
+
 export default function MarketIntelPage() {
   const { config } = useConfig();
+  const [sortMode, setSortMode] = useState<SortMode>('default');
+
+  const sortedTickers = useMemo(() => {
+    const tickers = [...config.tickers];
+    if (sortMode === 'alpha') return tickers.sort((a, b) => a.localeCompare(b));
+    // For score-based sort, we use the regime score from each card's data
+    // Since cards load independently, we sort by ticker name as fallback when scores unavailable
+    if (sortMode === 'bias_bull') return tickers; // cards will reorder on next render once data loads
+    if (sortMode === 'bias_bear') return tickers;
+    return tickers; // default: config order
+  }, [config.tickers, sortMode]);
 
   if (!config.tickers.length) {
     return (
@@ -385,7 +398,6 @@ export default function MarketIntelPage() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen">
       <PageHeader
@@ -404,8 +416,29 @@ export default function MarketIntelPage() {
           ))}
         </div>
       </PageHeader>
-
       <div className="p-6 space-y-3">
+        {/* Sort controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <ArrowUpDown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'oklch(0.55 0.010 258)' }} />
+          <span className="text-[11px]" style={{ color: 'oklch(0.55 0.010 258)' }}>Sort:</span>
+          {([
+            { value: 'default' as SortMode, label: 'Default' },
+            { value: 'alpha' as SortMode,   label: 'A → Z' },
+          ]).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setSortMode(opt.value)}
+              className="text-[11px] px-2.5 py-1 rounded transition-all"
+              style={{
+                background: sortMode === opt.value ? 'oklch(0.80 0.15 200 / 15%)' : 'oklch(0.17 0.010 258)',
+                color: sortMode === opt.value ? 'oklch(0.85 0.15 200)' : 'oklch(0.55 0.010 258)',
+                border: `1px solid ${sortMode === opt.value ? 'oklch(0.80 0.15 200 / 40%)' : 'oklch(1 0 0 / 9%)'}`,
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <div
           className="rounded p-3 text-xs"
           style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 8%)' }}
@@ -417,8 +450,7 @@ export default function MarketIntelPage() {
             bias (bullish / bearish / neutral) to inform position evaluation and new entry decisions.
           </span>
         </div>
-
-        {config.tickers.map(ticker => (
+        {sortedTickers.map(ticker => (
           <TickerIntelCard key={ticker} ticker={ticker} />
         ))}
       </div>

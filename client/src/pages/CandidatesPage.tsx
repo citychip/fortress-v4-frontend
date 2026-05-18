@@ -242,6 +242,36 @@ function CandidateRowItem({
  *
  * Width: $15 for stocks ≥$200, $10 for stocks <$200.
  */
+
+// ─── Monitoring Row (non-actionable universe tickers) ─────────────────────────
+function MonitoringRow({ ticker }: { ticker: string }) {
+  const DIM = 'oklch(0.45 0.010 258)';
+  const MID = 'oklch(0.55 0.010 258)';
+  return (
+    <tr
+      className="border-b"
+      style={{ borderColor: 'oklch(1 0 0 / 5%)', opacity: 0.65 }}
+    >
+      <td className="px-4 py-2.5">
+        <span className="font-display text-xs font-bold" style={{ color: MID }}>{ticker}</span>
+      </td>
+      <td className="px-4 py-2.5">
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border"
+          style={{ color: DIM, borderColor: 'oklch(1 0 0 / 10%)', background: 'oklch(1 0 0 / 4%)' }}
+        >
+          monitoring
+        </span>
+      </td>
+      <td className="px-4 py-2.5 font-mono-data text-xs" style={{ color: DIM }}>—</td>
+      <td className="px-4 py-2.5 font-mono-data text-xs" style={{ color: DIM }}>—</td>
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: DIM }}>—</td>
+      <td className="px-4 py-2.5 text-center" style={{ color: DIM }}>—</td>
+      <td className="px-4 py-2.5 font-mono-data text-xs" style={{ color: DIM }}>—</td>
+    </tr>
+  );
+}
+
 function deriveStrikes(price: number, mi: MarketIntelligence | null): {
   shortStrike: number;
   longStrike: number;
@@ -583,6 +613,13 @@ export default function CandidatesPage({ embedded = false }: { embedded?: boolea
     [evaluated]
   );
 
+
+  // Universe tickers not in the API response (monitoring-only)
+  const monitoringTickers = useMemo(() => {
+    const inData = new Set(evaluated.map(c => c.ticker));
+    return config.tickers.filter(t => !inData.has(t));
+  }, [evaluated, config.tickers]);
+
   return (
     <div className="min-h-screen">
       <PageHeader
@@ -649,7 +686,7 @@ export default function CandidatesPage({ embedded = false }: { embedded?: boolea
         )}
 
         {/* Table */}
-        {!loading && filtered.length > 0 && (
+        {!loading && (filtered.length > 0 || (filterMode === 'all' && monitoringTickers.length > 0)) && (
           <div className="rounded border overflow-hidden" style={{ borderColor: 'oklch(1 0 0 / 9%)' }}>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -674,13 +711,27 @@ export default function CandidatesPage({ embedded = false }: { embedded?: boolea
                       pretradeResult={pretradeMap[c.ticker]}
                     />
                   ))}
+                  {/* Universe — Monitoring divider (All tab only) */}
+                  {filterMode === 'all' && monitoringTickers.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={7} className="px-4 py-2" style={{ background: 'oklch(0.14 0.010 258)', borderTop: '1px solid oklch(1 0 0 / 8%)', borderBottom: '1px solid oklch(1 0 0 / 8%)' }}>
+                          <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'oklch(0.45 0.010 258)' }}>
+                            Universe — Monitoring ({monitoringTickers.length})
+                          </span>
+                        </td>
+                      </tr>
+                      {monitoringTickers.map(t => (
+                        <MonitoringRow key={t} ticker={t} />
+                      ))}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         )}
-
-        {!loading && !error && filtered.length === 0 && config.apiToken && (
+        {!loading && !error && filtered.length === 0 && monitoringTickers.length === 0 && config.apiToken && (
           <EmptyState type="empty" title="No candidates match filter" description="Try changing the filter or refreshing the data." />
         )}
 

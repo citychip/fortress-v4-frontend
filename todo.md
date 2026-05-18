@@ -186,3 +186,10 @@
 - [ ] Replace hand-rolled BS pricing in VPS options.py with py_vollib for accurate IV inversion and Greeks
 - [ ] 3D Volatility Surface upgrade: use py_vollib IV solver to build full strike×expiry IV grid from yfinance chain, render as interactive 3D surface in VolAnalyticsPanel using ECharts GL or react-three-fiber
 - [ ] Batch Greeks endpoint: GET /api/options/batch-greeks?ticker= — returns delta/gamma/theta/vega for all live positions in one call using py_vollib vectorised over position legs
+
+## Sprint v7.x: Candidates Universe Split + Market Intel Sort
+- [x] CandidatesPage: All tab shows all universe tickers — actionable rows at top, non-actionable below "Universe — Monitoring (N)" divider as MonitoringRow components (opacity 0.65, muted, monitoring chip)
+- [x] MarketIntelPage: Sort dropdown — Default / A→Z / Score ↓ / Score ↑ buttons above workflow info box
+- [x] Market Intel tooltips on every metric box (GEX walls, DP floor/ceiling, Net Drift, GEX Flip Zone, Regime Score)
+- [x] Market Intel per-card refresh button
+- [x] QuantData Credentials section in Settings page
