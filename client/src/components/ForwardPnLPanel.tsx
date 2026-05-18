@@ -234,12 +234,12 @@ export default function ForwardPnLPanel({ ticker, legs }: Props) {
                   {fmt(data.target_pnl)}
                 </span>
               </div>
-              {data.breakevens.length > 0 && (
+              {(data.breakevens ?? []).filter((be): be is number => be != null).length > 0 && (
                 <div className="flex items-center gap-1 text-[10px]" style={{ color: DIM }}>
                   <span>BE:</span>
-                  {data.breakevens.map((be, i) => (
+                  {(data.breakevens ?? []).filter((be): be is number => be != null).map((be, i, arr) => (
                     <span key={i} className="font-mono-data" style={{ color: CYAN }}>
-                      ${be.toFixed(2)}{i < data.breakevens.length - 1 ? ' /' : ''}
+                      ${be.toFixed(2)}{i < arr.length - 1 ? ' /' : ''}
                     </span>
                   ))}
                 </div>
@@ -289,13 +289,13 @@ export default function ForwardPnLPanel({ ticker, legs }: Props) {
                     label={{ value: `$${targetPrice}`, position: 'top', fontSize: 9, fill: CYAN }}
                   />
                   {/* Breakeven lines */}
-                  {(data.breakevens ?? []).map((be, i) => (
+                  {(data.breakevens ?? []).filter((be): be is number => be != null).map((be, i) => (
                     <ReferenceLine
                       key={i}
                       x={be}
                       stroke={AMBER}
                       strokeDasharray="3 3"
-                      label={{ value: `BE $${be}`, position: 'insideTopLeft', fontSize: 8, fill: AMBER }}
+                      label={{ value: `BE $${be.toFixed(2)}`, position: 'insideTopLeft', fontSize: 8, fill: AMBER }}
                     />
                   ))}
                   <Line

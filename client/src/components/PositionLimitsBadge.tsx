@@ -62,8 +62,9 @@ export default function PositionLimitsBadge({ ticker, legs }: Props) {
   const { max_profit, max_loss, net_premium, breakevens } = data;
 
   // Warn if spot is within 2% of any breakeven
-  const nearBreakeven = data.spot
-    ? breakevens.some(be => Math.abs((data.spot - be) / be) < 0.02)
+  const safeBreakevens = (breakevens ?? []).filter((be): be is number => be != null);
+  const nearBreakeven = data.spot && safeBreakevens.length > 0
+    ? safeBreakevens.some(be => Math.abs((data.spot - be) / be) < 0.02)
     : false;
 
   return (
@@ -114,7 +115,7 @@ export default function PositionLimitsBadge({ ticker, legs }: Props) {
       </div>
 
       {/* Breakevens */}
-      {breakevens.length > 0 && (
+      {safeBreakevens.length > 0 && (
         <>
           <span style={{ color: DIM }}>·</span>
           <div className="flex items-center gap-1">
@@ -122,15 +123,15 @@ export default function PositionLimitsBadge({ ticker, legs }: Props) {
               <AlertTriangle className="w-3 h-3" style={{ color: AMBER }} />
             )}
             <span className="text-[10px]" style={{ color: nearBreakeven ? AMBER : DIM }}>
-              BE{breakevens.length > 1 ? 's' : ''}
+              BE{safeBreakevens.length > 1 ? 's' : ''}
             </span>
-            {breakevens.map((be, i) => (
+            {safeBreakevens.map((be, i) => (
               <span
                 key={i}
                 className="font-mono-data text-[11px] font-semibold"
                 style={{ color: nearBreakeven ? AMBER : CYAN }}
               >
-                ${be.toFixed(2)}{i < breakevens.length - 1 ? ' /' : ''}
+                ${be.toFixed(2)}{i < safeBreakevens.length - 1 ? ' /' : ''}
               </span>
             ))}
             {nearBreakeven && (
