@@ -21,6 +21,7 @@ export interface BriefingAccount {
   unrealized_pnl: number | null;
   currency: string;
   fx_rate_eur_usd: number;
+  net_liquidation_value?: number;
   eur_equivalent: {
     net_liq: number;
     excess_liq: number;
@@ -47,6 +48,9 @@ export interface BriefingGreeks {
   delta_bias: string;
   positions_with_greeks: number;
   positions_total: number;
+  net_delta?: number;
+  beta_weighted_delta?: number;
+  theta_efficiency?: number;
 }
 
 export interface BriefingConcentration {
@@ -72,6 +76,8 @@ export interface BriefingData {
   concentration: BriefingConcentration;
   greeks: BriefingGreeks;
   actions: unknown[];
+  hedge?: { coverage_pct?: number; target_min_pct?: number; target_max_pct?: number; coverage_ok?: boolean; spy_hedge_pct?: number };
+  earnings_risk?: { tickers?: string[]; count?: number; risk_level?: string } | string;
 }
 
 // ─── /api/positions ───────────────────────────────────────────────────────────
@@ -107,6 +113,11 @@ export interface Position {
   current_vega?: number;
   current_iv?: number;
   current_mark?: number;
+  description?: string;
+  net_delta?: number;
+  dte?: number;
+  daily_pnl?: number | null;
+  unrealized_pnl?: number | null;
 }
 
 export interface PositionsResponse {
@@ -390,6 +401,16 @@ export interface EarningsEntry {
 export interface CalendarResponse {
   as_of: string;
   tickers: Record<string, EarningsEntry>;
+  // PortfolioCenterPage uses calendar as an array
+  calendar?: {
+    ticker?: string;
+    report_date?: string;
+    time?: string;
+    eps_estimate?: number | null;
+    eps_prior?: number | null;
+    revenue_estimate?: number | null;
+    in_portfolio?: boolean;
+  }[];
 }
 
 // ─── /api/calendar/{ticker}/history ─────────────────────────────────────────
@@ -481,6 +502,11 @@ export interface JournalEntry {
   created_at: string;
   realized_pnl?: number | null;
   tags?: string[];
+  // PortfolioCenterPage alias fields
+  outcome?: 'win' | 'loss' | 'breakeven' | string;
+  date?: string;
+  notes?: string;
+  pnl?: number | null;
 }
 
 export interface JournalMetrics {
@@ -488,6 +514,11 @@ export interface JournalMetrics {
   closed_positions_30d: number;
   pcs_hit_rate_pct: number | null;
   framework_violations_30d: number;
+  // PortfolioCenterPage alias fields
+  total_trades?: number;
+  win_rate?: number;
+  avg_win?: number;
+  avg_loss?: number;
 }
 
 export interface JournalResponse {
@@ -597,6 +628,13 @@ export interface OrderFlowResponse {
   net_delta: number;
   buy_pct: number;
   sell_pct: number;
+  call_premium_m?: number;
+  put_premium_m?: number;
+  call_pct?: number;
+  put_pct?: number;
+  net_bias?: number;
+  bias?: string;
+  volume_rank?: number;
 }
 
 // ─── /api/universe ────────────────────────────────────────────────────────────
@@ -672,6 +710,7 @@ export interface PnLDataPoint {
   unrealised: number;
   total: number;
   cumulative?: number;
+  pnl?: number | null;
 }
 
 export interface PnLByTicker {
@@ -680,6 +719,7 @@ export interface PnLByTicker {
   unrealised: number;
   total: number;
   pct_of_net_liq?: number;
+  pnl?: number | null;
 }
 
 export interface PnLByStrategy {
@@ -701,6 +741,15 @@ export interface PnLSummary {
   worst_day?: PnLDataPoint;
   win_rate?: number;
   last_updated?: string;
+  // Alias fields used by PortfolioCenterPage
+  summary?: {
+    total_pnl?: number;
+    realized_pnl?: number;
+    unrealized_pnl?: number;
+    win_rate?: number;
+    total_trades?: number;
+    avg_trade?: number;
+  };
 }
 
 // ─── Core fetch helper ────────────────────────────────────────────────────────
@@ -1300,4 +1349,121 @@ export function regimeInfo(regime: string): { label: string; color: 'red' | 'amb
   if (r.includes('mildly_bullish') || r.includes('mildly bullish')) return { label: 'Mildly Bullish', color: 'green' };
   if (r.includes('bullish')) return { label: 'Bullish', color: 'green' };
   return { label: regime, color: 'amber' };
+}
+
+// ─── /api/orders/pending ─────────────────────────────────────────────────────
+
+export interface OrderLeg {
+  ticker:    string;
+  sec_type:  string;
+  right?:    string;
+  strike?:   number;
+  expiry?:   string;
+  action:    string;
+  ratio:     number;
+  exchange:  string;
+  conid?:    number;
+}
+
+export interface PendingOrder {
+  id:          string;
+  ticker:      string;
+  strategy:    string;
+  legs:        OrderLeg[];
+  order_type:  string;
+  action:      string;
+  quantity:    number;
+  limit_price?: number;
+  tif:         string;
+  notes?:      string;
+  submitted_by: string;
+  pop?:        number;
+  max_profit?: number;
+  max_loss?:   number;
+  status:      'pending' | 'approved' | 'declined' | 'submitted' | 'failed';
+  created_at:  string;
+  submitted_at?: string;
+  declined_at?:  string;
+  whatif_result?: Record<string, unknown>;
+  ibkr_order_id?: string;
+  ibkr_response?: unknown;
+  error?:      string;
+}
+
+export interface PendingOrdersResponse {
+  orders: PendingOrder[];
+}
+
+export interface PendingOrderCreate {
+  ticker:       string;
+  strategy?:    string;
+  legs:         OrderLeg[];
+  order_type:   string;
+  action:       string;
+  quantity:     number;
+  limit_price?: number;
+  tif?:         string;
+  notes?:       string;
+  submitted_by?: string;
+  pop?:         number;
+  max_profit?:  number;
+  max_loss?:    number;
+}
+
+export function usePendingOrders(statusFilter?: string) {
+  const path = statusFilter
+    ? `/api/orders/pending?status=${statusFilter}`
+    : '/api/orders/pending';
+  return useApiData<PendingOrdersResponse>(path);
+}
+
+export function usePendingOrderActions() {
+  const { config } = useConfig();
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+
+  const submitOrder = useCallback(async (order: PendingOrderCreate): Promise<PendingOrder> => {
+    setLoading(true); setError(null);
+    try {
+      return await apiFetch<PendingOrder>(config.apiUrl, config.apiToken, '/api/orders/pending', {
+        method: 'POST',
+        body: JSON.stringify(order),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to submit order';
+      setError(msg); throw err;
+    } finally { setLoading(false); }
+  }, [config.apiUrl, config.apiToken]);
+
+  const declineOrder = useCallback(async (orderId: string): Promise<void> => {
+    setLoading(true); setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/orders/pending/${orderId}`, { method: 'DELETE' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to decline order';
+      setError(msg); throw err;
+    } finally { setLoading(false); }
+  }, [config.apiUrl, config.apiToken]);
+
+  const previewOrder = useCallback(async (orderId: string): Promise<{ order_id: string; whatif: Record<string, unknown> }> => {
+    setLoading(true); setError(null);
+    try {
+      return await apiFetch(config.apiUrl, config.apiToken, `/api/orders/pending/${orderId}/preview`, { method: 'POST' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to preview order';
+      setError(msg); throw err;
+    } finally { setLoading(false); }
+  }, [config.apiUrl, config.apiToken]);
+
+  const approveOrder = useCallback(async (orderId: string): Promise<{ id: string; status: string; ibkr_order_id?: string }> => {
+    setLoading(true); setError(null);
+    try {
+      return await apiFetch(config.apiUrl, config.apiToken, `/api/orders/pending/${orderId}/approve`, { method: 'POST' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to approve order';
+      setError(msg); throw err;
+    } finally { setLoading(false); }
+  }, [config.apiUrl, config.apiToken]);
+
+  return { submitOrder, declineOrder, previewOrder, approveOrder, loading, error };
 }
