@@ -1,6 +1,6 @@
 # Fortress Dashboard — Implementation Status
 
-**Snapshot:** May 18, 2026 | **Strategy:** v3.7 | **Dashboard:** Fortress V3 (React/tRPC) | **Build Spec:** v2.0
+**Snapshot:** May 23, 2026 | **Strategy:** v3.7 | **Dashboard:** Fortress V3 (React/tRPC) | **Build Spec:** v2.0
 
 ---
 
@@ -16,6 +16,11 @@
 | MCP server | ✅ Live | v1.2 | 29 tools. Installed in Claude Desktop. Repo: `citychip/fortress-mcp`. |
 | Market Intelligence endpoint | ✅ Live | — | `/api/market-intelligence` — GEX, DP floors, Net Drift, regime score. |
 | Market Intelligence UI | ✅ Live | Sprint v7.1 | Sort dropdown (Score/Bias/Alpha), per-card refresh, metric tooltips. |
+| Monitoring Page | ✅ Live | Sprint v8.0 | 5 check categories (IBKR, QuantData, Backend, Data, Config). Client-side checks — no server load. Manual "Run Checks" trigger. |
+| Dashboard — Morning Freshness | ✅ Live | Sprint v8.1 | Green/grey dot + "Last run Xm ago" indicator on Morning Workflow panel. Powered by `/api/run/results`. |
+| Scripts — Cached Run Badges | ✅ Live | Sprint v8.1 | Each script card shows last exit code, duration, and time since last run. "Last Output" panel shows cached stdout. |
+| MSFT Dedicated DP Page | ✅ Live | Sprint v8.1 | MSFT Dark Pool fetched from dedicated page `2ef8b3c4` (widget `1d0411cd`). GEX/drift still use system pages. |
+| `_load_page_registry()` | ✅ Live | Sprint v8.1 | Auto-discovers widget IDs from QuantData `/api/pages` with 24h cache. Eliminates hardcoded widget drift. |
 | Candidates All-tab | ✅ Live | Sprint v7.0 | Full 19-ticker universe. Actionable at top; monitoring below divider. |
 | Candidates fallback | ✅ Live | Sprint v7.1 | All 19 tickers shown even when API returns 0 rows (placeholder rows). |
 | Settings — QuantData Credentials | ✅ Live | Sprint v7.1 | Update `auth_token` + `cookie` from the Settings tab. No SSH required. |
@@ -51,6 +56,9 @@
 | O-03 | `chart.py` used deprecated `tool/OPTIONS_*` QuantData endpoints (400 errors, account revocation risk) | Fixed — replaced with widget-UUID REST endpoints matching `market_intelligence.py` pattern |
 | O-04 | Market Intel page crashed with `TypeError: Cannot read properties of null (reading 'toFixed')` | Fixed — null guard on `current_price` |
 | O-05 | Market Intel had no sort, no per-card refresh, no metric explanations | Fixed — sort dropdown, per-card refresh button, and hover tooltips added |
+| O-06 | MonitoringPage used `trpc.monitoring.runChecks` — hammered server on every page open | Fixed — rewritten as client-side fetch checks; manual trigger only |
+| O-07 | MSFT Dark Pool returned empty floors — system DP widget was not filtered to MSFT correctly | Fixed — MSFT now uses dedicated page `2ef8b3c4` with its own DP widget `1d0411cd` |
+| O-08 | QuantData widget IDs hardcoded — any page restructure on QD side silently breaks data | Fixed — `_load_page_registry()` auto-discovers IDs from `/api/pages` with 24h cache |
 
 ---
 
@@ -70,6 +78,8 @@
 
 | Date | Version | Summary |
 |---|---|---|
+| 2026-05-23 | Sprint v8.1 | MSFT dedicated DP page. `_load_page_registry()` auto-discovery. Morning freshness indicator. Cached run badges. MonitoringPage client-side rewrite. |
+| 2026-05-19 | Sprint v8.0 | Monitoring regression dashboard. 5 check categories. Config→Monitor tab. |
 | 2026-05-18 | Sprint v7.1 | Market Intel tooltips/refresh/sort. Candidates fallback. QuantData credentials UI. chart.py fix. |
 | 2026-05-17 | Sprint v7.0 | Candidates All-tab redesign: actionable at top, monitoring below divider. |
 | 2026-05-15 | Sprint v6.x | Market Intel null crash fix. IV Crush workflow debugging. |

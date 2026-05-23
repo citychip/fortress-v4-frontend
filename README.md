@@ -7,7 +7,7 @@
 **React 19 · FastAPI · QuantData MCP · IBKR Web API**
 
 [![Strategy](https://img.shields.io/badge/Strategy-v3.7-00d4aa?style=flat-square)](docs/Portfolio_Strategy_v3_7.md)
-[![Sprint](https://img.shields.io/badge/Sprint-v7.1-6366f1?style=flat-square)](#changelog)
+[![Sprint](https://img.shields.io/badge/Sprint-v8.1-6366f1?style=flat-square)](#changelog)
 [![Stack](https://img.shields.io/badge/Stack-React_19_%2B_FastAPI-0ea5e9?style=flat-square)](#tech-stack)
 [![Live](https://img.shields.io/badge/Live-76.13.138.194%3A3000-22c55e?style=flat-square)](http://76.13.138.194:3000)
 [![MCP](https://img.shields.io/badge/MCP-29_tools-f59e0b?style=flat-square)](https://github.com/citychip/fortress-mcp)
@@ -72,7 +72,7 @@ Every morning, a premium-selling options trader faces the same 50-minute grind:
 
 | Page | What You See |
 |---|---|
-| **Dashboard** | Portfolio briefing · Account metrics · Concentration alerts · Delta bias · Priority action list |
+| **Dashboard** | Portfolio briefing · Account metrics · Concentration alerts · Delta bias · Priority action list · Morning workflow freshness indicator |
 | **Market Intel** | Per-ticker cards: GEX walls, DP floors, Net Drift, regime score · Sort by score/bias/alpha · Per-card refresh · Metric tooltips |
 | **Trade → Candidates** | IV Rank Heatmap (19 tickers) · Actionable signals at top · Monitoring universe below divider |
 | **Analysis** | Chart with DP floor and GEX level overlays · Order flow panel · Vol analytics |
@@ -80,6 +80,7 @@ Every morning, a premium-selling options trader faces the same 50-minute grind:
 | **Performance** | Unrealised P&L · Trade journal with auto-suggest from IBKR sync |
 | **Earnings** | Calendar with countdown timers · CRUD · Outlook Calendar sync |
 | **Settings** | Strategy config · QuantData credentials manager · Alert thresholds · Security toggles |
+| **Monitoring** | System health dashboard — 5 check categories (IBKR, QuantData, Backend, Data, Config) · Client-side checks, no server load |
 
 ---
 
@@ -234,6 +235,8 @@ Full documentation is in `docs/` on the VPS. Key files:
 
 | Sprint | Date | Highlights |
 |---|---|---|
+| **v8.1** | May 23, 2026 | MSFT dedicated QuantData page (`2ef8b3c4`) for Dark Pool data. `_load_page_registry()` auto-discovery with 24h cache. Morning workflow freshness indicator on Dashboard. Cached run badges with Last Output panel on Scripts page. MonitoringPage rewritten as client-side checks. |
+| **v8.0** | May 19, 2026 | Monitoring regression dashboard — 5 check categories, Config→Monitor tab. |
 | **v7.1** | May 18, 2026 | Market Intel: sort dropdown, per-card refresh, metric tooltips. Candidates All-tab frontend fallback. QuantData credentials manager in Settings. `chart.py` invalid tool ID fix (no more 400 errors). |
 | **v7.0** | May 17, 2026 | Candidates All-tab redesign: full 19-ticker universe. Actionable signals at top; monitoring universe below divider. |
 | **v6.x** | May 15, 2026 | Market Intel null crash fix (`current_price`). IV Crush workflow debugging. |
@@ -253,6 +256,6 @@ The bearer token is **never stored in source code or committed to this repositor
 
 *"The edge isn't the data. The edge is the system."*
 
-**Fortress V3 · Sprint v7.1 · May 2026**
+**Fortress V3 · Sprint v8.1 · May 2026**
 
 </div>

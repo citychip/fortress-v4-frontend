@@ -1,10 +1,10 @@
 # Market Intelligence Skill
 
-**Version:** 1.1 | **Updated:** May 18, 2026
+**Version:** 1.2 | **Updated:** May 23, 2026
 
 The Market Intelligence Skill is an agentic workflow that synthesises live options order flow data (Gamma Exposure, Dark Pools, Net Drift) with active portfolio constraints from the Fortress Dashboard. It produces actionable, high-probability trading decisions that respect the rules of Strategy v3.7.
 
-**v1.1 changes from v1.0:** Sprint v7.1 UI enhancements documented — sort dropdown, per-card refresh button, and metric tooltips. QuantData API now uses widget-UUID REST endpoints (deprecated `tool/OPTIONS_*` calls removed from `chart.py`). QuantData credential refresh via Settings UI documented.
+**v1.2 changes from v1.1:** MSFT dedicated QuantData page documented. Widget registry table updated with all per-ticker and system widget IDs. `_load_page_registry()` auto-discovery mechanism documented. Mixed-page ticker pattern (dedicated DP + system GEX/drift) explained.
 
 ---
 
@@ -109,12 +109,33 @@ The MCP tool is powered by a dedicated endpoint on the Fortress Dashboard. This 
 
 | Data | Endpoint Pattern |
 |---|---|
-| GEX by strike (call/put walls) | `GET /api/options/exposure/strike/{widget_uuid}?ticker={ticker}` |
-| Dark Pool levels | `GET /api/equities/dark-pool/levels/{widget_uuid}?ticker={ticker}` |
-| Net Drift | `GET /api/options/net-drift/{widget_uuid}?ticker={ticker}` |
+| GEX by strike (call/put walls) | `GET /api/options/exposure/strike/{widget_uuid}` |
+| Dark Pool levels | `GET /api/equities/dark-pool/levels/{widget_uuid}` |
+| Net Drift | `GET /api/options/net-drift/{widget_uuid}` |
 | Order flow | `GET /api/options/order-flow/consolidated?ticker={ticker}` |
 
 > **Note:** The deprecated `tool/OPTIONS_GEX_WALLS_TABLE`, `tool/OPTIONS_DARK_POOL_LEVELS_TABLE`, and `tool/OPTIONS_ORDER_FLOW_CONSOLIDATED_TABLE` endpoints were removed in Sprint v7.1. Do not use them — they return 400 errors and caused account revocation.
+
+### Widget Registry (Sprint v8.1)
+
+Each QuantData widget is addressed by a UUID that is tied to a specific page in the QuantData UI. The backend maintains a registry (`_WIDGET_IDS` in `market_intelligence.py`) mapping tickers to their widget UUIDs. As of Sprint v8.1, the registry is as follows:
+
+| Ticker | Page | GEX Widget | DP Widget | Net Drift Widget | Notes |
+|---|---|---|---|---|---|
+| **SPY** | SPY Dashboard | `0dda93ba` | `7b2707f2` | `cf9f3e83` | Dedicated page |
+| **SPX** | SPX Dashboard | `0dda93ba` | `7b2707f2` | `cf9f3e83` | Dedicated page |
+| **QQQ** | QQQ Dashboard | `0dda93ba` | `0e3e3809` | `c36dd60c` | Dedicated page |
+| **NVDA** | NVDA Dashboard | `0dda93ba` | `7b2707f2` | `cf9f3e83` | Dedicated page |
+| **MSFT** | Microsoft page (`2ef8b3c4`) | System EXPOSURE | `1d0411cd` | System FLOW | Mixed-page: DP from dedicated page; GEX/drift from system pages |
+| **All others** | System pages | `465c0bd0` (EXPOSURE) | `a2c2f3f9` (DARK_POOL) | `de8c5cf5` (FLOW_ANALYSIS) | Global filter set to requested ticker before each fetch |
+
+> **Mixed-page tickers (MSFT):** MSFT has a dedicated QuantData page with its own Dark Pool widget, but no GEX or Net Drift widgets. The backend fetches DP from the dedicated page and GEX/drift from the system pages, acquiring the system lock to prevent global-filter race conditions.
+
+### Widget Auto-Discovery (`_load_page_registry()`)
+
+Introduced in Sprint v8.1, `_load_page_registry()` queries the QuantData `/api/pages` endpoint on startup and caches the full widget map for 24 hours. This ensures that if QuantData restructures a page or adds new widgets, the backend picks up the changes automatically without requiring a code change.
+
+The function uses `_walk_layout()` to traverse the nested page layout tree, matching widgets by their `component` field (not `type`, which was the pre-v8.1 bug that caused empty widget maps). The cached registry is used as a fallback when a ticker is not found in the hardcoded `_WIDGET_IDS` map.
 
 ### Regime Synthesis Scoring
 
@@ -170,6 +191,7 @@ To trade successfully using this skill, incorporate it into your daily routine:
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.2 | 2026-05-23 | MSFT dedicated page (`2ef8b3c4`) documented. Full widget registry table added. `_load_page_registry()` auto-discovery and `_walk_layout()` helper documented. Mixed-page ticker pattern explained. |
 | 1.1 | 2026-05-18 | Sprint v7.1 UI enhancements: sort dropdown, per-card refresh, metric tooltips. QuantData widget-UUID endpoint table. Deprecated tool IDs warning. Credential refresh via Settings UI. |
 | 1.0 | 2026-05-13 | Initial release. |
 
