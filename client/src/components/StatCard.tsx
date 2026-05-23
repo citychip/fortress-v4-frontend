@@ -16,6 +16,7 @@ interface StatCardProps {
   signal?: SignalColor;
   className?: string;
   loading?: boolean;
+  footer?: React.ReactNode;
 }
 
 const signalStyles: Record<SignalColor, { text: string; border: string; bg: string }> = {
@@ -46,7 +47,7 @@ const signalStyles: Record<SignalColor, { text: string; border: string; bg: stri
   },
 };
 
-export function StatCard({ label, value, subValue, trend, signal = 'default', className, loading }: StatCardProps) {
+export function StatCard({ label, value, subValue, trend, signal = 'default', className, loading, footer }: StatCardProps) {
   const styles = signalStyles[signal];
 
   return (
@@ -83,6 +84,8 @@ export function StatCard({ label, value, subValue, trend, signal = 'default', cl
           {subValue}
         </div>
       )}
+
+      {footer && <div className="mt-1">{footer}</div>}
     </div>
   );
 }

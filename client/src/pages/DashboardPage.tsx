@@ -9,7 +9,7 @@ import { useLocation } from 'wouter';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
   useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
-  useMarketIntelligence, useCandidates,
+  useMarketIntelligence, useCandidates, useRunResults,
   formatDollar, regimeInfo,
   type BriefingData, type TradeReport, type TradeReportRollCandidate, type TradeReportPostEarningsCandidate,
 } from '@/hooks/useApi';
@@ -995,7 +995,29 @@ function SendBriefingModal({
 export default function DashboardPage() {
   const { data, loading, refresh } = useBriefing();
   const { data: tradeReportData } = useTradeReport();
+  const { data: runResultsData } = useRunResults();
   const [showBriefingModal, setShowBriefingModal] = useState(false);
+
+  const morningKeys = ['premarket_scanner', 'iv_crush_report', 'max_pain', 'entry_scoring', 'gex_oi_report'];
+  const lastMorningRun = morningKeys
+    .map(k => runResultsData?.results?.[k]?.finished_at)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const morningRanToday = lastMorningRun
+    ? new Date(lastMorningRun).toDateString() === new Date().toDateString()
+    : false;
+
+  function timeAgo(ts: string): string {
+    try {
+      const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+      if (diff < 1) return 'just now';
+      if (diff < 60) return `${diff}m ago`;
+      const h = Math.floor(diff / 60);
+      if (h < 24) return `${h}h ago`;
+      return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch { return '--'; }
+  }
   return (
     <div className="min-h-screen">
       <PageHeader
@@ -1014,7 +1036,15 @@ export default function DashboardPage() {
         <div className="rounded p-4 flex items-center justify-between" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 9%)' }}>
           <div>
             <h2 className="font-display text-sm" style={{ color: BRIGHT }}>Morning Workflow</h2>
-            <p className="text-xs mt-0.5" style={{ color: DIM }}>Trade scan, candidates, and order recommendations</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs" style={{ color: DIM }}>Trade scan, candidates, and order recommendations</p>
+              <span className="w-1.5 h-1.5 rounded-full inline-block"
+                style={{ background: morningRanToday ? GREEN : 'oklch(0.40 0.010 258)' }} />
+              <span className="text-[10px] font-mono-data"
+                style={{ color: morningRanToday ? GREEN : 'oklch(0.45 0.010 258)' }}>
+                {lastMorningRun ? `Last run ${timeAgo(lastMorningRun)}` : 'Not run today'}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button

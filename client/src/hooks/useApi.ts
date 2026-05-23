@@ -1601,3 +1601,38 @@ export function useForwardPnL(
 
   return { data, loading, error, refresh: fetchData };
 }
+
+// ─── Run Results (script history cache) ──────────────────────────────────────
+
+export interface CachedRunResult {
+  exit_code: number;
+  duration_seconds: number;
+  stdout: string;
+  finished_at: string;
+}
+
+export interface RunResultsResponse {
+  results: Record<string, CachedRunResult>;
+  last_updated: string;
+}
+
+export function useRunResults() {
+  const { config } = useConfig();
+  const [data, setData] = useState<RunResultsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(() => {
+    if (!config.apiUrl || !config.apiToken) return;
+    setLoading(true);
+    setError(null);
+    apiFetch(config.apiUrl, config.apiToken, '/api/run/results')
+      .then(d => setData(d as RunResultsResponse))
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load run results'))
+      .finally(() => setLoading(false));
+  }, [config.apiUrl, config.apiToken]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  return { data, loading, error, refresh: fetchData };
+}

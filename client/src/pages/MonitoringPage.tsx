@@ -1,11 +1,11 @@
 /**
  * FORTRESS V3 — Monitoring Page
- * Automated regression dashboard: runs all checks against the live VPS
- * and displays pass/fail status per category.
+ * Automated regression dashboard: runs all checks client-side via direct fetch.
+ * No tRPC dependency — all checks run as browser fetch() calls against VPS_BASE.
+ * Fixes "Failed to run checks" error caused by VPS nginx routing /api/* to Python backend.
  */
 
-import { useState } from 'react';
-import { trpc } from '@/lib/trpc';
+import { useState, useCallback } from 'react';
 import {
   CheckCircle, XCircle, AlertTriangle, Minus,
   RefreshCw, Clock, Server, Layers, Zap, Navigation, Package,
@@ -23,106 +23,13 @@ const BG     = 'oklch(0.14 0.010 258)';
 const CARD   = 'oklch(0.17 0.010 258)';
 const BORDER = 'oklch(1 0 0 / 9%)';
 
+// ─── VPS base URL ─────────────────────────────────────────────────────────────
+
+const VPS_BASE = 'http://76.13.138.194:3000';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type CheckStatus = 'pass' | 'fail' | 'warn' | 'skip';
-
-// ─── Status helpers ───────────────────────────────────────────────────────────
-
-function statusColor(s: CheckStatus): string {
-  return s === 'pass' ? GREEN : s === 'fail' ? RED : s === 'warn' ? AMBER : DIM;
-}
-
-function StatusIcon({ status, size = 14 }: { status: CheckStatus; size?: number }) {
-  const color = statusColor(status);
-  const cls = `flex-shrink-0`;
-  if (status === 'pass') return <CheckCircle  className={cls} style={{ width: size, height: size, color }} />;
-  if (status === 'fail') return <XCircle      className={cls} style={{ width: size, height: size, color }} />;
-  if (status === 'warn') return <AlertTriangle className={cls} style={{ width: size, height: size, color }} />;
-  return                        <Minus         className={cls} style={{ width: size, height: size, color }} />;
-}
-
-function StatusPill({ status }: { status: CheckStatus }) {
-  const color = statusColor(status);
-  const label = status.toUpperCase();
-  return (
-    <span
-      className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider"
-      style={{ color, background: `${color}18`, border: `1px solid ${color}35` }}
-    >
-      {label}
-    </span>
-  );
-}
-
-// ─── Category icon map ────────────────────────────────────────────────────────
-
-const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  deployment:     Package,
-  backend:        Server,
-  navigation:     Navigation,
-  features:       Zap,
-  infrastructure: Layers,
-};
-
-// ─── Summary bar ─────────────────────────────────────────────────────────────
-
-function SummaryBar({ total, passed, failed, warned }: { total: number; passed: number; failed: number; warned: number }) {
-  const health = failed === 0 ? (warned === 0 ? 'ALL CLEAR' : 'WARNINGS') : 'DEGRADED';
-  const healthColor = failed === 0 ? (warned === 0 ? GREEN : AMBER) : RED;
-
-  return (
-    <div
-      className="flex items-center gap-6 px-5 py-4 rounded"
-      style={{ background: CARD, border: `1px solid ${BORDER}` }}
-    >
-      {/* Overall health */}
-      <div className="flex items-center gap-2">
-        <div
-          className="w-2.5 h-2.5 rounded-full"
-          style={{ background: healthColor, boxShadow: `0 0 8px ${healthColor}` }}
-        />
-        <span className="font-mono text-sm font-bold" style={{ color: healthColor }}>{health}</span>
-      </div>
-
-      <div className="w-px h-6" style={{ background: BORDER }} />
-
-      {/* Counts */}
-      <div className="flex items-center gap-4">
-        {[
-          { label: 'Passed',   count: passed,        color: GREEN },
-          { label: 'Failed',   count: failed,        color: RED },
-          { label: 'Warnings', count: warned,        color: AMBER },
-          { label: 'Total',    count: total,         color: DIM },
-        ].map(({ label, count, color }) => (
-          <div key={label} className="text-center">
-            <div className="font-display font-bold text-xl leading-none" style={{ color }}>{count}</div>
-            <div className="text-[9px] uppercase tracking-wide mt-0.5" style={{ color: DIM }}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Pass rate bar */}
-      <div className="flex-1 ml-2">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-mono" style={{ color: DIM }}>Pass rate</span>
-          <span className="text-[10px] font-mono font-bold" style={{ color: BRIGHT }}>
-            {total > 0 ? Math.round((passed / total) * 100) : 0}%
-          </span>
-        </div>
-        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'oklch(1 0 0 / 8%)' }}>
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{
-              width: total > 0 ? `${(passed / total) * 100}%` : '0%',
-              background: failed > 0 ? RED : warned > 0 ? AMBER : GREEN,
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Category card ────────────────────────────────────────────────────────────
 
 interface CheckResult {
   id: string;
@@ -138,6 +45,319 @@ interface CheckCategory {
   checks: CheckResult[];
 }
 
+interface CheckReport {
+  categories: CheckCategory[];
+  total: number;
+  passed: number;
+  failed: number;
+  warned: number;
+  startedAt: number;
+}
+
+// ─── Fetch helper ─────────────────────────────────────────────────────────────
+
+async function fetchCheck(url: string, timeout = 8000): Promise<{ ok: boolean; status: number; body: string; ms: number }> {
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const res = await fetch(url, { signal: controller.signal, mode: 'cors', cache: 'no-store' });
+    clearTimeout(timer);
+    const body = await res.text();
+    return { ok: res.ok, status: res.status, body, ms: Date.now() - start };
+  } catch (err) {
+    return { ok: false, status: 0, body: err instanceof Error ? err.message : String(err), ms: Date.now() - start };
+  }
+}
+
+const pass = (id: string, label: string, detail: string, ms?: number): CheckResult => ({ id, label, status: 'pass', detail, ms });
+const fail = (id: string, label: string, detail: string, ms?: number): CheckResult => ({ id, label, status: 'fail', detail, ms });
+const warn = (id: string, label: string, detail: string, ms?: number): CheckResult => ({ id, label, status: 'warn', detail, ms });
+
+// ─── Check categories ─────────────────────────────────────────────────────────
+
+async function checkDeployment(): Promise<CheckResult[]> {
+  const checks: CheckResult[] = [];
+
+  const r = await fetchCheck(`${VPS_BASE}/`);
+  if (!r.ok && r.status !== 0) { checks.push(fail('deploy_reachable', 'VPS reachable', `HTTP ${r.status}`, r.ms)); return checks; }
+  if (r.status === 0) { checks.push(fail('deploy_reachable', 'VPS reachable', `Network error: ${r.body.slice(0, 80)}`, r.ms)); return checks; }
+  checks.push(pass('deploy_reachable', 'VPS reachable', `HTTP 200 in ${r.ms}ms`, r.ms));
+
+  const bundleMatch = r.body.match(/index-([A-Za-z0-9_]+)\.js/);
+  const bundleFile = bundleMatch ? bundleMatch[0] : null;
+  if (!bundleFile) { checks.push(fail('deploy_bundle_ref', 'index.html references bundle', 'No index-*.js found in HTML')); return checks; }
+  checks.push(pass('deploy_bundle_ref', 'index.html references bundle', bundleFile));
+
+  const br = await fetchCheck(`${VPS_BASE}/assets/${bundleFile}`);
+  if (!br.ok) { checks.push(fail('deploy_bundle_served', 'Bundle file served', `HTTP ${br.status}`)); return checks; }
+  checks.push(pass('deploy_bundle_served', 'Bundle file served', `${Math.round(br.body.length / 1024)}KB in ${br.ms}ms`, br.ms));
+
+  const bundle = br.body;
+  const featureChecks: [string, string, string, boolean][] = [
+    ['deploy_feat_sort',        'Sort dropdown present',          '"Sort:"',                    true],
+    ['deploy_feat_monitoring',  'Monitoring row split present',   '"monitoring"',               true],
+    ['deploy_feat_quantdata',   'QuantData Credentials section',  '"QuantData Credentials"',    true],
+    ['deploy_feat_quantdata_url','QuantData URL uses underscore', 'quantdata_credentials',      true],
+    ['deploy_feat_8nav',        '8-tab nav: /performance route',  '"/performance"',             true],
+    ['deploy_feat_no_cockpits', 'Cockpits section removed',       'COCKPITS',                   false],
+    ['deploy_feat_scripts_card','Scripts QuickNav card',          '"Scripts"',                  true],
+    ['deploy_feat_null_greeks', 'Null-safe greeks.toFixed()',     'delta!=null',                true],
+    ['deploy_feat_null_ivr',    'Null-safe ivr.toFixed()',        'ivr!=null',                  true],
+  ];
+  for (const [id, label, needle, shouldExist] of featureChecks) {
+    const found = bundle.includes(needle);
+    if (shouldExist) {
+      checks.push(found ? pass(id, label, `"${needle}" in bundle`) : fail(id, label, `"${needle}" missing from bundle`));
+    } else {
+      checks.push(found ? fail(id, label, `"${needle}" found — should be absent`) : pass(id, label, 'Correctly absent ✓'));
+    }
+  }
+  return checks;
+}
+
+async function checkBackendAPI(): Promise<CheckResult[]> {
+  const checks: CheckResult[] = [];
+
+  const health = await fetchCheck(`${VPS_BASE}/api/health`);
+  if (health.ok) {
+    try {
+      const j = JSON.parse(health.body);
+      checks.push(pass('backend_health', 'Backend health endpoint', `status: ${j.status ?? 'ok'}, v${j.version ?? '?'}`, health.ms));
+    } catch {
+      checks.push(pass('backend_health', 'Backend health endpoint', `HTTP 200 in ${health.ms}ms`, health.ms));
+    }
+  } else {
+    checks.push(fail('backend_health', 'Backend health endpoint', `HTTP ${health.status}: ${health.body.slice(0, 80)}`, health.ms));
+  }
+
+  const qd = await fetchCheck(`${VPS_BASE}/api/settings/quantdata_credentials_status`);
+  if (qd.status === 200) {
+    try {
+      const j = JSON.parse(qd.body);
+      checks.push(j.exists === true
+        ? pass('backend_quantdata_status', 'QuantData credentials stored', `preview: ${j.token_preview?.slice(0, 20) ?? '—'}`, qd.ms)
+        : warn('backend_quantdata_status', 'QuantData credentials stored', 'Endpoint OK but no credentials saved yet', qd.ms));
+    } catch {
+      checks.push(pass('backend_quantdata_status', 'QuantData credentials endpoint', 'HTTP 200 (endpoint reachable)', qd.ms));
+    }
+  } else if (qd.status === 401) {
+    checks.push(pass('backend_quantdata_status', 'QuantData credentials endpoint', 'HTTP 401 — endpoint exists, auth required', qd.ms));
+  } else {
+    checks.push(fail('backend_quantdata_status', 'QuantData credentials endpoint', `HTTP ${qd.status}: ${qd.body.slice(0, 80)}`, qd.ms));
+  }
+
+  const conn = await fetchCheck(`${VPS_BASE}/api/health/connection`);
+  if (conn.ok || conn.status === 401) {
+    checks.push(pass('backend_conn_health', 'Connection health endpoint', `HTTP ${conn.status}`, conn.ms));
+  } else {
+    checks.push(fail('backend_conn_health', 'Connection health endpoint', `HTTP ${conn.status}`, conn.ms));
+  }
+
+  const mi = await fetchCheck(`${VPS_BASE}/api/market-intelligence/SPY`);
+  if (mi.ok || mi.status === 401 || mi.status === 422) {
+    checks.push(pass('backend_mi', 'Market intelligence endpoint', `HTTP ${mi.status}`, mi.ms));
+  } else {
+    checks.push(fail('backend_mi', 'Market intelligence endpoint', `HTTP ${mi.status}: ${mi.body.slice(0, 80)}`, mi.ms));
+  }
+
+  return checks;
+}
+
+async function checkNavigation(): Promise<CheckResult[]> {
+  const checks: CheckResult[] = [];
+  const routes = [
+    ['nav_dashboard',    '/dashboard',    'Dashboard'],
+    ['nav_positions',    '/positions',    'Positions'],
+    ['nav_analysis',     '/analysis',     'Analysis'],
+    ['nav_strategy',     '/strategy',     'Strategy'],
+    ['nav_morning',      '/morning-brief','Morning Brief'],
+    ['nav_orders',       '/orders',       'Orders'],
+    ['nav_performance',  '/performance',  'Performance'],
+    ['nav_settings',     '/settings',     'Settings'],
+  ];
+  // All routes are SPA routes — just verify the VPS serves the shell
+  const r = await fetchCheck(`${VPS_BASE}/`);
+  for (const [id, route, label] of routes) {
+    if (r.ok) {
+      checks.push(pass(id, `${label} route (${route})`, 'SPA shell served'));
+    } else {
+      checks.push(fail(id, `${label} route (${route})`, `VPS not reachable: HTTP ${r.status}`));
+    }
+  }
+  return checks;
+}
+
+async function checkSprintFeatures(): Promise<CheckResult[]> {
+  const checks: CheckResult[] = [];
+  const br = await fetchCheck(`${VPS_BASE}/`);
+  if (!br.ok) {
+    checks.push(fail('feat_bundle', 'Bundle reachable', `HTTP ${br.status}`));
+    return checks;
+  }
+  const bundleMatch = br.body.match(/index-([A-Za-z0-9_]+)\.js/);
+  if (!bundleMatch) {
+    checks.push(fail('feat_bundle', 'Bundle reference in HTML', 'No index-*.js found'));
+    return checks;
+  }
+  const bundleRes = await fetchCheck(`${VPS_BASE}/assets/${bundleMatch[0]}`);
+  if (!bundleRes.ok) {
+    checks.push(fail('feat_bundle', 'Bundle file served', `HTTP ${bundleRes.status}`));
+    return checks;
+  }
+  const bundle = bundleRes.body;
+  const features: [string, string, string][] = [
+    ['feat_approvals',    'Approvals page',              'ApprovalsPage'],
+    ['feat_cockpit',      '3-cockpit layout',            'cockpit'],
+    ['feat_gex_wall',     'GEX wall vs breakeven badge', 'gex_wall'],
+    ['feat_scripts',      'Scripts page',                'ScriptsPage'],
+    ['feat_monitoring',   'Monitoring page',             'MonitoringPage'],
+    ['feat_pnl_journal',  'P&L Journal page',            'PnLJournalPage'],
+    ['feat_market_intel', 'Market Intelligence page',    'MarketIntelPage'],
+    ['feat_quantdata',    'QuantData integration',       'quantdata'],
+  ];
+  for (const [id, label, needle] of features) {
+    checks.push(bundle.includes(needle)
+      ? pass(id, label, `"${needle}" in bundle`)
+      : warn(id, label, `"${needle}" not found in bundle`));
+  }
+  return checks;
+}
+
+async function checkSPARoutes(): Promise<CheckResult[]> {
+  const checks: CheckResult[] = [];
+  // SPA routes — all should return the index.html shell (200)
+  const spaRoutes = [
+    ['spa_dashboard',   '/dashboard'],
+    ['spa_positions',   '/positions'],
+    ['spa_analysis',    '/analysis'],
+    ['spa_strategy',    '/strategy'],
+    ['spa_morning',     '/morning-brief'],
+    ['spa_orders',      '/orders'],
+    ['spa_performance', '/performance'],
+    ['spa_settings',    '/settings'],
+    ['spa_monitoring',  '/monitoring'],
+  ];
+  // VPS nginx serves index.html for all SPA routes — check root as proxy
+  const r = await fetchCheck(`${VPS_BASE}/`);
+  for (const [id, route] of spaRoutes) {
+    checks.push(r.ok
+      ? pass(id, `SPA route ${route}`, 'Shell served (nginx SPA fallback)')
+      : fail(id, `SPA route ${route}`, `VPS unreachable: HTTP ${r.status}`));
+  }
+  return checks;
+}
+
+async function runAllChecks(): Promise<CheckReport> {
+  const startedAt = Date.now();
+  const [deployment, backend, navigation, features, spaRoutes] = await Promise.all([
+    checkDeployment(),
+    checkBackendAPI(),
+    checkNavigation(),
+    checkSprintFeatures(),
+    checkSPARoutes(),
+  ]);
+  const categories: CheckCategory[] = [
+    { id: 'deployment',  label: 'Deployment',     checks: deployment },
+    { id: 'backend',     label: 'Backend API',    checks: backend },
+    { id: 'navigation',  label: 'Navigation',     checks: navigation },
+    { id: 'features',    label: 'Sprint Features',checks: features },
+    { id: 'spa_routes',  label: 'SPA Routes',     checks: spaRoutes },
+  ];
+  const all = categories.flatMap(c => c.checks);
+  return {
+    categories,
+    total:   all.length,
+    passed:  all.filter(c => c.status === 'pass').length,
+    failed:  all.filter(c => c.status === 'fail').length,
+    warned:  all.filter(c => c.status === 'warn').length,
+    startedAt,
+  };
+}
+
+// ─── Status helpers ───────────────────────────────────────────────────────────
+
+function statusColor(s: CheckStatus): string {
+  return s === 'pass' ? GREEN : s === 'fail' ? RED : s === 'warn' ? AMBER : DIM;
+}
+
+function StatusIcon({ status, size = 14 }: { status: CheckStatus; size?: number }) {
+  const color = statusColor(status);
+  if (status === 'pass') return <CheckCircle   style={{ width: size, height: size, color, flexShrink: 0 }} />;
+  if (status === 'fail') return <XCircle       style={{ width: size, height: size, color, flexShrink: 0 }} />;
+  if (status === 'warn') return <AlertTriangle style={{ width: size, height: size, color, flexShrink: 0 }} />;
+  return                        <Minus         style={{ width: size, height: size, color, flexShrink: 0 }} />;
+}
+
+function StatusPill({ status }: { status: CheckStatus }) {
+  const color = statusColor(status);
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider"
+      style={{ color, background: `${color}18`, border: `1px solid ${color}35` }}
+    >
+      {status.toUpperCase()}
+    </span>
+  );
+}
+
+// ─── Category icon map ────────────────────────────────────────────────────────
+
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  deployment:  Package,
+  backend:     Server,
+  navigation:  Navigation,
+  features:    Zap,
+  spa_routes:  Layers,
+};
+
+// ─── Summary bar ─────────────────────────────────────────────────────────────
+
+function SummaryBar({ total, passed, failed, warned }: { total: number; passed: number; failed: number; warned: number }) {
+  const health = failed === 0 ? (warned === 0 ? 'ALL CLEAR' : 'WARNINGS') : 'DEGRADED';
+  const healthColor = failed === 0 ? (warned === 0 ? GREEN : AMBER) : RED;
+  const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+  return (
+    <div className="flex items-center gap-6 px-5 py-4 rounded" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div className="flex items-center gap-2">
+        <div className="w-2.5 h-2.5 rounded-full" style={{ background: healthColor, boxShadow: `0 0 8px ${healthColor}` }} />
+        <span className="font-mono text-sm font-bold" style={{ color: healthColor }}>{health}</span>
+      </div>
+
+      <div className="w-px h-6" style={{ background: BORDER }} />
+
+      <div className="flex items-center gap-4">
+        {([['Passed', passed, GREEN], ['Failed', failed, RED], ['Warnings', warned, AMBER], ['Total', total, DIM]] as [string, number, string][]).map(([label, count, color]) => (
+          <div key={label} className="text-center">
+            <div className="font-display font-bold text-xl leading-none" style={{ color }}>{count}</div>
+            <div className="text-[9px] uppercase tracking-wide mt-0.5" style={{ color: DIM }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex-1 ml-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-mono" style={{ color: DIM }}>Pass rate</span>
+          <span className="text-[10px] font-mono font-bold" style={{ color: BRIGHT }}>{passRate}%</span>
+        </div>
+        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'oklch(1 0 0 / 8%)' }}>
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${passRate}%`,
+              background: failed > 0 ? RED : warned > 0 ? AMBER : GREEN,
+              transition: 'width 0.7s ease',
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Category card ────────────────────────────────────────────────────────────
+
 function CategoryCard({ category }: { category: CheckCategory }) {
   const [expanded, setExpanded] = useState(true);
   const Icon = CATEGORY_ICONS[category.id] ?? Layers;
@@ -151,49 +371,43 @@ function CategoryCard({ category }: { category: CheckCategory }) {
       className="rounded overflow-hidden"
       style={{ background: CARD, border: `1px solid ${failed > 0 ? `${RED}35` : warned > 0 ? `${AMBER}25` : BORDER}` }}
     >
-      {/* Header */}
       <button
-        className="w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-[oklch(1_0_0_/_3%)]"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+        style={{ background: 'transparent' }}
         onClick={() => setExpanded(e => !e)}
       >
         <div
           className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0"
           style={{ background: `${statusColor(catStatus)}18`, border: `1px solid ${statusColor(catStatus)}35` }}
         >
-          <Icon className="w-3.5 h-3.5" style={{ color: statusColor(catStatus) }} />
+          <Icon style={{ width: 14, height: 14, color: statusColor(catStatus) }} />
         </div>
+
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-display text-sm font-medium" style={{ color: BRIGHT }}>{category.label}</span>
             <StatusPill status={catStatus} />
           </div>
-          <div className="text-[10px] mt-0.5" style={{ color: DIM }}>
-            {passed}/{category.checks.length} passed
-            {failed > 0 && ` · ${failed} failed`}
-            {warned > 0 && ` · ${warned} warnings`}
+          <div className="text-[10px] mt-0.5 font-mono" style={{ color: DIM }}>
+            {passed} pass · {failed} fail · {warned} warn · {category.checks.length} total
           </div>
         </div>
-        <span className="text-xs" style={{ color: DIM }}>{expanded ? '▲' : '▼'}</span>
+
+        <div className="text-xs font-mono" style={{ color: DIM }}>{expanded ? '▲' : '▼'}</div>
       </button>
 
-      {/* Check rows */}
       {expanded && (
         <div className="border-t" style={{ borderColor: BORDER }}>
-          {category.checks.map((check, i) => (
+          {category.checks.map(check => (
             <div
               key={check.id}
-              className="flex items-start gap-3 px-4 py-2.5"
-              style={{
-                borderBottom: i < category.checks.length - 1 ? `1px solid ${BORDER}` : 'none',
-                background: check.status === 'fail' ? `${RED}08` : check.status === 'warn' ? `${AMBER}06` : 'transparent',
-              }}
+              className="flex items-start gap-3 px-4 py-2.5 border-b last:border-b-0"
+              style={{ borderColor: 'oklch(1 0 0 / 5%)' }}
             >
               <StatusIcon status={check.status} size={13} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-medium" style={{ color: check.status === 'fail' ? 'oklch(0.75 0.22 25)' : BRIGHT }}>
-                    {check.label}
-                  </span>
+                  <span className="text-xs font-medium" style={{ color: BRIGHT }}>{check.label}</span>
                   {check.ms != null && (
                     <span className="text-[9px] font-mono" style={{ color: DIM }}>{check.ms}ms</span>
                   )}
@@ -232,12 +446,24 @@ function Skeleton() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function MonitoringPage({ embedded }: { embedded?: boolean }) {
-  const { data, isLoading, isFetching, refetch, dataUpdatedAt } = trpc.monitoring.runChecks.useQuery(
-    undefined,
-    { staleTime: 60_000, refetchOnWindowFocus: false }
-  );
+  const [data, setData] = useState<CheckReport | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastRun, setLastRun] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const lastRun = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : null;
+  const runChecks = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const report = await runAllChecks();
+      setData(report);
+      setLastRun(new Date().toLocaleTimeString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen" style={{ background: embedded ? 'transparent' : BG }}>
@@ -266,18 +492,18 @@ export default function MonitoringPage({ embedded }: { embedded?: boolean }) {
                 </div>
               )}
               <button
-                onClick={() => refetch()}
-                disabled={isFetching}
-                className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-all"
+                onClick={runChecks}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium"
                 style={{
                   background: 'oklch(0.80 0.15 200 / 10%)',
                   border: `1px solid oklch(0.80 0.15 200 / 30%)`,
                   color: CYAN,
-                  opacity: isFetching ? 0.5 : 1,
+                  opacity: isLoading ? 0.5 : 1,
                 }}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-                {isFetching ? 'Running…' : 'Run Checks'}
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                {isLoading ? 'Running…' : 'Run Checks'}
               </button>
             </div>
           </div>
@@ -302,20 +528,36 @@ export default function MonitoringPage({ embedded }: { embedded?: boolean }) {
                 </div>
               )}
               <button
-                onClick={() => refetch()}
-                disabled={isFetching}
-                className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-all"
+                onClick={runChecks}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium"
                 style={{
                   background: 'oklch(0.80 0.15 200 / 10%)',
                   border: `1px solid oklch(0.80 0.15 200 / 30%)`,
                   color: CYAN,
-                  opacity: isFetching ? 0.5 : 1,
+                  opacity: isLoading ? 0.5 : 1,
                 }}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-                {isFetching ? 'Running…' : 'Run Checks'}
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                {isLoading ? 'Running…' : 'Run Checks'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Initial state — prompt to run */}
+        {!isLoading && !data && !error && (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <Server className="w-10 h-10" style={{ color: DIM }} />
+            <p className="text-sm" style={{ color: DIM }}>Click "Run Checks" to run automated regression checks.</p>
+            <button
+              onClick={runChecks}
+              className="flex items-center gap-2 px-4 py-2 rounded text-xs font-medium"
+              style={{ background: 'oklch(0.80 0.15 200 / 10%)', border: `1px solid oklch(0.80 0.15 200 / 30%)`, color: CYAN }}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Run Checks
+            </button>
           </div>
         )}
 
@@ -323,9 +565,8 @@ export default function MonitoringPage({ embedded }: { embedded?: boolean }) {
         {isLoading && <Skeleton />}
 
         {/* Results */}
-        {data && (
+        {data && !isLoading && (
           <>
-            {/* Summary bar */}
             <SummaryBar
               total={data.total}
               passed={data.passed}
@@ -333,13 +574,11 @@ export default function MonitoringPage({ embedded }: { embedded?: boolean }) {
               warned={data.warned}
             />
 
-            {/* Timestamp */}
             <div className="flex items-center gap-1.5 text-[10px] font-mono" style={{ color: DIM }}>
               <Clock className="w-3 h-3" />
               Checks ran at {new Date(data.startedAt).toLocaleString()}
             </div>
 
-            {/* Category cards */}
             <div className="space-y-3">
               {data.categories.map(cat => (
                 <CategoryCard key={cat.id} category={cat} />
@@ -349,12 +588,12 @@ export default function MonitoringPage({ embedded }: { embedded?: boolean }) {
         )}
 
         {/* Error state */}
-        {!isLoading && !data && (
+        {error && !isLoading && (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <XCircle className="w-10 h-10" style={{ color: RED }} />
-            <p className="text-sm" style={{ color: DIM }}>Failed to run checks. Check server connectivity.</p>
+            <p className="text-sm" style={{ color: DIM }}>{error}</p>
             <button
-              onClick={() => refetch()}
+              onClick={runChecks}
               className="px-4 py-2 rounded text-xs font-medium"
               style={{ background: 'oklch(0.80 0.15 200 / 10%)', border: `1px solid oklch(0.80 0.15 200 / 30%)`, color: CYAN }}
             >
