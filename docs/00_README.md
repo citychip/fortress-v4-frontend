@@ -1,6 +1,6 @@
 # Fortress Dashboard — Documentation
 
-**Version:** 3.0 | **Updated:** May 18, 2026 | **Strategy:** Portfolio Strategy v3.7 | **Dashboard:** Fortress V3 (React/tRPC)
+**Version:** 3.1 | **Updated:** May 24, 2026 | **Strategy:** Portfolio Strategy v3.7 | **Dashboard:** Fortress V3 (React/tRPC) | **Sprint:** v8.1
 
 ---
 
@@ -10,7 +10,7 @@ Read documents in the order below. Each builds on the previous.
 
 | # | File | Purpose | When to Read |
 |---|---|---|---|
-| 1 | `01_Portfolio_Strategy_v3_7.md` | The rules. Delta targets, position sizing, stop-loss levels, roll criteria, earnings playbook. | Before any trade decision. |
+| 1 | `Portfolio_Strategy_v3_7.md` | The rules. Delta targets, position sizing, stop-loss levels, roll criteria, earnings playbook. | Before any trade decision. |
 | 2 | `03_Trading_Workflow_v2_9.md` | Daily operating procedure: pre-market, intraday, end-of-day. | Every trading day. |
 | 3 | `05_Implementation_Status.md` | What is live, what is pending, known issues. | When onboarding or after a build session. |
 | 4 | `07_MCP_Workflow_and_Prompts_v1_3.md` | Claude Desktop MCP prompts and workflows. | When using the MCP server. |
@@ -54,7 +54,7 @@ See `07_MCP_Workflow_and_Prompts_v1_3.md` for example prompts and workflows.
 
 ---
 
-## Current Live State (May 18, 2026)
+## Current Live State (May 24, 2026 — Sprint v8.1)
 
 | Component | Status | Notes |
 |---|---|---|
@@ -64,7 +64,13 @@ See `07_MCP_Workflow_and_Prompts_v1_3.md` for example prompts and workflows.
 | Greeks backend | **Web API** | CP Gateway (voyz/ibeam) + OPRA. |
 | Settings — QuantData Credentials | **Live** | Update `auth_token` + `cookie` from the Settings tab without SSH. |
 | Market Intelligence | **Live** | Sort dropdown, per-card refresh, metric tooltips (Sprint v7.1). |
-| Candidates All-tab | **Live** | Shows all 19 universe tickers; actionable at top, monitoring below divider (Sprint v7.0). |
+| Monitoring Page | **Live** | Config → Monitor tab. 5 check categories. Client-side checks only (Sprint v8.0). |
+| Dashboard — Morning Freshness | **Live** | Green/grey dot + "Last run Xm ago" on Morning Workflow panel (Sprint v8.1). |
+| Scripts — Cached Run Badges | **Live** | Last exit code, duration, time since last run. Last Output panel (Sprint v8.1). |
+| MSFT Dedicated DP Page | **Live** | MSFT Dark Pool fetched from dedicated page `2ef8b3c4` (Sprint v8.1). |
+| `_load_page_registry()` | **Live** | Auto-discovers widget IDs from QuantData `/api/pages` with 24h cache (Sprint v8.1). |
+| Candidates All-tab | **Live** | Full 19-ticker universe. Actionable at top; monitoring below divider (Sprint v7.0). |
+| Candidates fallback | **Live** | All 19 tickers shown even when API returns 0 rows (Sprint v7.1). |
 | MCP server | **Live** | `fortress_mcp.py` — 29 tools. Installed in Claude Desktop. |
 | QuantData API | **Active** | Widget-UUID REST endpoints (no deprecated `tool/OPTIONS_*` calls). |
 
@@ -81,17 +87,28 @@ See `07_MCP_Workflow_and_Prompts_v1_3.md` for example prompts and workflows.
 | Backups | `/home/ubuntu/Fortress_Dashboard/quant/backups/` |
 | MCP server | `/home/ubuntu/fortress_mcp/fortress_mcp.py` |
 | QuantData MCP config | `/home/ubuntu/.quantdata-mcp/config.json` |
-| Fortress V3 build | `/home/ubuntu/fortress-v2/` (source) → `/home/ubuntu/Fortress_Dashboard/app/static/` (deployed) |
+| Fortress V3 source | `/home/ubuntu/fortress-v2/` |
+| **Deploy target** | **`/var/www/fortress-v2/`** (production — use this path for all deployments) |
+
+> ⚠️ **Deploy target changed in Sprint v8.0.** The correct deploy path is `/var/www/fortress-v2/`. The old path `/home/ubuntu/Fortress_Dashboard/app/static/` is stale and will not affect the running service.
 
 ---
 
 ## Quick Commands
 
 ```bash
+# SSH — always use root, not ubuntu
+ssh -i ~/.ssh/fortress_vps root@76.13.138.194
+
 # Service management
-sudo systemctl status fortress-dashboard
-sudo systemctl restart fortress-dashboard
+systemctl status fortress-dashboard
+systemctl restart fortress-dashboard
 journalctl -u fortress-dashboard -f
+
+# Orchestrator service (path must be quant/master_orchestrator.py)
+systemctl status fortress_orchestrator
+systemctl cat fortress_orchestrator.service | grep ExecStart
+# Must show: .../Fortress_Dashboard/venv/bin/python3 .../Fortress_Dashboard/quant/master_orchestrator.py
 
 # Health check (no auth required)
 curl http://localhost:8080/api/health
@@ -110,10 +127,26 @@ python3 quant/workflow_05_iv_crush_report.py
 
 ---
 
+## VPS Port Map
+
+| Port | Service | Status |
+|---|---|---|
+| `8080` | Fortress Dashboard API | Active |
+| `5000` | ibeam IBKR CP Gateway | Active |
+| `3306` | MySQL 8 | Active (local only) |
+| `6379` | Redis 7 | Active (local only) |
+| `80` / `443` | NGINX | Active |
+| `8081` | Fortress API (old clone) | **PERMANENTLY CLOSED** — removed 2026-05-23 |
+
+> Port 8081 was a stale clone with no git history. It was stopped, disabled, and the directory removed on 2026-05-23. Do not recreate it.
+
+---
+
 ## Document History
 
 | Version | Date | Changes |
 |---|---|---|
+| 3.1 | 2026-05-24 | Sprint v8.0–v8.1 features added. Deploy path corrected to `/var/www/fortress-v2/`. SSH user corrected to `root`. Orchestrator path note added. Port 8081 removal noted. |
 | 3.0 | 2026-05-18 | Full update for Fortress V3 React/tRPC frontend. QuantData credentials manager in Settings. Sprint v7.0/7.1 features. chart.py invalid tool ID fix. All doc references updated to latest versions. Downloads section added. |
 | 2.5 | 2026-05-13 | Added Market Intelligence Skill with `/api/market-intelligence` endpoint and `get_market_intelligence` MCP tool. |
 | 2.4 | 2026-05-13 | All UX/Automation improvements (A-M) deployed. Trade Reports tab added. Positions tab merged into Dashboard tab. |

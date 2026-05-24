@@ -1,8 +1,10 @@
 # Fortress Dashboard — VPS Implementation Guide
 
-**Version 1.6 — May 18, 2026**
+**Version 1.7 — May 24, 2026**
 
 Complete guide for setting up and maintaining the Fortress Dashboard on a fresh VPS, or for understanding the current live configuration.
+
+**v1.7 changes from v1.6:** SSH user corrected to `root`. Deploy target corrected to `/var/www/fortress-v2/`. Orchestrator path fix documented (§3.4). Port 8081 stale clone removal documented. Sprint v8.0–v8.1 features noted.
 
 **v1.6 changes from v1.5.1:** Updated for Fortress V3 React/tRPC frontend. Added §5 (Frontend Deployment). Added §6 (QuantData Credentials Management). chart.py fix documented. All paths and service names verified against live VPS.
 
@@ -18,31 +20,40 @@ Complete guide for setting up and maintaining the Fortress Dashboard on a fresh 
 | RAM | 4 GB minimum (8 GB recommended) |
 | Disk | 40 GB SSD |
 | SSH key | `~/.ssh/fortress_vps` |
-| User | `ubuntu` (sudo) |
+| User | **`root`** — always use root, not ubuntu. The SSH key is registered for root only. |
+
+> ⚠️ **SSH user is `root`.** Using `ubuntu` will hang waiting for a password that is not accepted.
 
 ---
 
 ## 2. Directory Structure
 
 ```
+/var/www/fortress-v2/            ← PRODUCTION DEPLOY TARGET (use this path)
+  app/static/                    ← Deployed React build (index.html + assets/)
+  app/
+    main.py
+    routes/
+  logs/
+    scheduler.log
+
 /home/ubuntu/
-├── Fortress_Dashboard/          ← Main application
+├── Fortress_Dashboard/          ← V3 legacy backend (still running during V4 migration)
 │   ├── app/
 │   │   ├── routes/              ← Python FastAPI route files
-│   │   │   ├── market_intelligence.py
+│   │   │   ├── market_intelligence.py  ← Patched Sprint v8.1
 │   │   │   ├── chart.py
 │   │   │   ├── settings.py
 │   │   │   ├── manage.py
 │   │   │   └── ...
-│   │   ├── static/              ← Deployed React build (index.html + assets/)
 │   │   └── main.py              ← FastAPI app entry point
 │   ├── quant/
+│   │   ├── master_orchestrator.py      ← Orchestrator entry point (NOT project root)
 │   │   ├── fortress_config.json ← Strategy configuration
 │   │   ├── active_positions.json
 │   │   ├── ticker_universe.json
 │   │   ├── workflow_05_iv_crush_report.py
 │   │   └── backups/             ← Auto-backups of JSON state files
-│   ├── docs/                    ← All documentation (this file lives here)
 │   ├── cp-gateway/              ← Docker Compose for IBKR CP Gateway
 │   │   └── docker-compose.yml
 │   └── venv/                    ← Python virtual environment
@@ -53,6 +64,8 @@ Complete guide for setting up and maintaining the Fortress Dashboard on a fresh 
 │   └── config.json              ← QuantData credentials (auth_token, cookie, widget_ids)
 └── .fortress_api_token          ← Bearer token for API authentication
 ```
+
+> ⚠️ **Deploy target is `/var/www/fortress-v2/`** — not `/home/ubuntu/Fortress_Dashboard/app/static/`. Deploying to the old path will appear to succeed but the running service will not be updated.
 
 ---
 
@@ -76,12 +89,31 @@ journalctl -u fortress-dashboard -f
 curl http://localhost:8080/api/health
 ```
 
-The service runs as `ubuntu` user, activates the Python venv, and starts `uvicorn app.main:app --host 0.0.0.0 --port 8080`.
+The service runs as `root`, activates the Python venv, and starts `uvicorn app.main:app --host 0.0.0.0 --port 8080`.
+
+### 3.4 fortress_orchestrator (APScheduler workflows)
+
+The orchestrator service runs the scheduled Python workflows.
+
+```bash
+# Check status
+systemctl status fortress_orchestrator
+
+# Verify the ExecStart path — must point to quant/ subdirectory
+systemctl cat fortress_orchestrator.service | grep ExecStart
+# Correct output:
+# ExecStart=/home/ubuntu/Fortress_Dashboard/venv/bin/python3 /home/ubuntu/Fortress_Dashboard/quant/master_orchestrator.py
+
+# Logs
+journalctl -u fortress_orchestrator -f
+```
+
+> ⚠️ **Orchestrator path is `quant/master_orchestrator.py`** — not the project root. If the unit file has the wrong path, the service will crash-loop immediately. This was the cause of 2700+ crash events on 2026-05-23 before being identified and fixed.
 
 ### 3.2 nginx (reverse proxy + static file server)
 
 nginx listens on port 3000 and:
-- Serves static files from `/home/ubuntu/Fortress_Dashboard/app/static/` (React build)
+- Serves static files from `/var/www/fortress-v2/app/static/` (React build)
 - Proxies `/api/*` to `http://127.0.0.1:8080`
 - Handles SPA routing via `try_files $uri $uri/ /index.html`
 
@@ -171,13 +203,15 @@ pnpm build
 ### 5.2 Deploy
 
 ```bash
-# Copy built files to VPS
+# Copy built files to VPS (use root, not ubuntu)
 scp -i ~/.ssh/fortress_vps -r /home/ubuntu/fortress-v2/dist/* \
-    ubuntu@76.13.138.194:/home/ubuntu/Fortress_Dashboard/app/static/
+    root@76.13.138.194:/var/www/fortress-v2/app/static/
 
 # Restart nginx to pick up new files
-ssh -i ~/.ssh/fortress_vps ubuntu@76.13.138.194 "sudo systemctl restart nginx"
+ssh -i ~/.ssh/fortress_vps root@76.13.138.194 "systemctl restart nginx"
 ```
+
+> ⚠️ **Deploy target changed from v1.6.** Use `/var/www/fortress-v2/app/static/` and `root@` — not the old ubuntu path.
 
 ### 5.3 Verify
 
@@ -205,11 +239,11 @@ Navigate to **Settings → QuantData Credentials** in the Fortress Dashboard. Fo
 ### 6.2 Via SSH (fallback)
 
 ```bash
-ssh ubuntu@76.13.138.194
+ssh -i ~/.ssh/fortress_vps root@76.13.138.194
 nano /home/ubuntu/.quantdata-mcp/config.json
 # Update "auth_token" and "cookie" fields
 # Save: Ctrl+X, Y, Enter
-sudo systemctl restart fortress-dashboard
+systemctl restart fortress-dashboard
 ```
 
 ### 6.3 Verify
@@ -230,7 +264,7 @@ Expect a non-null integer score. If null, credentials are still invalid.
 The IV Crush workflow generates the `Workflow_05_IV_Crush_YYYY-MM-DD.md` file that powers the Candidates tab.
 
 ```bash
-ssh ubuntu@76.13.138.194
+ssh -i ~/.ssh/fortress_vps root@76.13.138.194
 cd /home/ubuntu/Fortress_Dashboard
 source venv/bin/activate
 python3 quant/workflow_05_iv_crush_report.py
@@ -291,6 +325,7 @@ sudo systemctl restart fortress-dashboard
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.7 | 2026-05-24 | SSH user corrected to `root`. Deploy target corrected to `/var/www/fortress-v2/`. §3.4 added for orchestrator service and path fix. Port 8081 stale clone removal noted. nginx static path updated. |
 | 1.6 | 2026-05-18 | Fortress V3 React frontend deployment (§5). QuantData credentials management (§6). chart.py deprecated tool IDs removal noted. All paths verified against live VPS. |
 | 1.5.1 | 2026-05-13 | Market Intelligence endpoint. Trade Reports tab. |
 | 1.5.0 | 2026-05-09 | Security section. Bearer token. CP Gateway primary. |
