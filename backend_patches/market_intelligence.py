@@ -48,6 +48,31 @@ QD_BASE_URL = "https://core-lb-prod.quantdata.us/api"
 _QD_CONFIG_PATH = Path.home() / ".quantdata-mcp" / "config.json"
 
 
+
+# ── US market holiday set (NYSE) — covers 2025-2027 ──────────────────────────
+_US_MARKET_HOLIDAYS: set = {
+    # 2025
+    "2025-01-01", "2025-01-20", "2025-02-17", "2025-04-18",
+    "2025-05-26", "2025-07-04", "2025-09-01", "2025-11-27", "2025-12-25",
+    # 2026
+    "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03",
+    "2026-05-25", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+    # 2027
+    "2027-01-01", "2027-01-18", "2027-02-15", "2027-04-26",
+    "2027-05-31", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+}
+
+
+def _last_trading_day() -> str:
+    from datetime import date, timedelta
+    d = date.today()
+    for _ in range(10):
+        if d.weekday() < 5 and d.isoformat() not in _US_MARKET_HOLIDAYS:
+            return d.isoformat()
+        d -= timedelta(days=1)
+    return d.isoformat()
+
+
 def _get_qd_credentials() -> tuple[str, str, str]:
     """
     Read auth_token, cookie, and user_id from ~/.quantdata-mcp/config.json.
@@ -554,6 +579,36 @@ def _synthesize_regime(gex: dict | None, dp: dict | None, drift: dict | None, ma
               "bearish"          if score == -2 else \
               "strongly_bearish"
 
+    # Extract top GEX walls and DP floor/ceiling for direct display in UI
+    gex_call_wall = None
+    gex_put_wall  = None
+    dp_floor      = None
+    dp_ceiling    = None
+    try:
+        call_walls = (gex or {}).get("call_walls") or []
+        if call_walls:
+            gex_call_wall = call_walls[0].get("strike")
+    except Exception:
+        pass
+    try:
+        put_walls = (gex or {}).get("put_walls") or []
+        if put_walls:
+            gex_put_wall = put_walls[0].get("strike")
+    except Exception:
+        pass
+    try:
+        floors = (dp or {}).get("floors") or []
+        if floors:
+            dp_floor = floors[0].get("price")
+    except Exception:
+        pass
+    try:
+        ceilings = (dp or {}).get("ceilings") or []
+        if ceilings:
+            dp_ceiling = ceilings[0].get("price")
+    except Exception:
+        pass
+
     return {
         "overall":       overall,
         "score":         score,
@@ -561,6 +616,10 @@ def _synthesize_regime(gex: dict | None, dp: dict | None, drift: dict | None, ma
         "current_price": current_price,
         "gamma_regime":  gamma_regime,
         "flip_zone":     flip_zone,
+        "gex_call_wall": gex_call_wall,
+        "gex_put_wall":  gex_put_wall,
+        "dp_floor":      dp_floor,
+        "dp_ceiling":    dp_ceiling,
     }
 
 
@@ -761,7 +820,7 @@ def get_market_intelligence(ticker: str = "SPY", session_date: str | None = None
     from ..routes.briefing import get_briefing
 
     if not session_date:
-        session_date = date.today().isoformat()
+        session_date = _last_trading_day()
 
     ticker = ticker.upper()
     as_of  = datetime.now(timezone.utc).isoformat()

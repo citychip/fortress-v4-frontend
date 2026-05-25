@@ -79,40 +79,19 @@ function GreeksBar({
   portfolioDelta,
   portfolioTheta,
   portfolioVega,
+  betaWeightedDelta,
   positionsWithGreeks,
   positionsTotal,
 }: {
   portfolioDelta: number;
   portfolioTheta: number;
   portfolioVega: number;
+  betaWeightedDelta?: number | null;
   positionsWithGreeks: number;
   positionsTotal: number;
 }) {
   const coverage = positionsTotal > 0 ? (positionsWithGreeks / positionsTotal) * 100 : 0;
-
-  const metrics = [
-    {
-      label: 'Portfolio Δ',
-      value: portfolioDelta,
-      format: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(3)}`,
-      color: portfolioDelta > 0.3 ? AMBER : portfolioDelta < -0.3 ? RED : GREEN,
-      hint: 'Net directional exposure',
-    },
-    {
-      label: 'Portfolio Θ',
-      value: portfolioTheta,
-      format: (v: number) => `${v > 0 ? '+' : ''}$${Math.abs(v).toFixed(0)}/day`,
-      color: portfolioTheta >= 0 ? GREEN : RED,
-      hint: 'Daily time decay collected',
-    },
-    {
-      label: 'Portfolio V',
-      value: portfolioVega,
-      format: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
-      color: portfolioVega < -50 ? AMBER : portfolioVega < 0 ? GREEN : RED,
-      hint: 'Sensitivity to IV change',
-    },
-  ];
+  const deltaColor = portfolioDelta > 0 ? AMBER : portfolioDelta < 0 ? RED : GREEN;
 
   return (
     <div className="rounded border p-4" style={{ background: CARD, borderColor: BORDER }}>
@@ -125,18 +104,41 @@ function GreeksBar({
         </span>
       </div>
       <div className="grid grid-cols-3 gap-4">
-        {metrics.map(m => (
-          <div key={m.label} className="rounded p-3" style={{ background: 'oklch(0.22 0.010 258)' }}>
-            <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: DIM }}>{m.label}</div>
-            <div className="font-mono-data text-lg font-bold" style={{ color: m.color }}>
-              {m.format(m.value)}
-            </div>
-            <div className="text-[10px] mt-0.5" style={{ color: DIM }}>{m.hint}</div>
+        {/* Delta tile — raw + beta-weighted */}
+        <div className="rounded p-3" style={{ background: 'oklch(0.22 0.010 258)' }}>
+          <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: DIM }}>Portfolio Δ</div>
+          <div className="font-mono-data text-lg font-bold" style={{ color: deltaColor }}>
+            {portfolioDelta > 0 ? '+' : ''}{Math.round(portfolioDelta)}
           </div>
-        ))}
+          {betaWeightedDelta != null ? (
+            <div className="text-[10px] mt-0.5 font-mono-data" style={{ color: DIM }}>
+              β SPY-eq: <span style={{ color: betaWeightedDelta > 0 ? AMBER : RED }}>
+                {betaWeightedDelta > 0 ? '+' : ''}{Math.round(betaWeightedDelta)}
+              </span>
+            </div>
+          ) : (
+            <div className="text-[10px] mt-0.5" style={{ color: DIM }}>Net directional exposure</div>
+          )}
+        </div>
+        {/* Theta tile */}
+        <div className="rounded p-3" style={{ background: 'oklch(0.22 0.010 258)' }}>
+          <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: DIM }}>Portfolio Θ</div>
+          <div className="font-mono-data text-lg font-bold" style={{ color: portfolioTheta >= 0 ? GREEN : RED }}>
+            {portfolioTheta > 0 ? '+' : ''}${Math.abs(portfolioTheta).toFixed(0)}/day
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: DIM }}>Daily time decay collected</div>
+        </div>
+        {/* Vega tile */}
+        <div className="rounded p-3" style={{ background: 'oklch(0.22 0.010 258)' }}>
+          <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: DIM }}>Portfolio V</div>
+          <div className="font-mono-data text-lg font-bold" style={{ color: portfolioVega < -50 ? AMBER : portfolioVega < 0 ? GREEN : RED }}>
+            {portfolioVega > 0 ? '+' : ''}{portfolioVega.toFixed(1)}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: DIM }}>Sensitivity to IV change</div>
+        </div>
       </div>
 
-      {/* Delta bias bar */}
+      {/* Delta bias bar — bullish/bearish based on sign of beta-weighted delta */}
       <div className="mt-3">
         <div className="flex items-center justify-between text-[9px] mb-1" style={{ color: DIM }}>
           <span>Bearish</span>
@@ -144,11 +146,12 @@ function GreeksBar({
           <span>Bullish</span>
         </div>
         <div className="h-2 rounded-full overflow-hidden" style={{ background: 'oklch(0.25 0.010 258)' }}>
-          {/* Clamp delta to -1..+1 range for display */}
           {(() => {
-            const clamped = Math.max(-1, Math.min(1, portfolioDelta));
+            const ref = betaWeightedDelta ?? portfolioDelta;
+            // Normalize: treat ±500 SPY shares as the extremes for bar display
+            const clamped = Math.max(-1, Math.min(1, ref / 500));
             const pct = ((clamped + 1) / 2) * 100;
-            const barColor = clamped > 0.3 ? AMBER : clamped < -0.3 ? RED : GREEN;
+            const barColor = ref > 50 ? AMBER : ref < -50 ? RED : GREEN;
             return (
               <div
                 className="h-full rounded-full transition-all"
@@ -557,6 +560,7 @@ export default function PositionsPage() {
             portfolioDelta={greeks.portfolio_delta}
             portfolioTheta={greeks.portfolio_theta}
             portfolioVega={greeks.portfolio_vega}
+            betaWeightedDelta={greeks.beta_weighted_delta}
             positionsWithGreeks={greeks.positions_with_greeks}
             positionsTotal={greeks.positions_total}
           />

@@ -1375,6 +1375,148 @@ function QuantDataCredentialsSection() {
   );
 }
 
+
+// ─── QuantData Login Refresh Section ────────────────────────────────────────
+
+function QuantDataLoginRefreshSection() {
+  const { config } = useConfig();
+  const [expanded, setExpanded] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const [tokenPreview, setTokenPreview] = useState<string | null>(null);
+  const [ivRank, setIvRank] = useState<number | null>(null);
+
+  async function handleLogin() {
+    if (!email.trim() || !password.trim()) {
+      setStatus('error');
+      setMessage('Both email and password are required.');
+      return;
+    }
+    setLoading(true);
+    setStatus('idle');
+    setMessage('');
+    setTokenPreview(null);
+    setIvRank(null);
+    try {
+      const base = config.apiUrl || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (config.apiToken) headers['Authorization'] = `Bearer ${config.apiToken}`;
+      const res = await fetch(`${base}/api/settings/quantdata_login_refresh`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        setStatus('success');
+        setMessage(result.message || 'Login successful. QuantData credentials refreshed.');
+        setTokenPreview(result.token_preview ?? null);
+        setIvRank(result.iv_rank ?? null);
+        setEmail('');
+        setPassword('');
+        setExpanded(false);
+      } else {
+        setStatus('error');
+        setMessage(result.message || 'Login failed.');
+      }
+    } catch (e: unknown) {
+      setStatus('error');
+      setMessage(e instanceof Error ? e.message : 'Request failed.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Section title="QuantData Auto-Login" description="Enter your QuantData email and password to automatically refresh your session token — no DevTools required.">
+      {status === 'success' && (
+        <div className="flex items-start gap-3 mb-4 rounded border p-3" style={{ borderColor: 'oklch(0.75 0.18 145 / 30%)', background: 'oklch(0.75 0.18 145 / 8%)' }}>
+          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5" style={{ background: 'oklch(0.75 0.18 145)' }} />
+          <div className="text-xs space-y-0.5" style={{ color: 'oklch(0.75 0.18 145)' }}>
+            <p className="font-semibold">Login successful — credentials refreshed</p>
+            {tokenPreview && <p style={{ color: DIM }}>Token: <span className="font-mono-data" style={{ color: BRIGHT }}>{tokenPreview}</span></p>}
+            {ivRank !== null && <p style={{ color: DIM }}>SPY IV Rank: <span className="font-mono-data" style={{ color: BRIGHT }}>{ivRank.toFixed(1)}</span> (live verification ✓)</p>}
+          </div>
+        </div>
+      )}
+
+      {!expanded ? (
+        <button
+          onClick={() => { setExpanded(true); setStatus('idle'); setMessage(''); }}
+          className="text-xs px-3 py-1.5 rounded border transition-all hover:opacity-80"
+          style={{ borderColor: ACCENT, color: ACCENT, background: 'transparent' }}
+        >
+          Login to Refresh
+        </button>
+      ) : (
+        <div className="space-y-4">
+          <div
+            className="rounded border p-3 text-xs"
+            style={{ borderColor: 'oklch(0.80 0.15 200 / 25%)', background: 'oklch(0.80 0.15 200 / 6%)' }}
+          >
+            <p style={{ color: DIM }}>The server will log in to <span style={{ color: ACCENT }}>v3.quantdata.us</span> using Chrome impersonation, extract a fresh JWT token, and save it automatically. The service restarts to pick up the new credentials.</p>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs mb-1" style={{ color: DIM }}>QuantData Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded border px-3 py-2 text-xs outline-none"
+                style={{ background: 'oklch(0.18 0.01 258)', borderColor: 'oklch(0.35 0.01 258)', color: BRIGHT }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: DIM }}>QuantData Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                className="w-full rounded border px-3 py-2 text-xs outline-none"
+                style={{ background: 'oklch(0.18 0.01 258)', borderColor: 'oklch(0.35 0.01 258)', color: BRIGHT }}
+              />
+            </div>
+          </div>
+
+          {status === 'error' && (
+            <p className="text-xs" style={{ color: 'oklch(0.65 0.20 25)' }}>{message}</p>
+          )}
+
+          {loading && (
+            <p className="text-xs" style={{ color: DIM }}>Logging in via Chrome impersonation… this may take 10–20 seconds.</p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleLogin}
+              disabled={loading}
+              className="text-xs px-3 py-1.5 rounded transition-all disabled:opacity-50"
+              style={{ background: ACCENT, color: 'oklch(0.12 0.01 258)' }}
+            >
+              {loading ? 'Logging in…' : 'Refresh Login'}
+            </button>
+            <button
+              onClick={() => { setExpanded(false); setStatus('idle'); setMessage(''); setEmail(''); setPassword(''); }}
+              className="text-xs px-3 py-1.5 rounded border transition-all"
+              style={{ borderColor: 'oklch(0.35 0.01 258)', color: DIM, background: 'transparent' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 // ─── Security Section — Bearer Token Rotation ───────────────────────────────────
 
 function SecuritySection() {
@@ -1537,6 +1679,7 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         <ApiSection />
         <ConnectionHealthSection />
         <QuantDataCredentialsSection />
+        <QuantDataLoginRefreshSection />
         <TickerSection />
         <StrategySection />
         <RefreshSection />
