@@ -9,9 +9,10 @@ import { useLocation } from 'wouter';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
   useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
-  useMarketIntelligence, useCandidates, useRunResults,
+  useMarketIntelligence, useCandidates, useRunResults, useJournal, usePcsExposure,
   formatDollar, regimeInfo,
   type BriefingData, type TradeReport, type TradeReportRollCandidate, type TradeReportPostEarningsCandidate,
+  type JournalEntry,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -992,6 +993,133 @@ function SendBriefingModal({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+
+// ─── E-03: PCS Exposure Badge ────────────────────────────────────────────────
+function PcsExposureBadge() {
+  const { data, loading } = usePcsExposure();
+  if (loading) return (
+    <div className="h-16 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />
+  );
+  if (!data) return null;
+
+  const countColor  = data.count_breach  ? RED : data.count_warning  ? AMBER : GREEN;
+  const notionalColor = data.notional_breach ? RED : data.notional_warning ? AMBER : GREEN;
+  const kNotional   = (data.total_notional / 1000).toFixed(1);
+  const kCap        = (data.notional_cap / 1000).toFixed(0);
+  const borderColor = data.count_breach || data.notional_breach ? RED
+                    : data.count_warning || data.notional_warning ? AMBER
+                    : 'oklch(1 0 0 / 9%)';
+
+  return (
+    <div className="rounded border p-4 flex items-center justify-between" style={{ background: 'oklch(0.17 0.010 258)', borderColor }}>
+      <div>
+        <div className="text-[10px] uppercase tracking-wide mb-1" style={{ color: DIM }}>PCS Exposure</div>
+        <div className="flex items-center gap-3">
+          <span className="font-display text-xl font-bold" style={{ color: countColor }}>
+            {data.pcs_count}<span className="text-sm font-normal" style={{ color: DIM }}>/{data.count_cap}</span>
+          </span>
+          <span className="text-xs" style={{ color: DIM }}>spreads</span>
+          <span className="w-px h-4" style={{ background: 'oklch(1 0 0 / 12%)' }} />
+          <span className="font-display text-xl font-bold" style={{ color: notionalColor }}>
+            ${kNotional}K<span className="text-sm font-normal" style={{ color: DIM }}>/${kCap}K</span>
+          </span>
+          <span className="text-xs" style={{ color: DIM }}>notional</span>
+        </div>
+      </div>
+      <div className="text-right">
+        {(data.count_breach || data.notional_breach) && (
+          <div className="text-xs font-mono-data" style={{ color: RED }}>AT CAP</div>
+        )}
+        {!(data.count_breach || data.notional_breach) && (data.count_warning || data.notional_warning) && (
+          <div className="text-xs font-mono-data" style={{ color: AMBER }}>NEAR CAP</div>
+        )}
+        {!data.count_warning && !data.notional_warning && (
+          <div className="text-xs font-mono-data" style={{ color: GREEN }}>OK</div>
+        )}
+        <div className="text-[10px] mt-0.5" style={{ color: DIM }}>
+          {data.spreads.map(s => s.ticker).join(' · ') || 'no spreads'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── E-04: Weekly Pacing Chart ───────────────────────────────────────────────
+function WeeklyPacingChart() {
+  const { data, loading } = useJournal();
+  const MAX_PER_WEEK = 2;
+
+  const weeks = useMemo(() => {
+    if (!data?.entries) return Array.from({ length: 8 }, (_, i) => ({ label: `W-${7-i}`, count: 0, isCurrentWeek: i === 7 }));
+    const now = new Date();
+    // Find start of current ISO week (Monday)
+    const day = now.getDay() || 7; // 1=Mon…7=Sun
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (day - 1));
+    monday.setHours(0, 0, 0, 0);
+
+    return Array.from({ length: 8 }, (_, i) => {
+      const weekStart = new Date(monday);
+      weekStart.setDate(monday.getDate() - (7 - i) * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 7);
+      const isCurrentWeek = i === 7;
+      const label = isCurrentWeek ? 'This week' : `W-${7 - i}`;
+      const count = (data.entries as JournalEntry[]).filter(e => {
+        if (!['OPEN', 'ADD'].includes(e.action)) return false;
+        const ts = new Date(e.timestamp);
+        return ts >= weekStart && ts < weekEnd;
+      }).length;
+      return { label, count, isCurrentWeek };
+    });
+  }, [data]);
+
+  if (loading) return (
+    <div className="h-16 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />
+  );
+
+  const currentWeek = weeks[7];
+  const statusColor = currentWeek.count >= MAX_PER_WEEK ? AMBER : GREEN;
+  const maxCount    = Math.max(...weeks.map(w => w.count), MAX_PER_WEEK, 1);
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px] uppercase tracking-wide" style={{ color: DIM }}>Weekly Entry Pacing</div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-display text-sm font-bold" style={{ color: statusColor }}>
+            {currentWeek.count}
+          </span>
+          <span className="text-[10px]" style={{ color: DIM }}>/ {MAX_PER_WEEK} this week</span>
+          {currentWeek.count >= MAX_PER_WEEK && (
+            <span className="text-[9px] px-1 rounded" style={{ background: `${AMBER}22`, color: AMBER }}>PACED</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-end gap-1" style={{ height: 40 }}>
+        {weeks.map((w, i) => {
+          const barH = maxCount > 0 ? Math.max(4, Math.round((w.count / maxCount) * 36)) : 4;
+          const barColor = w.isCurrentWeek
+            ? (w.count >= MAX_PER_WEEK ? AMBER : CYAN)
+            : 'oklch(1 0 0 / 18%)';
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-0.5" title={`${w.label}: ${w.count} entries`}>
+              <div className="w-full rounded-sm" style={{ height: barH, background: barColor }} />
+              {w.isCurrentWeek && (
+                <div className="text-[8px]" style={{ color: barColor }}>▲</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-between mt-1">
+        <span className="text-[9px]" style={{ color: DIM }}>8 weeks ago</span>
+        <span className="text-[9px]" style={{ color: DIM }}>now</span>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data, loading, refresh } = useBriefing();
   const { data: tradeReportData } = useTradeReport();
@@ -1058,6 +1186,12 @@ export default function DashboardPage() {
               <span className="text-xs cursor-pointer" style={{ color: CYAN }}>Open Trade page →</span>
             </Link>
           </div>
+        </div>
+
+        {/* E-03 + E-04: PCS Exposure + Weekly Pacing */}
+        <div className="grid grid-cols-2 gap-4">
+          <PcsExposureBadge />
+          <WeeklyPacingChart />
         </div>
 
         {/* Two-column: orders + alerts */}

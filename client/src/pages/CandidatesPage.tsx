@@ -32,7 +32,9 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { StatCard } from '@/components/StatCard';
 import { cn } from '@/lib/utils';
-import { TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, ExternalLink, TrendingUp as TrendUp, BarChart2 } from 'lucide-react';
+import { useConfig as _useConfig } from '@/contexts/ConfigContext';
+import { useEarningsVolatility, type EarningsVolData } from '@/hooks/useApi';
 
 // ─── Signal badge ─────────────────────────────────────────────────────────────
 
@@ -142,19 +144,149 @@ function PretradeGateBadge({ result }: { result: PretradeResult | undefined }) {
   );
 }
 
+
+// ─── E-08: Earnings Volatility Compare Panel ─────────────────────────────────
+
+const DIM_EV  = 'oklch(0.50 0.010 258)';
+const CYAN_EV = 'oklch(0.80 0.15 200)';
+const AMBER_EV = 'oklch(0.78 0.18 85)';
+const GREEN_EV = 'oklch(0.72 0.18 145)';
+const RED_EV  = 'oklch(0.65 0.22 25)';
+
+function EarningsVolPanel({ ticker, colSpan }: { ticker: string; colSpan: number }) {
+  const { data, loading } = useEarningsVolatility(ticker);
+
+  if (loading) {
+    return (
+      <tr>
+        <td colSpan={colSpan} className="px-4 pb-3 pt-0">
+          <div className="rounded p-3 flex items-center gap-2"
+            style={{ background: 'oklch(0.14 0.010 258)', border: '1px solid oklch(1 0 0 / 6%)' }}>
+            <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+              style={{ borderColor: `${CYAN_EV} transparent transparent transparent` }} />
+            <span className="text-[11px]" style={{ color: DIM_EV }}>Loading earnings vol data…</span>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  if (!data) return null;
+
+  const moves = data.historical_moves?.slice(0, 4) ?? [];
+  const maxMove = Math.max(...moves.map((m: any) => m.move_pct ?? 0), data.implied_move_pct ?? 0, 1);
+  const ratio = data.implied_vs_historical_ratio;
+  const ratioColor = ratio == null ? DIM_EV : ratio > 1.5 ? AMBER_EV : ratio < 0.8 ? GREEN_EV : CYAN_EV;
+
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-4 pb-3 pt-0">
+        <div className="rounded p-3" style={{ background: 'oklch(0.14 0.010 258)', border: '1px solid oklch(1 0 0 / 6%)' }}>
+          <div className="flex items-center gap-3 mb-2.5">
+            <BarChart2 className="w-3.5 h-3.5 flex-shrink-0" style={{ color: CYAN_EV }} />
+            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: CYAN_EV }}>
+              Earnings Volatility
+            </span>
+            {data.next_earnings_date && (
+              <span className="text-[10px]" style={{ color: DIM_EV }}>
+                Next: {data.next_earnings_date}
+              </span>
+            )}
+            <span className="ml-auto text-[10px]" style={{ color: DIM_EV }}>
+              Straddle expiry: {data.straddle_expiry ?? '—'}
+            </span>
+          </div>
+
+          <div className="flex items-end gap-6">
+            {/* Key metrics */}
+            <div className="flex items-center gap-4 shrink-0">
+              <div>
+                <div className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: DIM_EV }}>Implied Move</div>
+                <div className="font-mono-data text-xl font-bold" style={{ color: AMBER_EV }}>
+                  {data.implied_move_pct != null ? `±${data.implied_move_pct.toFixed(1)}%` : '—'}
+                </div>
+              </div>
+              <div className="text-lg" style={{ color: DIM_EV }}>vs</div>
+              <div>
+                <div className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: DIM_EV }}>Avg Historical</div>
+                <div className="font-mono-data text-xl font-bold" style={{ color: GREEN_EV }}>
+                  {data.avg_historical_pct != null ? `±${data.avg_historical_pct.toFixed(1)}%` : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: DIM_EV }}>Ratio</div>
+                <div className="font-mono-data text-xl font-bold" style={{ color: ratioColor }}>
+                  {ratio != null ? `${ratio.toFixed(2)}x` : '—'}
+                </div>
+                <div className="text-[9px] mt-0.5" style={{ color: DIM_EV }}>
+                  {ratio != null ? (ratio > 1.5 ? 'market pricing more' : ratio < 0.8 ? 'below history' : 'inline with history') : ''}
+                </div>
+              </div>
+            </div>
+
+            {/* Mini bar chart of last 4 historical moves */}
+            {moves.length > 0 && (
+              <div className="flex-1">
+                <div className="text-[9px] uppercase tracking-wider mb-1.5" style={{ color: DIM_EV }}>
+                  Last {moves.length} earnings moves
+                </div>
+                <div className="flex items-end gap-1.5 h-10">
+                  {/* Implied move bar */}
+                  {data.implied_move_pct != null && (
+                    <div className="flex flex-col items-center gap-0.5">
+                      <div className="w-6 rounded-sm"
+                        style={{
+                          height: `${Math.round((data.implied_move_pct / maxMove) * 36)}px`,
+                          background: AMBER_EV,
+                          opacity: 0.7,
+                        }} />
+                      <span className="text-[8px] font-mono" style={{ color: AMBER_EV }}>impl</span>
+                    </div>
+                  )}
+                  <div className="w-px h-full self-stretch" style={{ background: 'oklch(1 0 0 / 10%)' }} />
+                  {moves.map((m: any, i: number) => {
+                    const barH = Math.max(2, Math.round((m.move_pct / maxMove) * 36));
+                    const barColor = m.direction_pct > 0 ? GREEN_EV : RED_EV;
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-0.5 group relative">
+                        <div className="w-5 rounded-sm" style={{ height: `${barH}px`, background: barColor, opacity: 0.8 }} />
+                        <span className="text-[8px] font-mono" style={{ color: DIM_EV }}>
+                          {m.date?.slice(5) ?? ''}
+                        </span>
+                        {/* Hover tooltip */}
+                        <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block z-10
+                          px-1.5 py-1 rounded text-[9px] whitespace-nowrap"
+                          style={{ background: 'oklch(0.20 0.010 258)', border: '1px solid oklch(1 0 0 / 15%)', color: barColor }}>
+                          {m.direction_pct > 0 ? '+' : ''}{m.direction_pct?.toFixed(2)}%
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function CandidateRowItem({
-  candidate, ivRankThreshold, ivHvSpreadThreshold, pretradeResult,
+  candidate, ivRankThreshold, ivHvSpreadThreshold, pretradeResult, colSpan = 7,
 }: {
-  candidate: CandidateRow; ivRankThreshold: number; ivHvSpreadThreshold: number; pretradeResult?: PretradeResult;
+  candidate: CandidateRow; ivRankThreshold: number; ivHvSpreadThreshold: number; pretradeResult?: PretradeResult; colSpan?: number;
 }) {
   const evaluation = evaluateCandidate(candidate, ivRankThreshold, ivHvSpreadThreshold);
   const isBlocked = pretradeResult?.verdict === 'BLOCKED';
   const isActionable = !isBlocked && (evaluation.signal === 'STRONG_SELL' || evaluation.signal === 'SELL');
+  const [earningsExpanded, setEarningsExpanded] = useState(false);
 
   return (
+    <>
     <tr
       className={cn('border-b transition-colors hover:bg-[oklch(1_0_0_/_3%)]', isActionable && 'bg-[oklch(0.78_0.18_85_/_3%)]')}
-      style={{ borderColor: 'oklch(1 0 0 / 6%)' }}
+      style={{ borderColor: earningsExpanded ? 'transparent' : 'oklch(1 0 0 / 6%)' }}
     >
       {/* Ticker */}
       <td className="px-4 py-3">
@@ -172,6 +304,14 @@ function CandidateRowItem({
           >
             <ExternalLink className="w-3 h-3" />
           </a>
+          <button
+            onClick={() => setEarningsExpanded(e => !e)}
+            className="opacity-40 hover:opacity-90 transition-opacity ml-0.5"
+            title="Earnings volatility"
+            style={{ color: earningsExpanded ? 'oklch(0.78 0.18 85)' : 'oklch(0.60 0.010 258)' }}
+          >
+            <BarChart2 className="w-3 h-3" />
+          </button>
         </div>
         {candidate.earnings_state && candidate.earnings_state !== 'safe' && (
           <div className="text-[10px] mt-0.5" style={{ color: 'oklch(0.78 0.18 85)' }}>
@@ -226,6 +366,8 @@ function CandidateRowItem({
         <PretradeGateBadge result={pretradeResult} />
       </td>
     </tr>
+    {earningsExpanded && <EarningsVolPanel ticker={candidate.ticker} colSpan={colSpan} />}
+    </>
   );
 }
 

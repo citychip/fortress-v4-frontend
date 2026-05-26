@@ -20,6 +20,7 @@ import {
   Zap, TrendingUp, TrendingDown,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { usePortfolioBeta, useSectorExposure, type ComponentBeta, type SectorItem } from '@/hooks/useApi';
 import { Link } from 'wouter';
 
 // ─── Color constants ──────────────────────────────────────────────────────────
@@ -160,6 +161,188 @@ function GreeksBar({
             );
           })()}
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── E-05: Beta-Weighted Delta Card ──────────────────────────────────────────
+
+function BetaWeightedDeltaCard() {
+  const { data, loading } = usePortfolioBeta();
+  const [expanded, setExpanded] = useState(false);
+
+  const bwd     = data?.beta_weighted_delta ?? null;
+  const spy     = data?.spy_price ?? null;
+  const comps   = (data?.component_betas ?? []).slice(0, 8);
+  const maxAbs  = Math.max(...comps.map(c => Math.abs(c.delta_contribution)), 1);
+  const color   = bwd == null ? DIM : bwd > 30 ? AMBER : bwd < -30 ? RED : GREEN;
+
+  return (
+    <div className="rounded border p-4" style={{ background: CARD, borderColor: BORDER }}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: DIM }}>
+          Beta-Weighted Δ (SPY-eq)
+        </span>
+        {comps.length > 0 && (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="text-[10px] px-2 py-0.5 rounded"
+            style={{ color: CYAN, background: 'oklch(0.80 0.15 200 / 8%)', border: '1px solid oklch(0.80 0.15 200 / 20%)' }}
+          >
+            {expanded ? 'Hide' : 'Breakdown'}
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-end gap-6">
+        <div>
+          <div className="font-mono-data text-3xl font-bold" style={{ color: loading ? DIM : color }}>
+            {loading ? '…' : bwd == null ? '—' : `${bwd > 0 ? '+' : ''}${Math.round(bwd)}`}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: DIM }}>
+            SPY-equivalent delta shares{spy ? ` · SPY @ $${spy.toFixed(2)}` : ''}
+          </div>
+        </div>
+
+        {/* Gauge bar */}
+        <div className="flex-1">
+          <div className="flex justify-between text-[9px] mb-1" style={{ color: DIM }}>
+            <span>Bearish</span><span>Neutral</span><span>Bullish</span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: 'oklch(0.25 0.010 258)' }}>
+            {(() => {
+              const ref = bwd ?? 0;
+              const pct = ((Math.max(-1, Math.min(1, ref / 300)) + 1) / 2) * 100;
+              return <div className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${pct}%`, background: color }} />;
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Per-ticker breakdown */}
+      {expanded && comps.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {comps.map((c: ComponentBeta) => {
+            const pct = Math.abs(c.delta_contribution) / maxAbs * 100;
+            const barColor = c.delta_contribution > 0 ? AMBER : RED;
+            return (
+              <div key={c.ticker} className="flex items-center gap-2">
+                <span className="font-mono-data text-[10px] w-12 shrink-0" style={{ color: BRIGHT }}>{c.ticker}</span>
+                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'oklch(0.25 0.010 258)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor, opacity: 0.75 }} />
+                </div>
+                <span className="font-mono-data text-[10px] w-10 text-right shrink-0"
+                  style={{ color: c.delta_contribution > 0 ? AMBER : RED }}>
+                  {c.delta_contribution > 0 ? '+' : ''}{c.delta_contribution.toFixed(1)}
+                </span>
+                <span className="text-[9px] w-12 text-right shrink-0" style={{ color: DIM }}>β{c.beta.toFixed(2)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── E-06: Sector Exposure Bar ────────────────────────────────────────────────
+
+const SECTOR_COLORS: Record<string, string> = {
+  'Technology':             'oklch(0.80 0.15 200)',
+  'Communication Services': 'oklch(0.72 0.18 145)',
+  'Consumer Discretionary': 'oklch(0.78 0.18 85)',
+  'Financials':             'oklch(0.75 0.16 160)',
+  'Health Care':            'oklch(0.70 0.20 25)',
+  'Industrials':            'oklch(0.75 0.14 220)',
+  'Energy':                 'oklch(0.80 0.18 60)',
+  'Materials':              'oklch(0.72 0.16 300)',
+  'Real Estate':            'oklch(0.78 0.15 40)',
+  'Consumer Staples':       'oklch(0.72 0.14 170)',
+  'Utilities':              'oklch(0.75 0.12 240)',
+  'Unknown':                'oklch(0.45 0.010 258)',
+};
+const SECTOR_COLOR_LIST = Object.values(SECTOR_COLORS);
+
+function SectorExposureBar() {
+  const { data, loading } = useSectorExposure();
+  const [tooltip, setTooltip] = useState<string | null>(null);
+
+  if (loading) return (
+    <div className="rounded border p-4" style={{ background: CARD, borderColor: BORDER }}>
+      <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: DIM }}>Sector Exposure</span>
+      <div className="mt-3 h-4 rounded animate-pulse" style={{ background: 'oklch(0.22 0.010 258)' }} />
+    </div>
+  );
+
+  if (!data || data.sectors.length === 0) return null;
+
+  const maxPct = data.concentration_max_pct;
+
+  return (
+    <div className="rounded border p-4" style={{ background: CARD, borderColor: BORDER }}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: DIM }}>
+          Sector Exposure
+        </span>
+        {data.breach && (
+          <span className="text-[10px] px-2 py-0.5 rounded font-semibold"
+            style={{ color: AMBER, background: 'oklch(0.78 0.18 85 / 12%)', border: '1px solid oklch(0.78 0.18 85 / 35%)' }}>
+            ⚠ Concentration breach
+          </span>
+        )}
+      </div>
+
+      {/* Stacked bar */}
+      <div className="relative h-5 rounded overflow-hidden flex mb-2"
+        style={{ background: 'oklch(0.22 0.010 258)' }}>
+        {data.sectors.map((s: SectorItem, i: number) => {
+          const col = SECTOR_COLORS[s.sector] ?? SECTOR_COLOR_LIST[i % SECTOR_COLOR_LIST.length];
+          const isOver = s.pct > maxPct;
+          return (
+            <div
+              key={s.sector}
+              className="h-full transition-all cursor-pointer relative"
+              style={{ width: `${s.pct}%`, background: col, opacity: isOver ? 1 : 0.75,
+                outline: isOver ? `2px solid ${AMBER}` : undefined }}
+              onMouseEnter={() => setTooltip(s.sector)}
+              onMouseLeave={() => setTooltip(null)}
+            />
+          );
+        })}
+        {/* Cap marker */}
+        <div className="absolute top-0 h-full w-0.5 opacity-60"
+          style={{ left: `${maxPct}%`, background: AMBER }} />
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {data.sectors.map((s: SectorItem, i: number) => {
+          const col = SECTOR_COLORS[s.sector] ?? SECTOR_COLOR_LIST[i % SECTOR_COLOR_LIST.length];
+          const isOver = s.pct > maxPct;
+          const isHovered = tooltip === s.sector;
+          return (
+            <div key={s.sector} className="flex items-center gap-1 cursor-default"
+              onMouseEnter={() => setTooltip(s.sector)} onMouseLeave={() => setTooltip(null)}>
+              <div className="w-2 h-2 rounded-sm shrink-0" style={{ background: col, opacity: 0.85 }} />
+              <span className="text-[10px]" style={{ color: isHovered ? BRIGHT : DIM }}>
+                {s.sector}
+              </span>
+              <span className="font-mono-data text-[10px]"
+                style={{ color: isOver ? AMBER : isHovered ? BRIGHT : DIM }}>
+                {s.pct.toFixed(0)}%
+              </span>
+              {isHovered && s.tickers.length > 0 && (
+                <span className="text-[9px]" style={{ color: 'oklch(0.55 0.010 258)' }}>
+                  ({s.tickers.join(', ')})
+                </span>
+              )}
+            </div>
+          );
+        })}
+        <span className="text-[9px] ml-auto" style={{ color: DIM }}>cap: {maxPct}%</span>
       </div>
     </div>
   );
@@ -569,6 +752,12 @@ export default function PositionsPage() {
             positionsTotal={greeks.positions_total}
           />
         )}
+
+        {/* E-05: Beta-Weighted Delta Card */}
+        <BetaWeightedDeltaCard />
+
+        {/* E-06: Sector Exposure Bar */}
+        <SectorExposureBar />
 
         {/* States */}
         {error && !loading && <EmptyState type="error" title="Failed to load positions" description={error} />}

@@ -1639,3 +1639,110 @@ export function useRunResults() {
 
   return { data, loading, error, refresh: fetchData };
 }
+
+// ─── /api/portfolio/beta ──────────────────────────────────────────────────────
+
+export interface ComponentBeta {
+  ticker: string;
+  beta: number;
+  price: number;
+  delta_contribution: number;
+}
+export interface PortfolioBetaData {
+  beta_weighted_delta: number;
+  spy_price: number;
+  component_betas: ComponentBeta[];
+  as_of: string;
+}
+export function usePortfolioBeta() {
+  return useApiData<PortfolioBetaData>('/api/portfolio/beta');
+}
+
+// ─── /api/portfolio/sector-exposure ──────────────────────────────────────────
+
+export interface SectorItem {
+  sector: string;
+  notional: number;
+  pct: number;
+  tickers: string[];
+}
+export interface SectorExposureData {
+  sectors: SectorItem[];
+  concentration_max_pct: number;
+  breach: boolean;
+  as_of: string;
+}
+export function useSectorExposure() {
+  return useApiData<SectorExposureData>('/api/portfolio/sector-exposure');
+}
+
+// ─── /api/portfolio/capital-efficiency ───────────────────────────────────────
+
+export interface CapEffItem {
+  ticker: string;
+  annual_income: number;
+  capital_at_risk: number;
+  efficiency: number;
+  short_legs: number;
+  long_legs: number;
+}
+export interface CapitalEfficiencyData {
+  capital_efficiency: number;
+  annual_income_annualized: number;
+  capital_at_risk: number;
+  threshold: number;
+  above_threshold: boolean;
+  by_position: CapEffItem[];
+  as_of: string;
+}
+export function useCapitalEfficiency() {
+  return useApiData<CapitalEfficiencyData>('/api/portfolio/capital-efficiency');
+}
+
+// ─── /api/market/earnings-volatility/{ticker} ─────────────────────────────
+
+export interface HistoricalEarningsMove {
+  date: string;
+  move_pct: number;
+  direction_pct: number;
+}
+export interface EarningsVolData {
+  ticker: string;
+  implied_move_pct: number | null;
+  straddle_expiry: string | null;
+  stock_price: number | null;
+  next_earnings_date: string | null;
+  historical_moves: HistoricalEarningsMove[];
+  avg_historical_pct: number | null;
+  implied_vs_historical_ratio: number | null;
+  as_of: string;
+}
+export function useEarningsVolatility(ticker: string) {
+  return useApiData<EarningsVolData>(`/api/market/earnings-volatility/${ticker}`);
+}
+
+// ─── /api/portfolio/pcs-exposure ─────────────────────────────────────────────
+
+export interface PcsSpread {
+  ticker: string;
+  expiry: string;
+  short_strike: number;
+  long_strike: number;
+  contracts: number;
+  notional: number;
+}
+export interface PcsExposureData {
+  pcs_count: number;
+  count_cap: number;
+  total_notional: number;
+  notional_cap: number;
+  count_breach: boolean;
+  notional_breach: boolean;
+  count_warning: boolean;
+  notional_warning: boolean;
+  spreads: PcsSpread[];
+  as_of: string;
+}
+export function usePcsExposure() {
+  return useApiData<PcsExposureData>('/api/portfolio/pcs-exposure');
+}

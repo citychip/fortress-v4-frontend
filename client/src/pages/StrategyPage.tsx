@@ -15,7 +15,7 @@ import {
   DEFAULT_STRATEGY, DEFAULT_TRADER_PROFILE,
   downloadStrategyProfile,
 } from '@/contexts/ConfigContext';
-import { useMarketIntelligence, useCandidates, regimeInfo } from '@/hooks/useApi';
+import { useMarketIntelligence, useCandidates, regimeInfo, useCapitalEfficiency, type CapEffItem } from '@/hooks/useApi';
 import {
   ResponsiveContainer, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
@@ -555,6 +555,7 @@ export default function StrategyPage({ embedded = false }: { embedded?: boolean 
 
   // Market intel for the sandbox ticker
   const { data: sbIntel, loading: sbLoading } = useMarketIntelligence(effectiveTicker);
+  const { data: capEffData, loading: capEffLoading } = useCapitalEfficiency();
   const sbSpot = sbIntel?.current_price ?? 0;
   const sbIv = useMemo(() => {
     const candidate = candidatesData?.rows?.find(r => r.ticker === effectiveTicker);
@@ -1283,6 +1284,98 @@ export default function StrategyPage({ embedded = false }: { embedded?: boolean 
                 </div>
               );
             })()}
+          </div>
+
+          {/* ── E-07: Capital Efficiency Table ───────────────────────── */}
+          <div className="bg-zinc-900 border border-white/10 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
+                <span>Capital Efficiency</span>
+                {capEffData && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                    capEffData.above_threshold
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                  }`}>
+                    {(capEffData.capital_efficiency * 100).toFixed(1)}% portfolio
+                  </span>
+                )}
+              </h3>
+              <span className="text-[9px] text-zinc-500">threshold: 12%</span>
+            </div>
+
+            {capEffLoading && (
+              <div className="space-y-1.5">
+                {[1,2,3].map(i => (
+                  <div key={i} className="h-6 rounded animate-pulse bg-zinc-800" />
+                ))}
+              </div>
+            )}
+
+            {!capEffLoading && capEffData && capEffData.by_position.length > 0 && (
+              <>
+                {/* Portfolio gauge bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-[9px] text-zinc-500 mb-1">
+                    <span>0%</span>
+                    <span className="text-amber-400">12% target</span>
+                    <span>30%+</span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden bg-zinc-800">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, capEffData.capital_efficiency * 100 / 30 * 100)}%`,
+                        background: capEffData.above_threshold
+                          ? 'oklch(0.72 0.18 145)'
+                          : 'oklch(0.78 0.18 85)',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Per-position rows */}
+                <div className="space-y-1">
+                  <div className="grid grid-cols-4 text-[9px] text-zinc-500 uppercase tracking-wider pb-1 border-b border-white/5">
+                    <span>Ticker</span>
+                    <span className="text-right">Ann. Income</span>
+                    <span className="text-right">Capital</span>
+                    <span className="text-right">Efficiency</span>
+                  </div>
+                  {capEffData.by_position.map((p: CapEffItem) => {
+                    const eff = p.efficiency * 100;
+                    const effColor = eff >= 12
+                      ? 'text-emerald-400'
+                      : eff >= 6
+                      ? 'text-amber-400'
+                      : 'text-red-400';
+                    return (
+                      <div key={p.ticker} className="grid grid-cols-4 text-[10px] py-0.5">
+                        <span className="font-mono font-semibold text-zinc-200">{p.ticker}</span>
+                        <span className="text-right font-mono text-zinc-300">
+                          ${p.annual_income > 0 ? p.annual_income.toFixed(0) : '—'}
+                        </span>
+                        <span className="text-right font-mono text-zinc-400">
+                          ${p.capital_at_risk.toFixed(0)}
+                        </span>
+                        <span className={`text-right font-mono font-semibold ${effColor}`}>
+                          {p.annual_income > 0 ? `${eff.toFixed(1)}%` : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-white/5 flex justify-between text-[9px] text-zinc-500">
+                  <span>Total capital at risk</span>
+                  <span className="font-mono">${capEffData.capital_at_risk.toFixed(0)}</span>
+                </div>
+              </>
+            )}
+
+            {!capEffLoading && (!capEffData || capEffData.by_position.length === 0) && (
+              <p className="text-xs text-zinc-500 italic">No positions with calculable efficiency.</p>
+            )}
           </div>
 
           {/* Signal Mode Info */}
