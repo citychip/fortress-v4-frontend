@@ -61,6 +61,9 @@
 | ✅ V4-K01 | OPRA 21-char symbol padding — silent wrong-greeks on option lookups | Sprint v8.6 — `app/services/opra.py` normalises all symbols at sync + load time |
 | ✅ V4-K02 | Config backup/restore missing — any write could corrupt settings with no recovery | Sprint v8.4 — `POST /api/config/backup` + `POST /api/config/restore` + auto-backup on every write |
 | ✅ V4-K04 | Journal close linkage — no FK between close and open trade entries | Sprint v8.8 — `POST /api/journal/close/{id}` stamps `open_entry_id`, `iv_crush_realized`, `dte_at_close`; back-links open entry |
+| ✅ V4-K03 | IBKR upload retry missing — no way to re-trigger a failed sync without SSH | Sprint v8.9 — `POST /api/ibkr/upload/retry` with Redis-backed last-sync metadata; `GET /api/ibkr/last-sync` |
+| ✅ V4-F01 | Forward P&L panel had no UI surface despite complete backend + component | Sprint v8.10 — `ForwardPnLPanel` + `PositionLimitsBadge` wired into `TickerGroupCard` in PositionsPage |
+| ✅ V4-F02 | Regime labels displayed as raw `SNAKE_CASE` (e.g. `MILDLY_BULLISH`) across 6 sites | Sprint v8.11 — `regimeInfo()` ordering bug fixed; fallback now converts snake_case→Title Case; 6 display sites patched |
 | ✅ V4-P01 | Portfolio endpoints missing — no beta, sector-exposure, or capital-efficiency data | Sprint v8.5 — `GET /api/portfolio/beta`, `/sector-exposure`, `/capital-efficiency` |
 | ✅ V4-P02 | APScheduler not wired — 8 workflows ran manually only | Sprint v8.3 — BackgroundScheduler auto-runs briefing, IBKR sync, backup, reports |
 | ✅ V4-P03 | MySQL data layer not wired — `fortress_v4` DB existed but routes used JSON only | Sprint v8.7 — positions + greeks written on every IBKR sync; `GET /api/positions` reads MySQL first |
@@ -71,6 +74,4 @@
 
 | ID | Priority | Item | Sprint |
 |---|---|---|---|
-| V4-K03 | Medium | IBKR upload retry — `POST /api/ibkr/upload/retry` Redis-backed retry for failed uploads | v8.9 |
-| V4-F01 | Medium | Forward P&L panel — wire `GET /api/options/forward-pnl` to PositionsPage accordion | v8.10 |
-| V4-F02 | Low | Regime label formatting — replace `SNAKE_CASE` with human-readable labels across 4 pages | v8.11 |
+| — | — | All planned V4 sprints (v8.3–v8.11) complete. No remaining backlog items. | — |

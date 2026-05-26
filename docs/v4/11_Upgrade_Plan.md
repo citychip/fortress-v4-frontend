@@ -367,9 +367,9 @@ The V4 docs also specify these larger items. They are deferred — current V3/V4
 | **v8.6** | **OPRA symbol padding** | ✅ DONE | P4-25 (K-01) |
 | **v8.7** | **MySQL data layer (positions write + read)** | ✅ DONE | P4-01, P4-05 to P4-09 |
 | **v8.8** | **Journal close linkage** | ✅ DONE | P4-07, P4-20 (K-04) |
-| **v8.9** | **IBKR upload retry** | **~45 min** | P4-24 (K-03) |
-| **v8.10** | **Forward P&L panel on position cards** | **~1.5 hr** | todo.md Sprint v5.0 Gap 2 |
-| **v8.11** | **Regime label formatting** | **~30 min** | todo.md v3.5 open item |
+| **v8.9** | **IBKR upload retry** | ✅ DONE | P4-24 (K-03) |
+| **v8.10** | **Forward P&L panel on position cards** | ✅ DONE | todo.md Sprint v5.0 Gap 2 |
+| **v8.11** | **Regime label formatting** | ✅ DONE | todo.md v3.5 open item |
 
 Total estimated: ~12.5 hours of coding across 9 sprints + ~20 min pre-coding.
 

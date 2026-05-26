@@ -94,14 +94,13 @@
 | **v8.6** | OPRA symbol padding — 21-char normalisation on all option legs (K-01) | ✅ Done | `app/services/opra.py`, `ibkr_sync_web.py`, `state.py` |
 | **v8.7** | MySQL data layer — positions + greeks write on sync; MySQL-first read | ✅ Done | `app/services/db_v4.py`, `app/services/models_v4.py`, `app/routes/positions.py` |
 | **v8.8** | Journal close linkage — `POST /api/journal/close/{id}` links close→open (K-04) | ✅ Done | `app/routes/journal.py` |
+| **v8.9** | IBKR upload retry — Redis-backed `POST /api/ibkr/upload/retry` + `GET /api/ibkr/last-sync` (K-03) | ✅ Done | `app/routes/ibkr.py` |
+| **v8.10** | Forward P&L panel — `ForwardPnLPanel` + `PositionLimitsBadge` wired into PositionsPage accordion | ✅ Done | `client/src/pages/PositionsPage.tsx` |
+| **v8.11** | Regime label formatting — `regimeInfo()` ordering fix + snake_case→Title Case across 6 display sites | ✅ Done | `client/src/hooks/useApi.ts`, App.tsx, 4 pages |
 
 ### Remaining Sprints
 
-| Sprint | Feature | Est. |
-|---|---|---|
-| **v8.9** | IBKR upload retry — Redis-backed `POST /api/ibkr/upload/retry` (K-03) | ~45 min |
-| **v8.10** | Forward P&L panel — wire `GET /api/options/forward-pnl` to PositionsPage UI | ~1.5 hr |
-| **v8.11** | Regime label formatting — replace `SNAKE_CASE` with human-readable labels | ~30 min |
+No sprints remaining — all v8.3–v8.11 complete.
 
 ### V4 Known Issues (current)
 
@@ -109,7 +108,7 @@
 |---|---|---|
 | K-01 | OPRA 21-char symbol padding | ✅ Fixed — Sprint v8.6 |
 | K-02 | Config backup/restore missing | ✅ Fixed — Sprint v8.4 |
-| K-03 | IBKR upload retry missing | ⏳ Sprint v8.9 |
+| K-03 | IBKR upload retry missing | ✅ Fixed — Sprint v8.9 |
 | K-04 | Journal close_id linkage | ✅ Fixed — Sprint v8.8 |
 
 ### CI/CD
@@ -117,5 +116,5 @@
 | Component | Status |
 |---|---|
 | GitHub Actions — `fortress-v4-api` | ✅ Live — push to `main` auto-deploys via SSH + `git pull` + service restart |
-| GitHub Actions — `fortress-v4-frontend` | ⏳ Not yet wired |
+| GitHub Actions — `fortress-v4-frontend` | ⏳ Not yet wired — manual build + copy to `/var/www/fortress-v4` |
 
