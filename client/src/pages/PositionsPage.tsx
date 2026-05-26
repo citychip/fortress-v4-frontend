@@ -282,14 +282,14 @@ function LegRow({
       <td className="px-4 py-2.5 text-right">
         <DeltaCell delta={leg.current_delta} direction={leg.leg_direction} threshold={strategy.deltaAlertThreshold} />
       </td>
-      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.current_theta !== undefined ? (leg.current_theta >= 0 ? GREEN : RED) : DIM }}>
-        {leg.current_theta !== undefined ? `${leg.current_theta >= 0 ? '+' : '-'}$${Math.abs(leg.current_theta).toFixed(2)}/d` : '—'}
+      <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.current_theta != null ? (leg.current_theta >= 0 ? GREEN : RED) : DIM }}>
+        {leg.current_theta != null ? `${leg.current_theta >= 0 ? '+' : '-'}$${Math.abs(leg.current_theta).toFixed(2)}/d` : '—'}
       </td>
       <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: leg.market_value >= 0 ? GREEN : RED }}>
         {formatDollar(leg.market_value)}
       </td>
       <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{ color: DIM }}>
-        {leg.current_iv !== undefined ? `${leg.current_iv.toFixed(0)}%` : '—'}
+        {leg.current_iv != null ? `${leg.current_iv.toFixed(0)}%` : '—'}
       </td>
       <td className="px-4 py-2.5 font-mono-data text-xs text-right" style={{
         color: leg.net_liq_pct > strategy.maxSingleNamePct ? RED
