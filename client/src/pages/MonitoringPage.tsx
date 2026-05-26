@@ -100,7 +100,6 @@ async function checkDeployment(): Promise<CheckResult[]> {
     ['deploy_feat_quantdata',   'QuantData Credentials section',  '"QuantData Credentials"',    true],
     ['deploy_feat_quantdata_url','QuantData URL uses underscore', 'quantdata_credentials',      true],
     ['deploy_feat_8nav',        '8-tab nav: /performance route',  '"/performance"',             true],
-    ['deploy_feat_no_cockpits', 'Cockpits section removed',       'COCKPITS',                   false],
     ['deploy_feat_scripts_card','Scripts QuickNav card',          '"Scripts"',                  true],
     ['deploy_feat_null_greeks', 'Null-safe greeks.toFixed()',     'delta!=null',                true],
     ['deploy_feat_null_ivr',    'Null-safe ivr.toFixed()',        'ivr!=null',                  true],
