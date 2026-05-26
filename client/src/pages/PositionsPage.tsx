@@ -448,27 +448,31 @@ function TickerGroupCard({
         </div>
       </button>
 
-      {/* Expanded leg table */}
+      {/* Expanded leg table + panels */}
       {expanded && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr style={{ borderBottom: '1px solid oklch(1 0 0 / 8%)', background: 'oklch(0.15 0.010 258)' }}>
-                {['Type', 'Strike', 'Expiry / DTE', 'Qty', 'Delta', 'Theta', 'Mkt Val', 'IV', '% NL', 'Alerts'].map(h => (
-                  <th key={h} className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-right first:text-left last:text-left"
-                    style={{ color: DIM }}>
-                    {h}
-                  </th>
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr style={{ borderBottom: '1px solid oklch(1 0 0 / 8%)', background: 'oklch(0.15 0.010 258)' }}>
+                  {['Type', 'Strike', 'Expiry / DTE', 'Qty', 'Delta', 'Theta', 'Mkt Val', 'IV', '% NL', 'Alerts'].map(h => (
+                    <th key={h} className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-right first:text-left last:text-left"
+                      style={{ color: DIM }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {group.legs.map((leg, i) => (
+                  <LegRow key={i} leg={leg} strategy={strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} dteTriage={dteTriage} belowSma200={belowSma200} />
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {group.legs.map((leg, i) => (
-                <LegRow key={i} leg={leg} strategy={strategy} stopLossAct={stopLossAct} rollNeeded={rollNeeded} dteTriage={dteTriage} belowSma200={belowSma200} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </tbody>
+            </table>
+          </div>
+          <PositionLimitsBadge ticker={group.ticker} legs={group.legs} />
+          <ForwardPnLPanel ticker={group.ticker} legs={group.legs} />
+        </>
       )}
     </div>
   );
