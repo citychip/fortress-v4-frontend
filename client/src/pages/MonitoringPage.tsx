@@ -84,7 +84,7 @@ async function checkDeployment(): Promise<CheckResult[]> {
   if (r.status === 0) { checks.push(fail('deploy_reachable', 'VPS reachable', `Network error: ${r.body.slice(0, 80)}`, r.ms)); return checks; }
   checks.push(pass('deploy_reachable', 'VPS reachable', `HTTP 200 in ${r.ms}ms`, r.ms));
 
-  const bundleMatch = r.body.match(/index-([A-Za-z0-9_]+)\.js/);
+  const bundleMatch = r.body.match(/index-([A-Za-z0-9_\-]+)\.js/);
   const bundleFile = bundleMatch ? bundleMatch[0] : null;
   if (!bundleFile) { checks.push(fail('deploy_bundle_ref', 'index.html references bundle', 'No index-*.js found in HTML')); return checks; }
   checks.push(pass('deploy_bundle_ref', 'index.html references bundle', bundleFile));
@@ -195,7 +195,7 @@ async function checkSprintFeatures(): Promise<CheckResult[]> {
     checks.push(fail('feat_bundle', 'Bundle reachable', `HTTP ${br.status}`));
     return checks;
   }
-  const bundleMatch = br.body.match(/index-([A-Za-z0-9_]+)\.js/);
+  const bundleMatch = br.body.match(/index-([A-Za-z0-9_\-]+)\.js/);
   if (!bundleMatch) {
     checks.push(fail('feat_bundle', 'Bundle reference in HTML', 'No index-*.js found'));
     return checks;
