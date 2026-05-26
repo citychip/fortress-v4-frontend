@@ -67,7 +67,7 @@ function evaluatePositionLeg(
   }
 
   if (leg.net_liq_pct > strategy.maxSingleNamePct) {
-    alerts.push(`${leg.net_liq_pct.toFixed(1)}% NL > ${strategy.maxSingleNamePct}% limit`);
+    alerts.push(`${(leg.net_liq_pct ?? 0).toFixed(1)}% NL > ${strategy.maxSingleNamePct}% limit`);
   }
 
   return alerts;
@@ -296,7 +296,7 @@ function LegRow({
           : leg.net_liq_pct > strategy.maxSingleNamePct * 0.8 ? AMBER
           : DIM,
       }}>
-        {leg.net_liq_pct.toFixed(1)}%
+        {(leg.net_liq_pct ?? 0).toFixed(1)}%
       </td>
       <td className="px-4 py-2.5">
         {hasAlert ? (
@@ -513,7 +513,7 @@ export default function PositionsPage() {
     });
     return Array.from(byTicker.entries()).map(([ticker, legs]) => {
       const totalMktVal = legs.reduce((s, l) => s + l.market_value, 0);
-      const totalPctNL  = legs.reduce((s, l) => s + l.net_liq_pct, 0);
+      const totalPctNL  = legs.reduce((s, l) => s + (l.net_liq_pct ?? 0), 0);
       const netDelta    = legs.reduce((s, l) => s + (l.current_delta ?? 0) * l.qty, 0);
       const netTheta    = legs.reduce((s, l) => s + (l.current_theta ?? 0) * l.qty, 0);
       const legAlertCount = legs.filter(l => evaluatePositionLeg(l, config.strategy, stopLossAct, rollNeeded, belowSma200).length > 0).length;
