@@ -11,7 +11,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ConfigProvider, useConfig } from "./contexts/ConfigContext";
 import { PendingOrdersProvider } from "./contexts/PendingOrdersContext";
-import { useHealth, useIbkrSync, useBriefing, useMarketIntelligence } from "./hooks/useApi";
+import { useHealth, useIbkrSync, useBriefing, useMarketIntelligence, regimeInfo } from "./hooks/useApi";
 import { useFortressStream } from "./hooks/useFortressStream";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -193,7 +193,7 @@ function StatusBar() {
           <>
             <div className="flex items-center gap-1">
               <Activity className="w-3 h-3" style={{ color: regimeColor }} />
-              <span style={{ color: regimeColor, textTransform: 'uppercase' }}>{regime}</span>
+              <span style={{ color: regimeColor }}>{regimeInfo(regime).label}</span>
             </div>
             <span style={{ color: 'oklch(0.30 0.010 258)' }}>│</span>
           </>

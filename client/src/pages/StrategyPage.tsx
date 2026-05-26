@@ -15,7 +15,7 @@ import {
   DEFAULT_STRATEGY, DEFAULT_TRADER_PROFILE,
   downloadStrategyProfile,
 } from '@/contexts/ConfigContext';
-import { useMarketIntelligence, useCandidates } from '@/hooks/useApi';
+import { useMarketIntelligence, useCandidates, regimeInfo } from '@/hooks/useApi';
 import {
   ResponsiveContainer, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
@@ -611,7 +611,7 @@ export default function StrategyPage({ embedded = false }: { embedded?: boolean 
 
         {/* SPY regime badge */}
         <Badge variant="outline" className="text-xs border-zinc-600 text-zinc-400">
-          SPY: {spyRegime.replace(/_/g, ' ')}
+          SPY: {regimeInfo(spyRegime).label}
         </Badge>
 
         {/* Signal Mode toggle */}

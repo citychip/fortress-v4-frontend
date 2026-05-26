@@ -841,7 +841,7 @@ function CompactTradeReport() {
         <div className="flex items-center gap-3 text-[10px] font-mono-data pt-1" style={{ color: DIM }}>
           <span>VIX {report.macro.vix?.toFixed(2)}</span>
           <span>·</span>
-          <span className="capitalize">{report.macro.regime}</span>
+          <span>{regimeInfo(report.macro.regime).label}</span>
           <span>·</span>
           <span>{report.macro.vix_state}</span>
         </div>

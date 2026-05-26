@@ -5,7 +5,7 @@
  */
 
 import { useLocation } from 'wouter';
-import { useBriefing, useAlerts, useStopLossAll, useRollAll, useMarketIntelligence } from '@/hooks/useApi';
+import { useBriefing, useAlerts, useStopLossAll, useRollAll, useMarketIntelligence, regimeInfo } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/PageHeader';
@@ -45,7 +45,7 @@ function HealthStrip() {
     { label: 'NLV', value: nlv != null ? `$${(nlv / 1000).toFixed(1)}k` : '—', color: BRIGHT },
     { label: 'Net Δ', value: netDelta != null ? `${netDelta > 0 ? '+' : ''}${netDelta.toFixed(2)}` : '—', color: Math.abs(netDelta ?? 0) > 0.5 ? AMBER : GREEN },
     { label: 'Hedge', value: hedgePct != null ? `${hedgePct.toFixed(0)}%` : '—', color: (hedgePct ?? 0) < 50 ? AMBER : GREEN },
-    { label: 'Regime', value: regime ? regime.toUpperCase() : '—', color: regimeColor },
+    { label: 'Regime', value: regime ? regimeInfo(regime).label : '—', color: regimeColor },
     { label: 'SPY Call Wall', value: gexCallWall != null ? `$${gexCallWall.toFixed(0)}` : '—', color: GREEN },
     { label: 'SPY Put Wall', value: gexPutWall  != null ? `$${gexPutWall.toFixed(0)}`  : '—', color: RED },
   ];

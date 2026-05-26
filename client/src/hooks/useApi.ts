@@ -1343,12 +1343,15 @@ export function formatPct(value: number, decimals = 1): string {
 export function regimeInfo(regime: string): { label: string; color: 'red' | 'amber' | 'green' | 'cyan' } {
   const r = regime.toLowerCase();
   if (r.includes('strongly_bearish') || r.includes('strongly bearish')) return { label: 'Strongly Bearish', color: 'red' };
-  if (r.includes('bearish')) return { label: 'Bearish', color: 'red' };
   if (r.includes('mildly_bearish') || r.includes('mildly bearish')) return { label: 'Mildly Bearish', color: 'amber' };
+  if (r.includes('bearish')) return { label: 'Bearish', color: 'red' };
   if (r.includes('neutral')) return { label: 'Neutral', color: 'amber' };
   if (r.includes('mildly_bullish') || r.includes('mildly bullish')) return { label: 'Mildly Bullish', color: 'green' };
+  if (r.includes('strongly_bullish') || r.includes('strongly bullish')) return { label: 'Strongly Bullish', color: 'green' };
   if (r.includes('bullish')) return { label: 'Bullish', color: 'green' };
-  return { label: regime, color: 'amber' };
+  // Fallback: convert snake_case to Title Case
+  const fallback = regime.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return { label: fallback, color: 'amber' };
 }
 
 // ─── /api/orders/pending ─────────────────────────────────────────────────────

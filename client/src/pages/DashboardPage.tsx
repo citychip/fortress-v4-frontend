@@ -391,7 +391,7 @@ function TradeReportPanel() {
         <div className="flex items-center gap-4 text-[10px] font-mono-data pt-1" style={{ color: DIM }}>
           <span>VIX {report.macro.vix?.toFixed(2)}</span>
           <span>·</span>
-          <span className="capitalize">{report.macro.regime}</span>
+          <span>{regimeInfo(report.macro.regime).label}</span>
           <span>·</span>
           <span>{report.macro.vix_state}</span>
         </div>
@@ -622,7 +622,7 @@ function AccountSummarySection() {
           const metrics: { label: string; value: string; color?: string }[] = [
             { label: 'VIX', value: macro.vix !== null ? macro.vix.toFixed(2) : '—' },
             { label: 'VIX State', value: macro.vix_state ?? '—' },
-            { label: 'Regime', value: macro.regime, color: regimeColor },
+            { label: 'Regime', value: regimeInfo(macro.regime).label, color: regimeColor },
             { label: 'Gamma Regime', value: gammaRegime ?? '—',
               color: gammaRegime === 'positive' ? GREEN : gammaRegime === 'negative' ? RED : undefined },
             { label: 'GEX Call Wall', value: gexCallWall != null ? `$${gexCallWall.toFixed(2)}` : '—', color: 'oklch(0.72 0.18 145)' },

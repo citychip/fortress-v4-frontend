@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/EmptyState';
 import {
   useCandidates, usePretradeAll, useMarketIntelligence,
   useChartLevels, useOrderFlow, evaluateCandidate, usePendingOrderActions,
-  type CandidateRow, type PretradeResult,
+  regimeInfo, type CandidateRow, type PretradeResult,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { usePendingOrders } from '@/contexts/PendingOrdersContext';
@@ -153,7 +153,7 @@ function AssetDiagnostics({ ticker }: { ticker: string }) {
           <Activity className="w-4 h-4" style={{color:regimeColor}} />
           <div>
             <span className="font-mono-data text-sm font-bold" style={{color:regimeColor}}>
-              {(regime.overall??'neutral').toUpperCase()}
+              {regimeInfo(regime.overall??'neutral').label}
             </span>
             {score!=null && <span className="font-mono-data text-xs ml-2" style={{color:DIM}}>
               Score {score>0?'+':''}{score}
