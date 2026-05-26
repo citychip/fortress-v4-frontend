@@ -25,7 +25,7 @@ const BORDER = 'oklch(1 0 0 / 9%)';
 
 // ─── VPS base URL ─────────────────────────────────────────────────────────────
 
-const VPS_BASE = 'http://76.13.138.194:3000';
+const VPS_BASE = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,14 +147,14 @@ async function checkBackendAPI(): Promise<CheckResult[]> {
     checks.push(fail('backend_quantdata_status', 'QuantData credentials endpoint', `HTTP ${qd.status}: ${qd.body.slice(0, 80)}`, qd.ms));
   }
 
-  const conn = await fetchCheck(`${VPS_BASE}/api/health/connection`);
+  const conn = await fetchCheck(`${VPS_BASE}/api/health/v4`);
   if (conn.ok || conn.status === 401) {
-    checks.push(pass('backend_conn_health', 'Connection health endpoint', `HTTP ${conn.status}`, conn.ms));
+    checks.push(pass('backend_conn_health', 'Health v4 endpoint', `HTTP ${conn.status}`, conn.ms));
   } else {
-    checks.push(fail('backend_conn_health', 'Connection health endpoint', `HTTP ${conn.status}`, conn.ms));
+    checks.push(fail('backend_conn_health', 'Health v4 endpoint', `HTTP ${conn.status}`, conn.ms));
   }
 
-  const mi = await fetchCheck(`${VPS_BASE}/api/market-intelligence/SPY`);
+  const mi = await fetchCheck(`${VPS_BASE}/api/market-intelligence?ticker=SPY`);
   if (mi.ok || mi.status === 401 || mi.status === 422) {
     checks.push(pass('backend_mi', 'Market intelligence endpoint', `HTTP ${mi.status}`, mi.ms));
   } else {
@@ -167,14 +167,14 @@ async function checkBackendAPI(): Promise<CheckResult[]> {
 async function checkNavigation(): Promise<CheckResult[]> {
   const checks: CheckResult[] = [];
   const routes = [
-    ['nav_dashboard',    '/dashboard',    'Dashboard'],
+    ['nav_dashboard',    '/',             'Dashboard'],
+    ['nav_market_intel', '/market-intel', 'Market Intel'],
     ['nav_positions',    '/positions',    'Positions'],
+    ['nav_trade',        '/trade',        'Trade'],
     ['nav_analysis',     '/analysis',     'Analysis'],
-    ['nav_strategy',     '/strategy',     'Strategy'],
-    ['nav_morning',      '/morning-brief','Morning Brief'],
-    ['nav_orders',       '/orders',       'Orders'],
     ['nav_performance',  '/performance',  'Performance'],
-    ['nav_settings',     '/settings',     'Settings'],
+    ['nav_earnings',     '/earnings',     'Earnings'],
+    ['nav_config',       '/config',       'Config'],
   ];
   // All routes are SPA routes — just verify the VPS serves the shell
   const r = await fetchCheck(`${VPS_BASE}/`);
@@ -207,14 +207,16 @@ async function checkSprintFeatures(): Promise<CheckResult[]> {
   }
   const bundle = bundleRes.body;
   const features: [string, string, string][] = [
-    ['feat_approvals',    'Approvals page',              'ApprovalsPage'],
-    ['feat_cockpit',      '3-cockpit layout',            'cockpit'],
-    ['feat_gex_wall',     'GEX wall vs breakeven badge', 'gex_wall'],
-    ['feat_scripts',      'Scripts page',                'ScriptsPage'],
-    ['feat_monitoring',   'Monitoring page',             'MonitoringPage'],
-    ['feat_pnl_journal',  'P&L Journal page',            'PnLJournalPage'],
-    ['feat_market_intel', 'Market Intelligence page',    'MarketIntelPage'],
-    ['feat_quantdata',    'QuantData integration',       'quantdata'],
+    ['feat_approvals',    'Approvals page (/approvals)',   'ApprovalsPage'],
+    ['feat_action',       'Action Center (/action)',       'ActionCenterPage'],
+    ['feat_build',        'Build Center (/build)',         'BuildCenterPage'],
+    ['feat_forward_pnl',  'Forward P&L Panel',             'ForwardPnLPanel'],
+    ['feat_position_limits','Position Limits Badge',       'PositionLimitsBadge'],
+    ['feat_pnl_journal',  'P&L Journal page',              'PnLJournalPage'],
+    ['feat_market_intel', 'Market Intelligence page',      'MarketIntelPage'],
+    ['feat_regime_info',  'Regime label helper',           'regimeInfo'],
+    ['feat_null_nlq',     'Null-safe net_liq_pct',         'net_liq_pct??'],
+    ['feat_earnings',     'Earnings page',                 'EarningsPage'],
   ];
   for (const [id, label, needle] of features) {
     checks.push(bundle.includes(needle)
@@ -228,15 +230,17 @@ async function checkSPARoutes(): Promise<CheckResult[]> {
   const checks: CheckResult[] = [];
   // SPA routes — all should return the index.html shell (200)
   const spaRoutes = [
-    ['spa_dashboard',   '/dashboard'],
+    ['spa_root',        '/'],
+    ['spa_market_intel','/market-intel'],
     ['spa_positions',   '/positions'],
+    ['spa_trade',       '/trade'],
     ['spa_analysis',    '/analysis'],
-    ['spa_strategy',    '/strategy'],
-    ['spa_morning',     '/morning-brief'],
-    ['spa_orders',      '/orders'],
     ['spa_performance', '/performance'],
-    ['spa_settings',    '/settings'],
-    ['spa_monitoring',  '/monitoring'],
+    ['spa_earnings',    '/earnings'],
+    ['spa_config',      '/config'],
+    ['spa_action',      '/action'],
+    ['spa_approvals',   '/approvals'],
+    ['spa_build',       '/build'],
   ];
   // VPS nginx serves index.html for all SPA routes — check root as proxy
   const r = await fetchCheck(`${VPS_BASE}/`);

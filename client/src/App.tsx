@@ -52,6 +52,9 @@ import StrategyPage from "./pages/StrategyPage";
 import TradePage from "./pages/TradePage";
 import PnLJournalPage from "./pages/PnLJournalPage";
 import ConfigPage from "./pages/ConfigPage";
+import ActionCenterPage from "./pages/ActionCenterPage";
+import ApprovalsPage from "./pages/ApprovalsPage";
+import BuildCenterPage from "./pages/BuildCenterPage";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
@@ -418,6 +421,9 @@ function Router() {
           <Route path="/pnl"          component={() => <PnLPage />} />
           <Route path="/journal"      component={() => <JournalPage />} />
           <Route path="/strategy"     component={() => <StrategyPage />} />
+          <Route path="/action"       component={() => <ActionCenterPage />} />
+          <Route path="/approvals"    component={() => <ApprovalsPage />} />
+          <Route path="/build"        component={() => <BuildCenterPage />} />
           <Route path="/settings"     component={() => <SettingsPage />} />
           <Route path="/scripts"      component={() => <ScriptsPage />} />
           <Route                      component={NotFound} />
