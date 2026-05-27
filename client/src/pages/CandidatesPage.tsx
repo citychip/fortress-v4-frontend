@@ -123,6 +123,38 @@ function SortHeader({ label, sortKey, current, dir, onSort }: {
 
 // ─── Candidate row ────────────────────────────────────────────────────────────
 
+// ─── E-12: NOT READY failure reason chip ─────────────────────────────────────
+function canTradeReason(c: CandidateRow): string {
+  if (c.excluded)                                    return c.exclusion_reason ?? 'Excluded';
+  if (c.earnings_state === 'blackout')               return `Earnings ${c.days_to_earnings}d`;
+  if (c.earnings_state === 'approaching')            return `Earnings ${c.days_to_earnings}d`;
+  if (c.concentration_state === 'high')              return `Conc. ${c.concentration_pct?.toFixed(0)}%`;
+  if (c.concentration_state === 'critical')          return `Conc. ${c.concentration_pct?.toFixed(0)}% ⚠`;
+  return 'Not ready';
+}
+
+function CanTradeBlockedChip({ candidate }: { candidate: CandidateRow }) {
+  const reason = canTradeReason(candidate);
+  const isEarnings = candidate.earnings_state === 'blackout' || candidate.earnings_state === 'approaching';
+  const isConc     = (candidate.concentration_state === 'high' || candidate.concentration_state === 'critical');
+  const color = candidate.excluded
+    ? 'oklch(0.65 0.22 25)'
+    : isEarnings
+      ? 'oklch(0.78 0.18 85)'
+      : isConc
+        ? 'oklch(0.78 0.18 85)'
+        : 'oklch(0.65 0.22 25)';
+  return (
+    <div className="inline-flex flex-col items-center gap-0.5">
+      <span className="text-[9px] font-mono-data font-bold" style={{ color: 'oklch(0.65 0.22 25)' }}>✗</span>
+      <span className="text-[8px] font-mono-data px-1 py-0.5 rounded whitespace-nowrap"
+        style={{ color, background: `${color.replace(')', ' / 15%)')}` }}>
+        {reason}
+      </span>
+    </div>
+  );
+}
+
 function PretradeGateBadge({ result }: { result: PretradeResult | undefined }) {
   if (!result) return <span className="text-[10px] font-mono-data" style={{ color: 'oklch(0.45 0.010 258)' }}>—</span>;
   if (result.verdict === 'BLOCKED') {
@@ -353,12 +385,12 @@ function CandidateRowItem({
         </div>
       </td>
 
-      {/* Can trade */}
+      {/* Can trade — E-12: show failure reason when blocked */}
       <td className="px-4 py-3 text-center">
         {candidate.can_trade ? (
           <span className="text-xs font-semibold" style={{ color: 'oklch(0.72 0.18 145)' }}>✓</span>
         ) : (
-          <span className="text-xs" style={{ color: 'oklch(0.65 0.22 25)' }}>✗</span>
+          <CanTradeBlockedChip candidate={candidate} />
         )}
       </td>
       {/* Pre-trade gate */}
