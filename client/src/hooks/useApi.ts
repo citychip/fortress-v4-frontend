@@ -500,7 +500,13 @@ export interface JournalEntry {
   action: 'OPEN' | 'CLOSE' | 'ROLL' | 'ADJUST' | 'NOTE';
   description: string;
   created_at: string;
+  timestamp?: string;
   realized_pnl?: number | null;
+  debit_credit?: number | null;
+  iv_crush_realized?: number | null;
+  dte_at_close?: number | null;
+  open_entry_id?: string | null;
+  close_entry_id?: string | null;
   tags?: string[];
   // PortfolioCenterPage alias fields
   outcome?: 'win' | 'loss' | 'breakeven' | string;
@@ -1745,4 +1751,24 @@ export interface PcsExposureData {
 }
 export function usePcsExposure() {
   return useApiData<PcsExposureData>('/api/portfolio/pcs-exposure');
+}
+
+// ─── /api/pnl/history ────────────────────────────────────────────────────────
+
+export interface PnlHistoryRow {
+  date: string;
+  net_liquidation: number | null;
+  unrealized_pnl: number | null;
+  realized_pnl: number | null;
+  buying_power: number | null;
+  account: string;
+}
+export interface PnlHistoryData {
+  rows: PnlHistoryRow[];
+  count: number;
+  source: string;
+  as_of: string;
+}
+export function usePnlHistory(days = 90) {
+  return useApiData<PnlHistoryData>(`/api/pnl/history?days=${days}`);
 }

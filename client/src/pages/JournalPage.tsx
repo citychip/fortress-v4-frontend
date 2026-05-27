@@ -9,7 +9,7 @@ import { useJournal, useJournalActions, useJournalSuggest, type JournalEntry, fo
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { useConfig } from '@/contexts/ConfigContext';
-import { PlusCircle, Trash2, Sparkles, TrendingUp, TrendingDown, BookOpen, AlertCircle } from 'lucide-react';
+import { PlusCircle, Trash2, Sparkles, TrendingUp, TrendingDown, BookOpen, AlertCircle, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const GREEN  = 'oklch(0.72 0.18 145)';
@@ -172,6 +172,195 @@ function NewEntryForm({ onSave, onCancel }: { onSave: (entry: Partial<JournalEnt
   );
 }
 
+
+// ─── E-09: Closed-Loop Accordion ─────────────────────────────────────────────
+
+interface ClosedPair {
+  openEntry: JournalEntry;
+  closeEntry: JournalEntry;
+  daysHeld: number | null;
+}
+
+function buildClosedPairs(entries: JournalEntry[]): ClosedPair[] {
+  const byId = new Map<string, JournalEntry>(entries.map(e => [e.id, e]));
+  const pairs: ClosedPair[] = [];
+  const seen = new Set<string>();
+
+  for (const e of entries) {
+    if (e.action !== 'CLOSE' || seen.has(e.id)) continue;
+    const openId = e.open_entry_id;
+    if (!openId) continue;
+    const openEntry = byId.get(openId);
+    if (!openEntry) continue;
+    seen.add(e.id);
+    seen.add(openId);
+
+    // Days held: diff between close timestamp and open timestamp
+    let daysHeld: number | null = null;
+    const t0 = openEntry.timestamp ?? openEntry.created_at;
+    const t1 = e.timestamp ?? e.created_at;
+    if (t0 && t1) {
+      const diff = new Date(t1).getTime() - new Date(t0).getTime();
+      daysHeld = Math.round(diff / 86400000);
+    }
+    pairs.push({ openEntry, closeEntry: e, daysHeld });
+  }
+  // Newest close first
+  return pairs.sort((a, b) => {
+    const ta = a.closeEntry.timestamp ?? a.closeEntry.created_at ?? '';
+    const tb = b.closeEntry.timestamp ?? b.closeEntry.created_at ?? '';
+    return tb.localeCompare(ta);
+  });
+}
+
+function ClosedTradeCard({ pair }: { pair: ClosedPair }) {
+  const [expanded, setExpanded] = useState(false);
+  const { openEntry: open, closeEntry: close, daysHeld } = pair;
+  const pnl = close.realized_pnl ?? 0;
+  const isWin = pnl > 0;
+  const ivCrush = close.iv_crush_realized;
+  const dteClose = close.dte_at_close;
+
+  const openDate = new Date(open.timestamp ?? open.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const closeDate = new Date(close.timestamp ?? close.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  return (
+    <div className="rounded border overflow-hidden transition-colors"
+      style={{ background: 'oklch(0.17 0.010 258)', borderColor: isWin ? 'oklch(0.72 0.18 145 / 20%)' : 'oklch(0.65 0.22 25 / 20%)' }}>
+      {/* Header row */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[oklch(1_0_0_/_2%)] transition-colors text-left"
+        onClick={() => setExpanded(e => !e)}
+      >
+        {expanded
+          ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'oklch(0.55 0.010 258)' }} />
+          : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'oklch(0.55 0.010 258)' }} />
+        }
+        {/* Ticker + strategy */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-display font-bold text-sm" style={{ color: 'oklch(0.93 0.005 258)' }}>{open.ticker}</span>
+            <span className="text-[10px] font-mono-data px-1.5 py-0.5 rounded" style={{ color: 'oklch(0.80 0.15 200)', background: 'oklch(0.80 0.15 200 / 10%)' }}>
+              {open.strategy}
+            </span>
+            <span className="text-[10px] font-mono-data" style={{ color: 'oklch(0.55 0.010 258)' }}>
+              {openDate} → {closeDate}
+              {daysHeld !== null && ` (${daysHeld}d)`}
+            </span>
+          </div>
+          <div className="text-xs mt-0.5 truncate" style={{ color: 'oklch(0.60 0.010 258)' }}>{close.description}</div>
+        </div>
+        {/* P&L + quick stats */}
+        <div className="flex items-center gap-4 flex-shrink-0 text-right">
+          {ivCrush != null && (
+            <div className="text-right hidden sm:block">
+              <div className="text-[9px] uppercase tracking-wider" style={{ color: 'oklch(0.45 0.010 258)' }}>IV Crush</div>
+              <div className="font-mono-data text-xs font-semibold" style={{ color: 'oklch(0.78 0.18 85)' }}>{(ivCrush * 100).toFixed(0)}%</div>
+            </div>
+          )}
+          {dteClose != null && (
+            <div className="text-right hidden sm:block">
+              <div className="text-[9px] uppercase tracking-wider" style={{ color: 'oklch(0.45 0.010 258)' }}>DTE@Close</div>
+              <div className="font-mono-data text-xs" style={{ color: 'oklch(0.55 0.010 258)' }}>{dteClose}d</div>
+            </div>
+          )}
+          <div className="text-right">
+            <div className="text-[9px] uppercase tracking-wider" style={{ color: 'oklch(0.45 0.010 258)' }}>Realised P&L</div>
+            <div className="font-mono-data text-sm font-semibold" style={{ color: isWin ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }}>
+              {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(0)}
+            </div>
+          </div>
+        </div>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="px-4 pb-4 pt-1 space-y-3 border-t" style={{ borderColor: 'oklch(1 0 0 / 8%)' }}>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Open leg */}
+            <div className="rounded p-3" style={{ background: 'oklch(0.13 0.010 258)', border: '1px solid oklch(0.72 0.18 145 / 15%)' }}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-[10px] font-mono-data font-bold px-1.5 py-0.5 rounded uppercase" style={{ color: 'oklch(0.72 0.18 145)', background: 'oklch(0.72 0.18 145 / 12%)' }}>OPEN</span>
+                <span className="text-[10px] font-mono-data" style={{ color: 'oklch(0.45 0.010 258)' }}>{openDate}</span>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: 'oklch(0.75 0.005 258)' }}>{open.description}</p>
+              {open.debit_credit != null && (
+                <div className="mt-2 text-xs font-mono-data" style={{ color: 'oklch(0.55 0.010 258)' }}>
+                  Credit/Debit: <span style={{ color: open.debit_credit >= 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }}>
+                    {open.debit_credit >= 0 ? '+' : ''}${open.debit_credit.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+            {/* Close leg */}
+            <div className="rounded p-3" style={{ background: 'oklch(0.13 0.010 258)', border: '1px solid oklch(0.65 0.22 25 / 15%)' }}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-[10px] font-mono-data font-bold px-1.5 py-0.5 rounded uppercase" style={{ color: 'oklch(0.65 0.22 25)', background: 'oklch(0.65 0.22 25 / 12%)' }}>CLOSE</span>
+                <span className="text-[10px] font-mono-data" style={{ color: 'oklch(0.45 0.010 258)' }}>{closeDate}</span>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: 'oklch(0.75 0.005 258)' }}>{close.description}</p>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] font-mono-data">
+                <div>
+                  <div style={{ color: 'oklch(0.45 0.010 258)' }}>P&L</div>
+                  <div style={{ color: isWin ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)', fontWeight: 600 }}>
+                    {pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}
+                  </div>
+                </div>
+                {ivCrush != null && (
+                  <div>
+                    <div style={{ color: 'oklch(0.45 0.010 258)' }}>IV Crush</div>
+                    <div style={{ color: 'oklch(0.78 0.18 85)', fontWeight: 600 }}>{(ivCrush * 100).toFixed(0)}%</div>
+                  </div>
+                )}
+                {dteClose != null && (
+                  <div>
+                    <div style={{ color: 'oklch(0.45 0.010 258)' }}>DTE@Close</div>
+                    <div style={{ color: 'oklch(0.55 0.010 258)' }}>{dteClose}d</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClosedLoopAccordion({ entries }: { entries: JournalEntry[] }) {
+  const pairs = buildClosedPairs(entries);
+  if (pairs.length === 0) return null;
+
+  const totalPnl = pairs.reduce((s, p) => s + (p.closeEntry.realized_pnl ?? 0), 0);
+  const wins = pairs.filter(p => (p.closeEntry.realized_pnl ?? 0) > 0).length;
+
+  return (
+    <div className="space-y-2">
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Link2 className="w-3.5 h-3.5" style={{ color: 'oklch(0.80 0.15 200)' }} />
+          <span className="font-display text-xs font-bold uppercase tracking-wider" style={{ color: 'oklch(0.93 0.005 258)' }}>
+            Closed Trades
+          </span>
+          <span className="font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'oklch(0.80 0.15 200 / 10%)', color: 'oklch(0.80 0.15 200)' }}>
+            {pairs.length} pair{pairs.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 text-xs font-mono-data">
+          <span style={{ color: 'oklch(0.55 0.010 258)' }}>{wins}/{pairs.length} wins</span>
+          <span style={{ color: totalPnl >= 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)', fontWeight: 600 }}>
+            {totalPnl >= 0 ? '+' : ''}${Math.abs(totalPnl).toFixed(0)} total
+          </span>
+        </div>
+      </div>
+      {pairs.map(pair => (
+        <ClosedTradeCard key={pair.closeEntry.id} pair={pair} />
+      ))}
+    </div>
+  );
+}
+
 export default function JournalPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, loading, error, refresh, lastUpdated } = useJournal();
   const { data: suggest, loading: suggestLoading, refresh: refreshSuggest } = useJournalSuggest();
@@ -312,8 +501,18 @@ export default function JournalPage({ embedded = false }: { embedded?: boolean }
           </div>
         )}
 
+        {/* ── E-09: Closed-loop paired view ── */}
+        {entries.length > 0 && <ClosedLoopAccordion entries={entries} />}
+
+        {/* ── Full entry log ── */}
         {entries.length > 0 && (
           <div className="space-y-2">
+            <div className="flex items-center gap-2 pt-2">
+              <span className="font-display text-xs font-bold uppercase tracking-wider" style={{ color: 'oklch(0.93 0.005 258)' }}>All Entries</span>
+              <span className="font-mono-data text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'oklch(1 0 0 / 6%)', color: 'oklch(0.55 0.010 258)' }}>
+                {entries.length}
+              </span>
+            </div>
             {entries.map(entry => (
               <EntryRow key={entry.id} entry={entry} onDelete={handleDelete} />
             ))}

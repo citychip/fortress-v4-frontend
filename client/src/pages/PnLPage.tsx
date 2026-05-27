@@ -7,13 +7,13 @@
  * Filtering: by ticker, by side (long/short), by right (call/put), by P&L sign (winners/losers)
  */
 
-import { usePositions } from '@/hooks/useApi';
+import { usePositions, usePnlHistory, type PnlHistoryRow } from '@/hooks/useApi';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { StatCard } from '@/components/StatCard';
 import { useConfig } from '@/contexts/ConfigContext';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, ReferenceLine, CartesianGrid,
 } from 'recharts';
 import { useMemo, useState } from 'react';
@@ -188,6 +188,80 @@ function LegRow({ leg, onTriageClick, dteTriage }: { leg: LegPnL; onTriageClick:
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+
+// ─── E-10: Equity Curve ───────────────────────────────────────────────────────
+
+function EquityCurveTooltip({ active, payload, label }: { active?: boolean; payload?: {value:number}[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const val = payload[0].value;
+  return (
+    <div className="rounded border px-3 py-2 text-xs font-mono-data" style={{ background: 'oklch(0.15 0.010 258)', borderColor: 'oklch(1 0 0 / 15%)' }}>
+      <div className="font-semibold mb-1" style={{ color: 'oklch(0.93 0.005 258)' }}>{label}</div>
+      <div style={{ color: 'oklch(0.80 0.15 200)' }}>${val != null ? val.toLocaleString('en-US', {maximumFractionDigits:0}) : '—'}</div>
+    </div>
+  );
+}
+
+function EquityCurvePanel() {
+  const { data, loading } = usePnlHistory(90);
+  const rows = data?.rows ?? [];
+
+  if (loading) return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+      <div className="text-xs" style={{ color: 'oklch(0.55 0.010 258)' }}>Loading net-liq history…</div>
+    </div>
+  );
+  if (rows.length === 0) return (
+    <div className="rounded border p-4 text-center" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+      <div className="text-xs" style={{ color: 'oklch(0.55 0.010 258)' }}>
+        No equity history yet — snapshot writes daily at 16:10 ET after first EOD close.
+      </div>
+    </div>
+  );
+
+  const chartData = rows.map((r: PnlHistoryRow) => ({
+    date: r.date.slice(5),
+    net_liq: r.net_liquidation,
+  }));
+
+  const first = rows[0].net_liquidation ?? 0;
+  const last  = rows[rows.length - 1].net_liquidation ?? 0;
+  const change = last - first;
+  const changePct = first ? (change / first) * 100 : 0;
+
+  const minVal = Math.min(...chartData.map(r => r.net_liq ?? Infinity));
+  const maxVal = Math.max(...chartData.map(r => r.net_liq ?? -Infinity));
+  const pad    = (maxVal - minVal) * 0.08 || 5000;
+
+  return (
+    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display text-sm font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>
+          Net Liquidation — 90-Day History
+        </h2>
+        <div className="flex items-center gap-3 text-xs font-mono-data">
+          <span style={{ color: 'oklch(0.55 0.010 258)' }}>{rows.length}d</span>
+          <span style={{ color: change >= 0 ? 'oklch(0.72 0.18 145)' : 'oklch(0.65 0.22 25)' }}>
+            {change >= 0 ? '+' : ''}${Math.abs(change).toLocaleString('en-US', {maximumFractionDigits:0})} ({changePct >= 0 ? '+' : ''}{changePct.toFixed(1)}%)
+          </span>
+          <span style={{ color: 'oklch(0.80 0.15 200)', fontWeight: 600 }}>
+            ${last.toLocaleString('en-US', {maximumFractionDigits:0})}
+          </span>
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={160}>
+        <LineChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke="oklch(1 0 0 / 5%)" />
+          <XAxis dataKey="date" tick={{ fill: 'oklch(0.45 0.010 258)', fontSize: 10, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <YAxis domain={[minVal - pad, maxVal + pad]} tick={{ fill: 'oklch(0.45 0.010 258)', fontSize: 10, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'k' : v.toFixed(0))} width={55} />
+          <Tooltip content={<EquityCurveTooltip />} cursor={{ stroke: 'oklch(1 0 0 / 20%)' }} />
+          <Line type="monotone" dataKey="net_liq" stroke="oklch(0.80 0.15 200)" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: 'oklch(0.80 0.15 200)' }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function PnLPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, loading, error, refresh, lastUpdated } = usePositions();
   const { config } = useConfig();
@@ -308,6 +382,9 @@ export default function PnLPage({ embedded = false }: { embedded?: boolean } = {
           <StatCard label="Winners / Losers"     value={loading ? '—' : `${winners} / ${losers}`} signal={winners >= losers ? 'green' : 'red'} loading={loading} />
           <StatCard label="Total Legs"           value={loading ? '—' : legs.length.toString()} signal="cyan" loading={loading} />
         </div>
+
+        {/* ── E-10: Net-liq equity curve ── */}
+        <EquityCurvePanel />
 
         {error && !loading && <EmptyState type="error" title="Failed to load positions" description={error} />}
         {loading && !data && <EmptyState type="loading" title="Loading positions…" />}
