@@ -11,7 +11,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ConfigProvider, useConfig } from "./contexts/ConfigContext";
 import { PendingOrdersProvider } from "./contexts/PendingOrdersContext";
-import { useHealth, useIbkrSync, useBriefing, useMarketIntelligence, regimeInfo } from "./hooks/useApi";
+import { useHealth, useBriefing, useMarketIntelligence, regimeInfo } from "./hooks/useApi";
 import { useFortressStream } from "./hooks/useFortressStream";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -239,17 +239,6 @@ function Sidebar() {
   const [location] = useLocation();
   const [expanded, setExpanded] = useState(false);
   const { config } = useConfig();
-  const { triggerSync, syncing } = useIbkrSync();
-
-  const handleSync = useCallback(async () => {
-    if (!config.apiToken) {
-      toast.error('API token not configured', { description: 'Go to Settings to add your API token.' });
-      return;
-    }
-    await triggerSync();
-    toast.success('IBKR sync triggered', { description: 'Positions will update shortly.' });
-  }, [config.apiToken, triggerSync]);
-
   return (
     <aside
       className="fixed left-0 z-40 flex flex-col transition-all duration-200 ease-out"
@@ -345,45 +334,6 @@ function Sidebar() {
         })}
 
       </nav>
-      {/* Bottom: IBKR sync */}
-      <div
-        className="flex-shrink-0"
-        style={{ padding: '10px', borderTop: '1px solid oklch(1 0 0 / 8%)' }}
-      >
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          title="Sync IBKR"
-          className={cn(
-            'flex items-center rounded transition-all duration-150',
-            syncing ? 'opacity-60 cursor-not-allowed' : 'hover:bg-[oklch(0.80_0.15_200_/_10%)]'
-          )}
-          style={{
-            width: '100%',
-            height: '32px',
-            padding: '0 8px',
-            gap: '10px',
-            color: 'oklch(0.80 0.15 200)',
-            border: '1px solid oklch(0.80 0.15 200 / 25%)',
-            background: 'transparent',
-          }}
-        >
-          <RefreshCw className={cn('w-3.5 h-3.5 flex-shrink-0', syncing && 'animate-spin')} />
-          <AnimatePresence>
-            {expanded && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.12 }}
-                className="text-xs whitespace-nowrap overflow-hidden"
-              >
-                {syncing ? 'Syncing…' : 'Sync IBKR'}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-      </div>
     </aside>
   );
 }

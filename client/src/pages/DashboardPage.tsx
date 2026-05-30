@@ -8,7 +8,7 @@ import { useState, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import {
   useBriefing, useStopLossAll, useRollAll, useAlerts,
-  useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory,
+  useTradeReport, useIbkrPreview, useSpyHedgeCoverage, useIbkrSync, useIbkrSyncHistory, useIbkrGateway, useIbkrStatus,
   useMarketIntelligence, useCandidates, useRunResults, useJournal, usePcsExposure,
   formatDollar, regimeInfo,
   type BriefingData, type TradeReport, type TradeReportRollCandidate, type TradeReportPostEarningsCandidate,
@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import {
   ArrowRight, AlertTriangle, TrendingUp, BookOpen, Crosshair,
   DollarSign, Shield, Zap, TrendingDown, CheckCircle, XCircle, Target,
-  Mail, X, RefreshCw, Database,
+  Mail, X, RefreshCw, Database, Play, Square, RotateCcw, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -428,77 +428,137 @@ function IbkrLivePreview() {
 function IbkrSyncHistoryPanel() {
   const { records, loading, refresh } = useIbkrSyncHistory();
   const { triggerSync, syncing, lastSync } = useIbkrSync();
+  const { control, loading: gwLoading } = useIbkrGateway();
+  const { data: status } = useIbkrStatus();
 
-  const handleSync = async () => {
-    await triggerSync();
-    refresh();
+  const lastRecord = records[0] ?? null;
+  const syncAgeMin = lastSync ? Math.floor((Date.now() - lastSync.getTime()) / 60000) : null;
+  const isHealthy = status?.web_api?.session_status?.authenticated && status?.web_api?.session_status?.established;
+  const autoCollapse = isHealthy && syncAgeMin !== null && syncAgeMin < 30;
+  const [expanded, setExpanded] = useState(!autoCollapse);
+
+  // Keep in sync with auto-collapse state when data loads
+  const prevAutoCollapse = expanded === !autoCollapse;
+
+  const connColor = isHealthy ? GREEN : status?.web_api?.session_status?.reachable ? AMBER : RED;
+  const connLabel = isHealthy ? 'Connected' : status?.web_api?.session_status?.reachable ? 'Reachable' : 'Disconnected';
+  const statusColor = (s: string) => s === 'ok' ? GREEN : s === 'partial' ? AMBER : RED;
+
+  const handleSync = async () => { await triggerSync(); refresh(); };
+  const handleGateway = async (action: 'start' | 'stop' | 'restart') => {
+    await control(action);
+    setTimeout(refresh, 3000);
   };
 
-  const statusColor = (s: string) =>
-    s === 'ok' ? GREEN : s === 'partial' ? AMBER : RED;
-
   return (
-    <div className="rounded border p-4" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Database className="w-4 h-4" style={{ color: CYAN }} />
-          <span className="font-display text-sm" style={{ color: BRIGHT }}>IBKR Sync</span>
-          {lastSync && (
-            <span className="text-[10px] font-mono-data" style={{ color: DIM }}>
-              Last: {lastSync.toLocaleTimeString()}
-            </span>
-          )}
+    <div className="rounded border overflow-hidden" style={{ background: 'oklch(0.17 0.010 258)', borderColor: 'oklch(1 0 0 / 9%)' }}>
+      {/* Always-visible header row */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: connColor, boxShadow: `0 0 6px ${connColor}` }} />
+        <Database className="w-3.5 h-3.5 flex-shrink-0" style={{ color: CYAN }} />
+        <span className="font-display text-sm" style={{ color: BRIGHT }}>IBKR</span>
+        <span className="text-[11px] font-mono-data" style={{ color: connColor }}>{connLabel}</span>
+        {status?.web_api && (
+          <span className="text-[11px] font-mono-data" style={{ color: DIM }}>
+            {status.active_backend === 'web_api' ? 'Web API' : status.active_backend}
+          </span>
+        )}
+        {lastRecord && (
+          <span className="text-[11px] font-mono-data" style={{ color: DIM }}>
+            · {lastRecord.positions_count} positions
+          </span>
+        )}
+        {lastSync && (
+          <span className="text-[11px] font-mono-data" style={{ color: DIM }}>
+            · {syncAgeMin === 0 ? 'just now' : `${syncAgeMin}m ago`}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono-data hover:opacity-80 disabled:opacity-40 transition-opacity"
+            style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
+          >
+            <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing…' : 'Sync Now'}
+          </button>
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="p-1 rounded hover:opacity-70 transition-opacity"
+            style={{ color: DIM }}
+          >
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-mono-data hover:opacity-80 disabled:opacity-40 transition-opacity"
-          style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
-        >
-          <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'Syncing…' : 'Sync Now'}
-        </button>
       </div>
 
-      {loading ? (
-        <div className="space-y-1.5">
-          {[1, 2].map(i => <div key={i} className="h-8 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />)}
-        </div>
-      ) : records.length === 0 ? (
-        <div className="text-xs py-2" style={{ color: DIM }}>No sync data available. Click Sync Now to fetch live positions.</div>
-      ) : (
-        <div className="overflow-hidden rounded border" style={{ borderColor: 'oklch(1 0 0 / 8%)' }}>
-          <table className="w-full text-xs">
-            <thead>
-              <tr style={{ background: 'oklch(1 0 0 / 4%)' }}>
-                <th className="text-left px-3 py-2 font-semibold" style={{ color: DIM }}>Timestamp</th>
-                <th className="text-left px-3 py-2 font-semibold" style={{ color: DIM }}>Backend</th>
-                <th className="text-right px-3 py-2 font-semibold" style={{ color: DIM }}>Positions</th>
-                <th className="text-center px-3 py-2 font-semibold" style={{ color: DIM }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r, i) => (
-                <tr key={i} style={{ borderTop: '1px solid oklch(1 0 0 / 6%)' }}>
-                  <td className="px-3 py-2 font-mono-data" style={{ color: 'oklch(0.70 0.010 258)' }}>
-                    {new Date(r.timestamp).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2 font-mono-data" style={{ color: CYAN }}>
-                    {r.backend === 'web_api' ? 'Web API' : r.backend === 'bs_yfinance' ? 'yFinance' : r.backend}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono-data font-semibold" style={{ color: BRIGHT }}>
-                    {r.positions_count}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold"
-                      style={{ background: `${statusColor(r.status)}15`, color: statusColor(r.status) }}>
-                      {r.status.toUpperCase()}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Expanded section */}
+      {expanded && (
+        <div className="border-t px-4 py-3 space-y-3" style={{ borderColor: 'oklch(1 0 0 / 8%)' }}>
+          {/* Gateway controls */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px]" style={{ color: DIM }}>Gateway:</span>
+            {(['start', 'stop', 'restart'] as const).map(action => (
+              <button
+                key={action}
+                onClick={() => handleGateway(action)}
+                disabled={!!gwLoading}
+                className="flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-mono-data capitalize hover:opacity-80 disabled:opacity-40 transition-opacity"
+                style={{
+                  color: action === 'start' ? GREEN : action === 'stop' ? RED : AMBER,
+                  borderColor: action === 'start' ? 'oklch(0.72 0.18 145 / 30%)' : action === 'stop' ? 'oklch(0.65 0.22 25 / 30%)' : 'oklch(0.78 0.18 85 / 30%)',
+                  background: action === 'start' ? 'oklch(0.72 0.18 145 / 8%)' : action === 'stop' ? 'oklch(0.65 0.22 25 / 8%)' : 'oklch(0.78 0.18 85 / 8%)',
+                }}
+              >
+                {action === 'start' ? <Play className="w-2.5 h-2.5" /> : action === 'stop' ? <Square className="w-2.5 h-2.5" /> : <RotateCcw className="w-2.5 h-2.5" />}
+                {gwLoading === action ? `${action}ing…` : action}
+              </button>
+            ))}
+          </div>
+
+          {/* Sync history */}
+          {loading ? (
+            <div className="space-y-1.5">
+              {[1, 2].map(i => <div key={i} className="h-8 rounded animate-pulse" style={{ background: 'oklch(1 0 0 / 5%)' }} />)}
+            </div>
+          ) : records.length === 0 ? (
+            <div className="text-xs py-1" style={{ color: DIM }}>No sync data. Click Sync Now to fetch live positions.</div>
+          ) : (
+            <div className="overflow-hidden rounded border" style={{ borderColor: 'oklch(1 0 0 / 8%)' }}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ background: 'oklch(1 0 0 / 4%)' }}>
+                    <th className="text-left px-3 py-2 font-semibold" style={{ color: DIM }}>Timestamp</th>
+                    <th className="text-left px-3 py-2 font-semibold" style={{ color: DIM }}>Backend</th>
+                    <th className="text-right px-3 py-2 font-semibold" style={{ color: DIM }}>Positions</th>
+                    <th className="text-center px-3 py-2 font-semibold" style={{ color: DIM }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid oklch(1 0 0 / 6%)' }}>
+                      <td className="px-3 py-2 font-mono-data" style={{ color: 'oklch(0.70 0.010 258)' }}>
+                        {new Date(r.timestamp).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 font-mono-data" style={{ color: CYAN }}>
+                        {r.backend === 'web_api' ? 'Web API' : r.backend === 'bs_yfinance' ? 'yFinance' : r.backend}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono-data font-semibold" style={{ color: BRIGHT }}>
+                        {r.positions_count}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold"
+                          style={{ background: `${statusColor(r.status)}15`, color: statusColor(r.status) }}>
+                          {r.status.toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

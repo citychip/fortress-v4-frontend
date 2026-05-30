@@ -1039,6 +1039,26 @@ export function useIbkrSyncHistory() {
   return { records, loading, error, refresh };
 }
 
+
+// ─── /api/ibkr/gateway/{action} ─────────────────────────────────────────────
+export function useIbkrGateway() {
+  const { config } = useConfig();
+  const [loading, setLoading] = useState<string | null>(null); // action in progress
+  const [error, setError] = useState<string | null>(null);
+  const control = useCallback(async (action: 'start' | 'stop' | 'restart') => {
+    setLoading(action);
+    setError(null);
+    try {
+      await apiFetch(config.apiUrl, config.apiToken, `/api/ibkr/gateway/${action}`, { method: 'POST' });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : `Gateway ${action} failed`);
+      throw err;
+    } finally {
+      setLoading(null);
+    }
+  }, [config.apiUrl, config.apiToken]);
+  return { control, loading, error };
+}
 // ─── Alert management (PATCH/DELETE) ─────────────────────────────────────────
 
 export function useAlertActions() {
