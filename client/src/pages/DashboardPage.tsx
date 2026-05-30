@@ -899,7 +899,7 @@ function QuickNav({ briefing, morningRanToday }: { briefing: BriefingData | null
   const scriptsColor = morningRanToday ? GREEN : AMBER;
 
   const links = [
-    { href: '/trade',        label: 'Trade',          sub: 'Scan · Candidates · Orders',    icon: Crosshair,     color: tradeColor },
+    { href: '/research',     label: 'Research',        sub: 'IV scan · Candidates · Gate',   icon: Crosshair,     color: tradeColor },
     { href: '/positions',    label: 'Positions',      sub: 'Per-leg evaluation',             icon: BookOpen,      color: positionsColor },
     { href: '/market-intel', label: 'Market Intel',   sub: 'GEX / DP / Drift',               icon: TrendingUp,    color: marketColor },
     { href: '/analysis',     label: 'Analysis',       sub: 'Ticker deep-dive + vol',         icon: AlertTriangle, color: CYAN },

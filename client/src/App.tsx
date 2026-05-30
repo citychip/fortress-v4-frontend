@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback } from "react";
 import {
-  LayoutDashboard,
+  LayoutDashboard, Crosshair,
   BookOpen,
   TrendingUp,
   BarChart2,
@@ -49,6 +49,7 @@ import NotFound from "./pages/NotFound";
 import MorningBriefPage from "./pages/MorningBriefPage";
 import TradeBuilderPage from "./pages/TradeBuilderPage";
 import StrategyPage from "./pages/StrategyPage";
+import ResearchPage from './pages/ResearchPage';
 import TradePage from "./pages/TradePage";
 import PnLJournalPage from "./pages/PnLJournalPage";
 import ConfigPage from "./pages/ConfigPage";
@@ -63,6 +64,7 @@ const NAV_ITEMS = [
   { path: '/',            label: 'Dashboard',   icon: LayoutDashboard },
   { path: '/market-intel',label: 'Market Intel',icon: TrendingUp },
   { path: '/positions',   label: 'Positions',   icon: BookOpen },
+  { path: '/research',    label: 'Research',    icon: Crosshair },
   { path: '/trade',       label: 'Trade',       icon: Activity },
   { path: '/analysis',    label: 'Analysis',    icon: BarChart2 },
   { path: '/performance', label: 'Performance', icon: DollarSign },
@@ -358,6 +360,7 @@ function Router() {
           <Route path="/"             component={DashboardPage} />
           <Route path="/market-intel" component={MarketIntelPage} />
           <Route path="/positions"    component={PositionsPage} />
+          <Route path="/research"     component={() => <ResearchPage />} />
           <Route path="/trade"        component={() => <TradePage />} />
           <Route path="/analysis"     component={AnalysisPage} />
           <Route path="/performance"  component={() => <PnLJournalPage />} />

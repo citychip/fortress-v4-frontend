@@ -14,7 +14,7 @@
  *   can_trade    = boolean
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { Microscope, useState, useMemo, useEffect } from 'react';
 import { Copy, CheckCircle2, AlertTriangle, SendHorizonal, CheckCheck, ShieldOff, ShieldCheck } from 'lucide-react';
 import {
   useCandidates,
@@ -308,6 +308,7 @@ function CandidateRowItem({
   const isBlocked = pretradeResult?.verdict === 'BLOCKED';
   const isActionable = !isBlocked && (evaluation.signal === 'STRONG_SELL' || evaluation.signal === 'SELL');
   const [earningsExpanded, setEarningsExpanded] = useState(false);
+  const [, navigate] = useLocation();
 
   return (
     <>
