@@ -1,3 +1,4 @@
+import { useLocation } from 'wouter';
 /**
  * FORTRESS V2 — Candidates Page
  * IV rank screener: surfaces new short-premium entry opportunities.
@@ -14,8 +15,8 @@
  *   can_trade    = boolean
  */
 
-import { Microscope, useState, useMemo, useEffect } from 'react';
-import { Copy, CheckCircle2, AlertTriangle, SendHorizonal, CheckCheck, ShieldOff, ShieldCheck } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Microscope, Copy, CheckCircle2, AlertTriangle, SendHorizonal, CheckCheck, ShieldOff, ShieldCheck } from 'lucide-react';
 import {
   useCandidates,
   useMarketIntelligence,
