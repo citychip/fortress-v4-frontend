@@ -13,14 +13,7 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { trpc } from '@/lib/trpc';
 import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, Download, Edit2, Check, X, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-
-const GREEN  = 'oklch(0.72 0.18 145)';
-const RED    = 'oklch(0.65 0.22 25)';
-const AMBER  = 'oklch(0.78 0.18 85)';
-const CYAN   = 'oklch(0.80 0.15 200)';
-const PURPLE = 'oklch(0.72 0.18 290)';
-const DIM    = 'oklch(0.55 0.010 258)';
-const BRIGHT = 'oklch(0.93 0.005 258)';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 function statusConfig(status: string) {
   switch (status) {

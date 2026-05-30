@@ -32,20 +32,13 @@ import {
   Line,
 } from 'recharts';
 import { useChartData } from '@/hooks/useApi';
-
-const GREEN  = 'oklch(0.72 0.18 145)';
-const RED    = 'oklch(0.65 0.22 25)';
-const AMBER  = 'oklch(0.78 0.18 85)';
-const CYAN   = 'oklch(0.80 0.15 200)';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 /** Navigate to Analysis page with the given ticker pre-selected */
 function navigateToAnalysis(ticker: string, navigate: (path: string) => void) {
   sessionStorage.setItem('fortress_analysis_ticker', ticker);
   navigate('/analysis');
 }
-const DIM    = 'oklch(0.55 0.010 258)';
-const BRIGHT = 'oklch(0.93 0.005 258)';
-
 // ─── Mini Sparkline ──────────────────────────────────────────────────────────
 // Tiny 60×24px price sparkline for entry candidate rows
 // Uses last 20 closes from useChartData; shows trend color (green/red)

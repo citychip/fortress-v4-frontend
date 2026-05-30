@@ -36,6 +36,7 @@ import {
   Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -1217,10 +1218,6 @@ function ConnectionHealthSection() {
 
 
 // ─── QuantData Credentials Section ───────────────────────────────────────────
-
-const ACCENT = 'oklch(0.80 0.15 200)';
-const BRIGHT = 'oklch(0.93 0.005 258)';
-const DIM    = 'oklch(0.55 0.010 258)';
 
 function QuantDataCredentialsSection() {
   const { config } = useConfig();

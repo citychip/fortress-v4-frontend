@@ -49,15 +49,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const GREEN  = 'oklch(0.72 0.18 145)';
-const RED    = 'oklch(0.65 0.22 25)';
-const AMBER  = 'oklch(0.78 0.18 85)';
-const CYAN   = 'oklch(0.80 0.15 200)';
-const DIM    = 'oklch(0.55 0.010 258)';
-const BRIGHT = 'oklch(0.93 0.005 258)';
-const CARD   = 'oklch(0.17 0.010 258)';
-const BORDER = 'oklch(1 0 0 / 9%)';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 /** Navigate to Analysis page with ticker pre-selected */
 function navigateToAnalysis(ticker: string, navigate: (path: string) => void) {

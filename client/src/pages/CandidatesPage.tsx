@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, ExternalLink, TrendingUp as TrendUp, BarChart2 } from 'lucide-react';
 import { useConfig as _useConfig } from '@/contexts/ConfigContext';
 import { useEarningsVolatility, type EarningsVolData } from '@/hooks/useApi';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 // ─── Signal badge ─────────────────────────────────────────────────────────────
 
@@ -178,12 +179,6 @@ function PretradeGateBadge({ result }: { result: PretradeResult | undefined }) {
 
 
 // ─── E-08: Earnings Volatility Compare Panel ─────────────────────────────────
-
-const DIM_EV  = 'oklch(0.50 0.010 258)';
-const CYAN_EV = 'oklch(0.80 0.15 200)';
-const AMBER_EV = 'oklch(0.78 0.18 85)';
-const GREEN_EV = 'oklch(0.72 0.18 145)';
-const RED_EV  = 'oklch(0.65 0.22 25)';
 
 function EarningsVolPanel({ ticker, colSpan }: { ticker: string; colSpan: number }) {
   const { data, loading } = useEarningsVolatility(ticker);

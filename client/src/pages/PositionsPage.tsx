@@ -22,17 +22,9 @@ import {
 import { useState, useMemo } from 'react';
 import { usePortfolioBeta, useSectorExposure, type ComponentBeta, type SectorItem } from '@/hooks/useApi';
 import { Link } from 'wouter';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 // ─── Color constants ──────────────────────────────────────────────────────────
-const CYAN   = 'oklch(0.80 0.15 200)';
-const GREEN  = 'oklch(0.72 0.18 145)';
-const AMBER  = 'oklch(0.78 0.18 85)';
-const RED    = 'oklch(0.65 0.22 25)';
-const DIM    = 'oklch(0.55 0.010 258)';
-const BRIGHT = 'oklch(0.93 0.005 258)';
-const CARD   = 'oklch(0.17 0.010 258)';
-const BORDER = 'oklch(1 0 0 / 9%)';
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function evaluatePositionLeg(

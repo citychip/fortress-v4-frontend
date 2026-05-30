@@ -8,13 +8,7 @@
 import { useMemo } from 'react';
 import { AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { usePositionLimits, type LegInput, type Position } from '@/hooks/useApi';
-
-const GREEN  = 'oklch(0.72 0.17 145)';
-const RED    = 'oklch(0.65 0.22 25)';
-const AMBER  = 'oklch(0.78 0.18 85)';
-const DIM    = 'oklch(0.55 0.02 258)';
-const BRIGHT = 'oklch(0.88 0.02 258)';
-const CYAN   = 'oklch(0.80 0.15 200)';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 function fmt(v: number | null, prefix = '$'): string {
   if (v === null) return '∞';

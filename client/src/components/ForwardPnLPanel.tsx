@@ -14,15 +14,7 @@ import {
 import { TrendingUp, TrendingDown, Zap, RefreshCw } from 'lucide-react';
 import { useForwardPnL, type LegInput, type Position } from '@/hooks/useApi';
 import { positionsToLegs } from './PositionLimitsBadge';
-
-const GREEN  = 'oklch(0.72 0.17 145)';
-const RED    = 'oklch(0.65 0.22 25)';
-const AMBER  = 'oklch(0.78 0.18 85)';
-const DIM    = 'oklch(0.55 0.02 258)';
-const BRIGHT = 'oklch(0.88 0.02 258)';
-const CYAN   = 'oklch(0.80 0.15 200)';
-const BG     = 'oklch(0.16 0.010 258)';
-const BORDER = 'oklch(1 0 0 / 8%)';
+import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 function fmt(v: number): string {
   const abs = Math.abs(v);
