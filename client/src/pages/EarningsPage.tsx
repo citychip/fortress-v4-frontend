@@ -120,6 +120,9 @@ function EarningsRow({ ticker, entry, onRefresh }: { ticker: string; entry: Earn
             ) : (
               <div className="font-mono-data text-xs" style={{ color: DIM }}>
                 {entry.next_earnings}
+                {entry.days_to_earnings !== undefined && entry.status !== 'past' && (
+                  <span className="ml-2" style={{ color: 'oklch(0.78 0.18 85)' }}>{entry.days_to_earnings}d</span>
+                )}
                 {entry.notes && <span className="ml-2" style={{ color: 'oklch(0.45 0.010 258)' }}>— {entry.notes}</span>}
               </div>
             )}
@@ -225,7 +228,7 @@ function PushCalendarModal({
                   className="rounded"
                 />
                 <span className="font-display font-bold text-sm flex-1" style={{ color: BRIGHT }}>{ticker}</span>
-                <span className="font-mono-data text-xs" style={{ color: DIM }}>{entry.next_earnings}</span>
+                <span className="font-mono-data text-xs" style={{ color: DIM }}>{entry.next_earnings}{entry.days_to_earnings !== undefined && entry.status !== 'past' && <span className="ml-2" style={{ color: 'oklch(0.78 0.18 85)' }}>{entry.days_to_earnings}d</span>}</span>
                 <StatusBadge status={entry.status} />
               </label>
             );

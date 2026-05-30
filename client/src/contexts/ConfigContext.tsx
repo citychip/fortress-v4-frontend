@@ -287,7 +287,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   traderProfile: DEFAULT_TRADER_PROFILE,
   autoRefresh: true,
   refreshIntervalSec: 60,
-  dashboardName: 'Fortress v3',
+  dashboardName: 'Fortress v4',
   dteTriage: 7,
 };
 

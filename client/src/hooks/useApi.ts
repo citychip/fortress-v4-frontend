@@ -1350,7 +1350,7 @@ export function regimeInfo(regime: string): { label: string; color: 'red' | 'amb
   const r = regime.toLowerCase();
   if (r.includes('strongly_bearish') || r.includes('strongly bearish')) return { label: 'Strongly Bearish', color: 'red' };
   if (r.includes('mildly_bearish') || r.includes('mildly bearish')) return { label: 'Mildly Bearish', color: 'amber' };
-  if (r.includes('bearish')) return { label: 'Bearish', color: 'red' };
+  if (r.includes('bearish')) return { label: 'Bearish', color: 'amber' };
   if (r.includes('neutral')) return { label: 'Neutral', color: 'amber' };
   if (r.includes('mildly_bullish') || r.includes('mildly bullish')) return { label: 'Mildly Bullish', color: 'green' };
   if (r.includes('strongly_bullish') || r.includes('strongly bullish')) return { label: 'Strongly Bullish', color: 'green' };

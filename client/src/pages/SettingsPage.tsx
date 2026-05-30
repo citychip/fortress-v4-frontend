@@ -775,7 +775,7 @@ function GeneralSection() {
           <Input
             value={config.dashboardName}
             onChange={v => updateConfig({ dashboardName: v })}
-            placeholder="Fortress v3"
+            placeholder="Fortress v4"
           />
         </Field>
 

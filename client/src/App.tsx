@@ -290,7 +290,7 @@ function Sidebar() {
               className="overflow-hidden whitespace-nowrap"
             >
               <div className="font-display text-sm leading-tight" style={{ color: 'oklch(0.93 0.005 258)' }}>
-                {config.dashboardName || 'Fortress v3'}
+                {config.dashboardName || 'Fortress v4'}
               </div>
               <div className="font-mono-data text-[10px]" style={{ color: 'oklch(0.50 0.010 258)' }}>
                 Options Dashboard

@@ -989,7 +989,7 @@ export default function MorningBriefPage({ embedded = false }: { embedded?: bool
     <div className="min-h-screen">
       <PageHeader
         title="Morning Brief"
-        subtitle={`Fortress v3 — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
+        subtitle={`Fortress v4 — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
         lastUpdated={briefing?.as_of ? new Date(briefing.as_of) : null}
         onRefresh={refresh}
         refreshing={loading}
