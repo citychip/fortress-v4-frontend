@@ -805,18 +805,49 @@ function PositionAlertsSummary() {
 
 // ─── Quick Nav Cards ──────────────────────────────────────────────────────────
 
-function QuickNav() {
-  const links = [
-    { href: '/trade',        label: 'Trade',          sub: 'Scan · Candidates · Orders',  icon: Crosshair,     color: CYAN },
-    { href: '/positions',    label: 'Positions',      sub: 'Per-leg evaluation',          icon: BookOpen,      color: GREEN },
-    { href: '/market-intel', label: 'Market Intel',   sub: 'GEX / DP / Drift',            icon: TrendingUp,    color: AMBER },
-    { href: '/analysis',     label: 'Analysis',       sub: 'Ticker deep-dive + vol',      icon: AlertTriangle, color: RED },
-    { href: '/performance',  label: 'Performance',    sub: 'P&L · Journal',               icon: DollarSign,    color: CYAN },
-    { href: '/earnings',     label: 'Earnings',       sub: 'Calendar & blackout windows', icon: BookOpen,      color: GREEN },
-    { href: '/config',       label: 'Config',         sub: 'Strategy · Settings · Scripts', icon: Zap,         color: AMBER },
-    { href: '/scripts',      label: 'Scripts',        sub: 'Automation & tools',          icon: Shield,        color: DIM },
-  ];
+function QuickNav({ briefing, morningRanToday }: { briefing: BriefingData | null; morningRanToday: boolean }) {
+  const regime = briefing?.macro_regime?.regime?.toLowerCase() ?? '';
+  const pacing = briefing?.pacing;
+  const account = briefing?.account;
+  const earningsRisk = typeof briefing?.earnings_risk === 'object' && briefing?.earnings_risk !== null
+    ? briefing.earnings_risk as { risk_level?: string }
+    : null;
 
+  const tradeColor = !pacing || pacing.remaining === 0 ? RED
+    : regime.includes('strongly_bear') ? RED
+    : regime.includes('bear') ? AMBER
+    : GREEN;
+
+  const positionsColor = account?.thresholds?.excess_liq_ok === false ? RED
+    : account?.thresholds?.available_funds_ok === false ? AMBER
+    : GREEN;
+
+  const marketColor = regime.includes('strongly_bear') ? RED
+    : regime.includes('bear') || regime.includes('neutral') ? AMBER
+    : regime.includes('bull') ? GREEN
+    : CYAN;
+
+  const perfColor = account?.daily_pnl == null ? CYAN
+    : account.daily_pnl < 0 ? RED
+    : account.daily_pnl > 0 ? GREEN
+    : CYAN;
+
+  const earningsColor = earningsRisk?.risk_level === 'high' ? RED
+    : earningsRisk?.risk_level === 'medium' ? AMBER
+    : GREEN;
+
+  const scriptsColor = morningRanToday ? GREEN : AMBER;
+
+  const links = [
+    { href: '/trade',        label: 'Trade',          sub: 'Scan · Candidates · Orders',    icon: Crosshair,     color: tradeColor },
+    { href: '/positions',    label: 'Positions',      sub: 'Per-leg evaluation',             icon: BookOpen,      color: positionsColor },
+    { href: '/market-intel', label: 'Market Intel',   sub: 'GEX / DP / Drift',               icon: TrendingUp,    color: marketColor },
+    { href: '/analysis',     label: 'Analysis',       sub: 'Ticker deep-dive + vol',         icon: AlertTriangle, color: CYAN },
+    { href: '/performance',  label: 'Performance',    sub: 'P&L · Journal',                  icon: DollarSign,    color: perfColor },
+    { href: '/earnings',     label: 'Earnings',       sub: 'Calendar & blackout windows',    icon: BookOpen,      color: earningsColor },
+    { href: '/config',       label: 'Config',         sub: 'Strategy · Settings · Scripts',  icon: Zap,           color: AMBER },
+    { href: '/scripts',      label: 'Scripts',        sub: 'Automation & tools',             icon: Shield,        color: scriptsColor },
+  ];
   return (
     <div className="grid grid-cols-4 gap-3">
       {links.map(({ href, label, sub, icon: Icon, color }) => (
@@ -838,7 +869,6 @@ function QuickNav() {
     </div>
   );
 }
-
 // ─── Send Briefing Modal ─────────────────────────────────────────────────────
 
 function SendBriefingModal({
@@ -1151,7 +1181,7 @@ export default function DashboardPage() {
       <div className="p-6 space-y-6">
         <AccountSummarySection />
         <IbkrSyncHistoryPanel />
-        <QuickNav />
+        <QuickNav briefing={data} morningRanToday={morningRanToday} />
 
         {/* Morning briefing send button */}
         <div className="rounded p-4 flex items-center justify-between" style={{ background: 'oklch(0.17 0.010 258)', border: '1px solid oklch(1 0 0 / 9%)' }}>
