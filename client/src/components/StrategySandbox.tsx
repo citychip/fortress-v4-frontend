@@ -100,11 +100,12 @@ const REGIME_CELLS = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 interface StrategySandboxProps {
-  ticker?: string;        // pre-selected ticker from parent (AnalysisPage)
+  ticker?: string;        // pre-selected ticker from parent
   collapsed?: boolean;    // start collapsed
+  hideTickerSelect?: boolean;  // when true (Trade tab): don't show internal ticker dropdown
 }
 
-export function StrategySandbox({ ticker: propTicker, collapsed = false }: StrategySandboxProps) {
+export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTickerSelect = false }: StrategySandboxProps) {
   const [, navigate] = useLocation();
   const { config } = useConfig();
   const [open, setOpen] = useState(!collapsed);
@@ -135,6 +136,26 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false }: Strat
   const sbGexCall = (sbIntel as any)?.regime?.gex_call_wall ?? (sbIntel as any)?.gex?.call_wall ?? null;
   const sbGexPut  = (sbIntel as any)?.regime?.gex_put_wall  ?? (sbIntel as any)?.gex?.put_wall  ?? null;
   const sbDpFloor = (sbIntel as any)?.regime?.dp_floor ?? null;
+  const sbFlipZone = (sbIntel as any)?.gex?.flip_zone ?? (sbIntel as any)?.regime?.flip_zone ?? null;
+
+  // Multi-level enrichment: use arrays when available, fall back to scalars
+  const dpFloors: number[] = useMemo(() => {
+    const raw = (sbIntel as any)?.dark_pool?.floors ?? [];
+    if (raw.length > 0) return raw.map((f: any) => typeof f === 'number' ? f : (f.level ?? f.price ?? 0)).filter(Boolean).slice(0, 4);
+    return sbDpFloor ? [sbDpFloor] : [];
+  }, [sbIntel, sbDpFloor]);
+
+  const gexCallWalls: number[] = useMemo(() => {
+    const walls = (sbIntel as any)?.gex?.call_walls ?? [];
+    if (walls.length > 0) return walls.slice(0, 3).map((w: any) => w.strike).filter(Boolean);
+    return sbGexCall ? [sbGexCall] : [];
+  }, [sbIntel, sbGexCall]);
+
+  const gexPutWalls: number[] = useMemo(() => {
+    const walls = (sbIntel as any)?.gex?.put_walls ?? [];
+    if (walls.length > 0) return walls.slice(0, 3).map((w: any) => w.strike).filter(Boolean);
+    return sbGexPut ? [sbGexPut] : [];
+  }, [sbIntel, sbGexPut]);
 
   // Live regime cell
   const spyIvr = (spyIntel as any)?.regime?.iv_rank ?? null;
@@ -221,21 +242,23 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false }: Strat
           )}
 
           {/* Controls */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Ticker */}
-            <div>
-              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: SB_DIM }}>Ticker</p>
-              <Select value={effectiveTicker} onValueChange={setSandboxTicker}>
-                <SelectTrigger size="sm" className="h-8 text-xs font-mono-data" style={{ background: 'oklch(0.22 0.010 258)', borderColor: SB_BORDER, color: SB_BRIGHT }}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(candidateTickers.length > 0 ? candidateTickers : ['SPY', 'QQQ', 'MSFT', 'AAPL', 'NVDA']).map((t: string) => (
-                    <SelectItem key={t} value={t} className="text-xs font-mono-data">{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className={`grid gap-3 ${hideTickerSelect ? "grid-cols-1" : "grid-cols-2"}`}>
+            {/* Ticker — hidden when parent (Trade tab) controls selection */}
+            {!hideTickerSelect && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: SB_DIM }}>Ticker</p>
+                <Select value={effectiveTicker} onValueChange={setSandboxTicker}>
+                  <SelectTrigger size="sm" className="h-8 text-xs font-mono-data" style={{ background: 'oklch(0.22 0.010 258)', borderColor: SB_BORDER, color: SB_BRIGHT }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(candidateTickers.length > 0 ? candidateTickers : ['SPY', 'QQQ', 'MSFT', 'AAPL', 'NVDA']).map((t: string) => (
+                      <SelectItem key={t} value={t} className="text-xs font-mono-data">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {/* Strategy */}
             <div>
               <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: SB_DIM }}>Strategy</p>
@@ -284,9 +307,22 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false }: Strat
                     formatter={(v: number) => [`$${v.toFixed(2)}`, 'P&L']}
                   />
                   <ReferenceLine x={sbSpot} stroke={SB_CYAN} strokeDasharray="4 2" label={{ value: 'Spot', fill: SB_CYAN, fontSize: 9 }} />
-                  {sbGexCall && <ReferenceLine x={sbGexCall} stroke={SB_RED}   strokeDasharray="2 3" label={{ value: 'GEX Call', fill: SB_RED,   fontSize: 8 }} />}
-                  {sbGexPut  && <ReferenceLine x={sbGexPut}  stroke={SB_GREEN} strokeDasharray="2 3" label={{ value: 'GEX Put',  fill: SB_GREEN, fontSize: 8 }} />}
-                  {sbDpFloor && <ReferenceLine x={sbDpFloor} stroke={SB_AMBER} strokeDasharray="2 3" label={{ value: 'DP Floor', fill: SB_AMBER, fontSize: 8 }} />}
+                  {gexCallWalls.map((lvl, i) => (
+                    <ReferenceLine key={`gc${i}`} x={lvl} stroke={SB_RED} strokeDasharray="2 3"
+                      label={i === 0 ? { value: 'GEX↑', fill: SB_RED, fontSize: 8 } : undefined} />
+                  ))}
+                  {gexPutWalls.map((lvl, i) => (
+                    <ReferenceLine key={`gp${i}`} x={lvl} stroke={SB_GREEN} strokeDasharray="2 3"
+                      label={i === 0 ? { value: 'GEX↓', fill: SB_GREEN, fontSize: 8 } : undefined} />
+                  ))}
+                  {dpFloors.map((lvl, i) => (
+                    <ReferenceLine key={`dp${i}`} x={lvl} stroke={SB_AMBER} strokeDasharray="2 3"
+                      label={i === 0 ? { value: 'DP', fill: SB_AMBER, fontSize: 8 } : undefined} />
+                  ))}
+                  {sbFlipZone && (
+                    <ReferenceLine x={sbFlipZone} stroke="oklch(0.75 0.20 300)" strokeDasharray="3 2"
+                      label={{ value: 'Flip', fill: 'oklch(0.75 0.20 300)', fontSize: 8 }} />
+                  )}
                   <ReferenceLine y={0} stroke="oklch(1 0 0 / 20%)" />
                   <Line type="monotone" dataKey="pnl" dot={false} strokeWidth={2}
                     stroke={payoffData.map(d => d.pnl >= 0 ? SB_GREEN : SB_RED)[0] ?? SB_CYAN} />
@@ -316,12 +352,29 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false }: Strat
             </div>
           )}
 
-          {/* GEX / DP levels */}
-          {(sbGexCall || sbGexPut || sbDpFloor) && (
+          {/* GEX / DP / Flip levels */}
+          {(gexCallWalls.length > 0 || gexPutWalls.length > 0 || dpFloors.length > 0 || sbFlipZone) && (
             <div className="flex flex-wrap gap-2 text-[10px] font-mono-data">
-              {sbGexCall && <span className="px-2 py-0.5 rounded" style={{ background: `${SB_RED}15`, color: SB_RED }}>GEX Call Wall: ${sbGexCall.toFixed(2)}</span>}
-              {sbGexPut  && <span className="px-2 py-0.5 rounded" style={{ background: `${SB_GREEN}15`, color: SB_GREEN }}>GEX Put Wall: ${sbGexPut.toFixed(2)}</span>}
-              {sbDpFloor && <span className="px-2 py-0.5 rounded" style={{ background: `${SB_AMBER}15`, color: SB_AMBER }}>DP Floor: ${sbDpFloor.toFixed(2)}</span>}
+              {gexCallWalls.map((lvl, i) => (
+                <span key={`gc${i}`} className="px-2 py-0.5 rounded" style={{ background: `${SB_RED}18`, color: SB_RED }}>
+                  GEX↑{gexCallWalls.length > 1 ? ` #${i+1}` : ''}: ${lvl.toFixed(0)}
+                </span>
+              ))}
+              {gexPutWalls.map((lvl, i) => (
+                <span key={`gp${i}`} className="px-2 py-0.5 rounded" style={{ background: `${SB_GREEN}18`, color: SB_GREEN }}>
+                  GEX↓{gexPutWalls.length > 1 ? ` #${i+1}` : ''}: ${lvl.toFixed(0)}
+                </span>
+              ))}
+              {dpFloors.map((lvl, i) => (
+                <span key={`dp${i}`} className="px-2 py-0.5 rounded" style={{ background: `${SB_AMBER}18`, color: SB_AMBER }}>
+                  DP{dpFloors.length > 1 ? ` #${i+1}` : ''}: ${lvl.toFixed(0)}
+                </span>
+              ))}
+              {sbFlipZone && (
+                <span className="px-2 py-0.5 rounded" style={{ background: 'oklch(0.75 0.20 300 / 12%)', color: 'oklch(0.75 0.20 300)' }}>
+                  Flip Zone: ${sbFlipZone.toFixed(0)}
+                </span>
+              )}
             </div>
           )}
 
