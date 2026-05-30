@@ -5,7 +5,7 @@
  * IBKR order placement is deferred until backend adds /api/ibkr/order endpoints.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import {
@@ -13,6 +13,9 @@ import {
   usePretradeAll,
   useMarketIntelligence,
   useChartLevels,
+  usePositions,
+  useStopLossAll,
+  useRollAll,
   evaluateCandidate,
   regimeInfo,
   type CandidateRow,
@@ -187,12 +190,19 @@ function normalCDF(x: number): number {
 
 // ─── Ticker selector ──────────────────────────────────────────────────────────
 
+// ─── Trade mode ──────────────────────────────────────────────────────────────
+type TradeMode = 'new' | 'add' | 'roll' | 'close';
+const TRADE_MODE_LABELS: Record<TradeMode, string> = {
+  new: 'New Entry', add: 'Add', roll: 'Roll', close: 'Close',
+};
+
 function TickerSelector({
   selected,
   onSelect,
   candidates,
   universeTickers,
   loading,
+  positionContextMap,
 }: {
   selected: string | null;
   onSelect: (t: string) => void;
@@ -210,15 +220,29 @@ function TickerSelector({
     return m;
   }, [candidates]);
 
-  // Split universe into READY (in screener) vs NOT READY (not in screener results)
+  // Active position tickers (urgent first)
+  const activeTickers = useMemo(() => {
+    if (!positionContextMap?.size) return [];
+    const q = search.toUpperCase().trim();
+    const all = [...positionContextMap.keys()].filter(t => !q || t.includes(q));
+    return all.sort((a, b) => {
+      const au = positionContextMap.get(a)!.urgent;
+      const bu = positionContextMap.get(b)!.urgent;
+      return au === bu ? 0 : au ? -1 : 1;
+    });
+  }, [positionContextMap, search]);
+
+  // Split universe into READY/NOT READY — exclude active positions
   const { ready, notReady } = useMemo(() => {
     const q = search.toUpperCase().trim();
     const all = universeTickers.filter(t => !q || t.includes(q));
     const r: string[] = [];
     const nr: string[] = [];
-    all.forEach(t => (candidateMap.has(t) ? r : nr).push(t));
+    all
+      .filter(t => !positionContextMap?.has(t))
+      .forEach(t => (candidateMap.has(t) ? r : nr).push(t));
     return { ready: r, notReady: nr };
-  }, [universeTickers, candidateMap, search]);
+  }, [universeTickers, candidateMap, positionContextMap, search]);
 
   // Extra tickers typed that aren't in universe at all
   const freeTextTicker = useMemo(() => {
@@ -276,6 +300,33 @@ function TickerSelector({
             />
           </div>
 
+          {/* Active Positions section */}
+          {activeTickers.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider flex items-center gap-2"
+                style={{ color: CYAN }}>
+                <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: CYAN }} />
+                Active positions ({activeTickers.length})
+              </div>
+              {activeTickers.map(ticker => {
+                const ctx = positionContextMap!.get(ticker)!;
+                return (
+                  <button
+                    key={ticker}
+                    onClick={() => { onSelect(ticker); setOpen(false); setSearch(''); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all hover:bg-[oklch(1_0_0_/_4%)]"
+                  >
+                    <span className="font-mono-data text-sm font-bold w-16" style={{ color: CYAN }}>{ticker}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: 'oklch(0.80 0.15 200 / 10%)', color: CYAN }}>{ctx.strategy}</span>
+                    {ctx.urgent && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data ml-auto" style={{ background: 'oklch(0.65 0.22 25 / 12%)', color: 'oklch(0.65 0.22 25)' }}>urgent</span>
+                    )}
+                  </button>
+                );
+              })}
+              <div className="border-t" style={{ borderColor: BORDER }} />
+            </>
+          )}
           {/* Free-text: ticker not in universe at all */}
           {freeTextTicker && (
             <>
@@ -742,24 +793,55 @@ function CandidateSummaryBar({ candidate }: { candidate: CandidateRow }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function TradeBuilderPage() {
+export default function TradeBuilderPage({
+  embedded = false,
+  initialTicker = null,
+  initialMode = 'new' as TradeMode,
+  initialLeg = null,
+}: {
+  embedded?: boolean;
+  initialTicker?: string | null;
+  initialMode?: TradeMode;
+  initialLeg?: string | null;
+} = {}) {
   const { config } = useConfig();
   const { data: candidatesData, loading: candLoading, refresh: candRefresh } = useCandidates();
   const { data: pretradeData } = usePretradeAll();
   const { addOrder, hasOrder } = usePendingOrders();
+  const { data: positionsData } = usePositions();
+  const { data: rollData } = useRollAll();
+  const { data: stopLossData } = useStopLossAll();
 
   const [selectedTicker, setSelectedTicker] = useState<string | null>(() => {
-    // Deep-link from Positions page Roll/Build shortcuts
+    if (initialTicker) return initialTicker;
     const preselect = sessionStorage.getItem('fortress_tradebuilder_ticker');
-    if (preselect) {
-      sessionStorage.removeItem('fortress_tradebuilder_ticker');
-      return preselect;
-    }
+    if (preselect) { sessionStorage.removeItem('fortress_tradebuilder_ticker'); return preselect; }
     return null;
   });
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
+  const [mode, setMode] = useState<TradeMode>(initialMode);
+  const [legId, setLegId] = useState<string | null>(initialLeg);
 
   const candidates = candidatesData?.rows ?? [];
+
+  const positionContextMap = useMemo(() => {
+    const map = new Map<string, { strategy: string; urgent: boolean }>();
+    const rollTickers = new Set<string>((rollData as any)?.positions?.map((p: any) => p.ticker) ?? []);
+    const stopTickers = new Set<string>((stopLossData as any)?.positions?.map((p: any) => p.ticker) ?? []);
+    ((positionsData as any)?.positions ?? []).forEach((p: any) => {
+      if (!map.has(p.ticker)) {
+        map.set(p.ticker, { strategy: p.strategy ?? '', urgent: rollTickers.has(p.ticker) || stopTickers.has(p.ticker) });
+      }
+    });
+    return map;
+  }, [positionsData, rollData, stopLossData]);
+
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setSelectedStrategy(null);
+    setLegId(null);
+  }, [selectedTicker, mode]);
 
   const candidate = useMemo(
     () => candidates.find(c => c.ticker === selectedTicker) ?? null,
@@ -822,10 +904,11 @@ export default function TradeBuilderPage() {
         {/* Ticker selector in header */}
         <TickerSelector
           selected={selectedTicker}
-          onSelect={t => { setSelectedTicker(t); setSelectedStrategy(null); }}
+          onSelect={t => { setSelectedTicker(t); setSelectedStrategy(null); setMode('new'); setLegId(null); }}
           candidates={candidates}
           universeTickers={config.tickers}
           loading={candLoading}
+          positionContextMap={positionContextMap}
         />
         {candidate && strategyDef && (
           <button
@@ -840,6 +923,19 @@ export default function TradeBuilderPage() {
       </PageHeader>
 
       <div className="p-6 space-y-5">
+        {selectedTicker && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wider" style={{ color: DIM }}>Mode:</span>
+            {(Object.keys(TRADE_MODE_LABELS) as TradeMode[]).map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className="px-3 py-1 rounded border text-[11px] font-mono-data transition-all"
+                style={{ background: mode === m ? 'oklch(0.80 0.15 200 / 12%)' : 'transparent', borderColor: mode === m ? 'oklch(0.80 0.15 200 / 40%)' : BORDER, color: mode === m ? CYAN : DIM }}>
+                {TRADE_MODE_LABELS[m]}
+              </button>
+            ))}
+            {legId && <span className="text-[10px] font-mono-data ml-2 px-2 py-0.5 rounded" style={{ background: 'oklch(0.78 0.18 85 / 10%)', color: AMBER }}>leg: {legId}</span>}
+          </div>
+        )}
         {!selectedTicker ? (
           <div className="rounded border py-16 text-center" style={{ borderColor: BORDER }}>
             <BarChart2 className="w-10 h-10 mx-auto mb-3" style={{ color: DIM }} />

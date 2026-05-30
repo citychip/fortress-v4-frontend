@@ -480,10 +480,9 @@ function LegRow({
               <span key={i} className="text-[10px]" style={{ color: AMBER }}>⚠ {a}</span>
             ))}
             {/* Auto-Roll shortcut for legs in roll window — pre-selects ticker in Trade Builder */}
-            {alerts.some(a => a.includes('roll window')) && (
+            {(alerts.some(a => a.includes('roll window')) || alerts.some(a => a.includes('Roll candidate'))) && (
               <Link
-                href="/trade-builder"
-                onClick={() => sessionStorage.setItem('fortress_tradebuilder_ticker', leg.ticker)}
+                href={`/trade?ticker=${encodeURIComponent(leg.ticker)}&mode=roll&leg=${encodeURIComponent(leg.id ?? leg.ticker)}`}
                 className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border mt-0.5 hover:opacity-80"
                 style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 8%)' }}
               >
@@ -609,11 +608,8 @@ function TickerGroupCard({
 
           {/* Trade Builder shortcut — pre-selects this ticker */}
           <Link
-            href="/trade-builder"
-            onClick={e => {
-              e.stopPropagation();
-              sessionStorage.setItem('fortress_tradebuilder_ticker', group.ticker);
-            }}
+            href={`/trade?ticker=${encodeURIComponent(group.ticker)}&mode=new`}
+            onClick={e => e.stopPropagation()}
             className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border transition-all hover:bg-[oklch(0.80_0.15_200_/_10%)]"
             style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 25%)' }}
           >

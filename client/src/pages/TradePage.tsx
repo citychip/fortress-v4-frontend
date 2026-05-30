@@ -5,6 +5,7 @@
  */
 import { ListOrdered, Wrench } from 'lucide-react';
 import { useState } from 'react';
+import { useSearch } from 'wouter';
 import OrdersPage from './OrdersPage';
 import TradeBuilderPage from './TradeBuilderPage';
 
@@ -16,6 +17,11 @@ const TABS: { id: TradeTab; label: string; subtitle: string }[] = [
 ];
 
 export default function TradePage() {
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const initialTicker = params.get('ticker') ?? null;
+  const initialMode = (params.get('mode') as 'new' | 'add' | 'roll' | 'close') ?? 'new';
+  const initialLeg = params.get('leg') ?? null;
   const [tab, setTab] = useState<TradeTab>('builder');
   return (
     <div className="min-h-screen">
@@ -40,7 +46,7 @@ export default function TradePage() {
           );
         })}
       </div>
-      {tab === 'builder' && <TradeBuilderPage embedded />}
+      {tab === 'builder' && <TradeBuilderPage key={`${initialTicker}-${initialMode}-${initialLeg}`} embedded initialTicker={initialTicker} initialMode={initialMode} initialLeg={initialLeg} />}
       {tab === 'orders'  && <OrdersPage       embedded />}
     </div>
   );
