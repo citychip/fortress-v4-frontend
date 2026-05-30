@@ -413,9 +413,9 @@ function IbkrLivePreview() {
 
   return (
     <div className="grid grid-cols-4 gap-3">
-      <StatCard label="Net Liq (Live)" value={formatDollar(data.net_liq)} signal="cyan" />
-      <StatCard label="Excess Liquidity" value={formatDollar(data.excess_liquidity)} signal="default" />
-      <StatCard label="Available Funds" value={formatDollar(data.available_funds)} signal="default" />
+      <StatCard label="Net Liq (Live)" value={data.net_liq != null && !isNaN(data.net_liq) ? formatDollar(data.net_liq) : '—'} signal="cyan" />
+      <StatCard label="Excess Liquidity" value={data.excess_liquidity != null && !isNaN(data.excess_liquidity) ? formatDollar(data.excess_liquidity) : '—'} signal="default" />
+      <StatCard label="Available Funds" value={data.available_funds != null && !isNaN(data.available_funds) ? formatDollar(data.available_funds) : '—'} signal="default" />
       <StatCard
         label="Daily P&L"
         value={data.daily_pnl != null ? formatDollar(data.daily_pnl) : '—'}

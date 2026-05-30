@@ -288,7 +288,7 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false }: Strat
                   {sbGexPut  && <ReferenceLine x={sbGexPut}  stroke={SB_GREEN} strokeDasharray="2 3" label={{ value: 'GEX Put',  fill: SB_GREEN, fontSize: 8 }} />}
                   {sbDpFloor && <ReferenceLine x={sbDpFloor} stroke={SB_AMBER} strokeDasharray="2 3" label={{ value: 'DP Floor', fill: SB_AMBER, fontSize: 8 }} />}
                   <ReferenceLine y={0} stroke="oklch(1 0 0 / 20%)" />
-                  <Line type="monotone" dataKey="pnl" stroke={SB_CYAN} dot={false} strokeWidth={2}
+                  <Line type="monotone" dataKey="pnl" dot={false} strokeWidth={2}
                     stroke={payoffData.map(d => d.pnl >= 0 ? SB_GREEN : SB_RED)[0] ?? SB_CYAN} />
                 </LineChart>
               </ResponsiveContainer>

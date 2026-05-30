@@ -892,7 +892,7 @@ export function useEarningsHistory(ticker: string) {
 }
 
 export function useIbkrStatus() {
-  return useApiData<IbkrStatus>('/api/ibkr/status');
+  return useApiData<IbkrStatus>('/api/ibkr/capability');
 }
 
 export function useIbkrPreview() {
