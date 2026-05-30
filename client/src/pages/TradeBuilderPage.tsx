@@ -18,6 +18,7 @@ import {
   useRollAll,
   evaluateCandidate,
   regimeInfo,
+  calcDte,
   type CandidateRow,
   type PretradeResult,
 } from '@/hooks/useApi';
@@ -197,6 +198,203 @@ const TRADE_MODE_LABELS: Record<TradeMode, string> = {
   new: 'New Entry', add: 'Add', roll: 'Roll', close: 'Close',
 };
 
+
+// ─── Trade Landing Page ──────────────────────────────────────────────────────
+
+function TradeLanding({
+  positionsData, candidates, pretradeData, rollData, stopLossData,
+  onSelect,
+}: {
+  positionsData: any;
+  candidates: CandidateRow[];
+  pretradeData: any;
+  rollData: any;
+  stopLossData: any;
+  onSelect: (ticker: string, mode: TradeMode) => void;
+}) {
+  const candidateMap = useMemo(() => {
+    const m = new Map<string, CandidateRow>();
+    candidates.forEach(c => m.set(c.ticker, c));
+    return m;
+  }, [candidates]);
+
+  const rollTickers = useMemo(() => new Set<string>(
+    (rollData as any)?.positions?.filter((p: any) => p.roll_needed).map((p: any) => p.ticker) ?? []
+  ), [rollData]);
+
+  const stopTickers = useMemo(() => new Set<string>(
+    (stopLossData as any)?.positions?.filter((p: any) => p.verdict === 'ACT').map((p: any) => p.ticker) ?? []
+  ), [stopLossData]);
+
+  const positionGroups = useMemo(() => {
+    const positions = (positionsData as any)?.positions ?? [];
+    const byTicker = new Map<string, any[]>();
+    positions.forEach((p: any) => {
+      const arr = byTicker.get(p.ticker) ?? [];
+      arr.push(p);
+      byTicker.set(p.ticker, arr);
+    });
+    return Array.from(byTicker.entries()).map(([ticker, legs]) => {
+      const netDelta    = legs.reduce((s: number, l: any) => s + (l.current_delta ?? 0) * l.qty, 0);
+      const totalPctNL  = legs.reduce((s: number, l: any) => s + (l.net_liq_pct ?? 0), 0);
+      const shortLegs   = legs.filter((l: any) => l.leg_direction === 'short' && l.expiry);
+      const nearestDte  = shortLegs.length > 0 ? Math.min(...shortLegs.map((l: any) => calcDte(l.expiry))) : null;
+      const strategy    = legs[0]?.strategy ?? '';
+      const needsRoll   = rollTickers.has(ticker);
+      const needsStop   = stopTickers.has(ticker);
+      const cand        = candidateMap.get(ticker);
+      return { ticker, legs, netDelta, totalPctNL, nearestDte, strategy, needsRoll, needsStop, ivr: cand?.ivr ?? null, iv: cand?.current_iv ?? null };
+    }).sort((a, b) => {
+      const au = a.needsStop ? 2 : a.needsRoll ? 1 : 0;
+      const bu = b.needsStop ? 2 : b.needsRoll ? 1 : 0;
+      return bu - au || Math.abs(b.totalPctNL) - Math.abs(a.totalPctNL);
+    });
+  }, [positionsData, rollTickers, stopTickers, candidateMap]);
+
+  const activeSet = useMemo(() => new Set(positionGroups.map(g => g.ticker)), [positionGroups]);
+
+  const universeCandidates = useMemo(() =>
+    candidates.filter(c => !activeSet.has(c.ticker)).sort((a, b) => b.ivr - a.ivr),
+    [candidates, activeSet]
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* ── Active Positions ── */}
+      {positionGroups.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider font-semibold mb-3 flex items-center gap-2" style={{ color: CYAN }}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CYAN }} />
+            Active Positions ({positionGroups.length})
+          </div>
+          <div className="space-y-1.5">
+            {positionGroups.map(g => (
+              <div key={g.ticker} className="rounded border overflow-hidden"
+                style={{ borderColor: g.needsStop ? 'oklch(0.65 0.22 25 / 40%)' : g.needsRoll ? 'oklch(0.78 0.18 85 / 35%)' : BORDER }}>
+                <div className="flex items-center gap-3 px-4 py-3" style={{ background: 'oklch(0.19 0.012 258)' }}>
+                  {/* Status dot */}
+                  <span className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: g.needsStop ? RED : g.needsRoll ? AMBER : GREEN,
+                      boxShadow: (g.needsStop || g.needsRoll) ? `0 0 4px ${g.needsStop ? RED : AMBER}` : 'none' }} />
+
+                  {/* Ticker */}
+                  <span className="font-display text-sm font-bold w-14 shrink-0" style={{ color: BRIGHT }}>{g.ticker}</span>
+
+                  {/* Strategy badge */}
+                  {g.strategy && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data shrink-0"
+                      style={{ background: 'oklch(0.80 0.15 200 / 10%)', color: CYAN }}>{g.strategy}</span>
+                  )}
+
+                  {/* Metrics */}
+                  <div className="flex items-center gap-4 flex-1 min-w-0 ml-1">
+                    <span className="font-mono-data text-xs shrink-0" style={{ color: DIM }}>
+                      Δ <span style={{ color: g.netDelta > 0 ? GREEN : RED }}>{g.netDelta > 0 ? '+' : ''}{g.netDelta.toFixed(3)}</span>
+                    </span>
+                    {g.nearestDte !== null && (
+                      <span className="font-mono-data text-xs shrink-0"
+                        style={{ color: g.nearestDte <= 7 ? RED : g.nearestDte <= 21 ? AMBER : DIM }}>
+                        {g.nearestDte}d
+                      </span>
+                    )}
+                    <span className="font-mono-data text-xs shrink-0" style={{ color: DIM }}>
+                      {g.totalPctNL.toFixed(1)}% NL
+                    </span>
+                    {g.ivr !== null && (
+                      <span className="font-mono-data text-xs shrink-0" style={{ color: DIM }}>
+                        IVR <span style={{ color: g.ivr >= 50 ? GREEN : g.ivr >= 25 ? AMBER : DIM }}>{Math.round(g.ivr)}</span>
+                      </span>
+                    )}
+                    {g.iv !== null && (
+                      <span className="font-mono-data text-xs shrink-0" style={{ color: DIM }}>
+                        IV <span style={{ color: BRIGHT }}>{g.iv.toFixed(1)}%</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 ml-auto shrink-0">
+                    {g.needsStop && (
+                      <button onClick={() => onSelect(g.ticker, 'close')}
+                        className="text-[10px] px-2 py-1 rounded border transition-all hover:opacity-80"
+                        style={{ color: RED, borderColor: 'oklch(0.65 0.22 25 / 35%)', background: 'oklch(0.65 0.22 25 / 8%)' }}>
+                        ✕ Close
+                      </button>
+                    )}
+                    {g.needsRoll && (
+                      <button onClick={() => onSelect(g.ticker, 'roll')}
+                        className="text-[10px] px-2 py-1 rounded border transition-all hover:opacity-80"
+                        style={{ color: AMBER, borderColor: 'oklch(0.78 0.18 85 / 35%)', background: 'oklch(0.78 0.18 85 / 8%)' }}>
+                        ↻ Roll
+                      </button>
+                    )}
+                    <button onClick={() => onSelect(g.ticker, 'add')}
+                      className="text-[10px] px-2 py-1 rounded border transition-all hover:opacity-80"
+                      style={{ color: DIM, borderColor: BORDER }}>
+                      + Add
+                    </button>
+                    <button onClick={() => onSelect(g.ticker, 'new')}
+                      className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border transition-all hover:opacity-80"
+                      style={{ color: CYAN, borderColor: 'oklch(0.80 0.15 200 / 30%)', background: 'oklch(0.80 0.15 200 / 6%)' }}>
+                      <Zap className="w-3 h-3" /> Build
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Universe Candidates ── */}
+      {universeCandidates.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider font-semibold mb-3 flex items-center gap-2" style={{ color: GREEN }}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: GREEN }} />
+            Universe Candidates ({universeCandidates.length})
+          </div>
+          <div className="space-y-1.5">
+            {universeCandidates.map(c => {
+              const ev      = evaluateCandidate(c);
+              const pretrade = (pretradeData as any)?.results?.find((r: any) => r.ticker === c.ticker);
+              const ok      = pretrade?.verdict === 'PROCEED';
+              return (
+                <div key={c.ticker}
+                  className="rounded border flex items-center gap-3 px-4 py-3 cursor-pointer transition-all hover:bg-[oklch(1_0_0_/_2%)]"
+                  style={{ borderColor: BORDER, background: 'oklch(0.19 0.012 258)' }}
+                  onClick={() => onSelect(c.ticker, 'new')}>
+                  <span className="font-display text-sm font-bold w-14 shrink-0" style={{ color: c.can_trade ? BRIGHT : DIM }}>{c.ticker}</span>
+                  <span className="font-mono-data text-xs shrink-0" style={{ color: DIM }}>
+                    IVR <span style={{ color: c.ivr >= 50 ? GREEN : c.ivr >= 25 ? AMBER : DIM }}>{c.ivr.toFixed(0)}</span>
+                  </span>
+                  <span className="font-mono-data text-xs shrink-0" style={{ color: DIM }}>
+                    IV <span style={{ color: BRIGHT }}>{c.current_iv.toFixed(1)}%</span>
+                  </span>
+                  {c.days_to_earnings != null && (
+                    <span className="font-mono-data text-xs shrink-0"
+                      style={{ color: c.days_to_earnings <= 14 ? RED : c.days_to_earnings <= 30 ? AMBER : DIM }}>
+                      earn {c.days_to_earnings}d
+                    </span>
+                  )}
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data"
+                    style={{ background: `${ev.color}18`, color: ev.color }}>{ev.label}</span>
+                  {pretrade && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data"
+                      style={{ background: ok ? 'oklch(0.72 0.18 145 / 12%)' : 'oklch(1 0 0 / 5%)', color: ok ? GREEN : DIM }}>
+                      {ok ? '✓ proceed' : pretrade.verdict}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[10px]" style={{ color: CYAN }}>New Entry →</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TickerSelector({
   selected,
   onSelect,
@@ -319,8 +517,11 @@ function TickerSelector({
                   >
                     <span className="font-mono-data text-sm font-bold w-16" style={{ color: CYAN }}>{ticker}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data" style={{ background: 'oklch(0.80 0.15 200 / 10%)', color: CYAN }}>{ctx.strategy}</span>
+                    {ctx.ivr != null && (
+                      <span className="font-mono-data text-[10px]" style={{ color: ctx.ivr >= 25 ? GREEN : DIM }}>IVR {Math.round(ctx.ivr)}</span>
+                    )}
                     {ctx.urgent && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data ml-auto" style={{ background: 'oklch(0.65 0.22 25 / 12%)', color: 'oklch(0.65 0.22 25)' }}>urgent</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-mono-data ml-auto" style={{ background: 'oklch(0.78 0.18 85 / 12%)', color: AMBER }}>roll</span>
                     )}
                   </button>
                 );
@@ -826,16 +1027,21 @@ export default function TradeBuilderPage({
   const candidates = candidatesData?.rows ?? [];
 
   const positionContextMap = useMemo(() => {
-    const map = new Map<string, { strategy: string; urgent: boolean }>();
-    const rollTickers = new Set<string>((rollData as any)?.positions?.map((p: any) => p.ticker) ?? []);
-    const stopTickers = new Set<string>((stopLossData as any)?.positions?.map((p: any) => p.ticker) ?? []);
+    const map = new Map<string, { strategy: string; urgent: boolean; ivr?: number }>();
+    const rollTickers = new Set<string>((rollData as any)?.positions?.filter((p: any) => p.roll_needed).map((p: any) => p.ticker) ?? []);
+    const stopTickers = new Set<string>((stopLossData as any)?.positions?.filter((p: any) => p.verdict === 'ACT').map((p: any) => p.ticker) ?? []);
+    const ivrMap = new Map<string, number>(candidates.map(c => [c.ticker, c.ivr]));
     ((positionsData as any)?.positions ?? []).forEach((p: any) => {
       if (!map.has(p.ticker)) {
-        map.set(p.ticker, { strategy: p.strategy ?? '', urgent: rollTickers.has(p.ticker) || stopTickers.has(p.ticker) });
+        map.set(p.ticker, {
+          strategy: p.strategy ?? '',
+          urgent: rollTickers.has(p.ticker) || stopTickers.has(p.ticker),
+          ivr: ivrMap.get(p.ticker),
+        });
       }
     });
     return map;
-  }, [positionsData, rollData, stopLossData]);
+  }, [positionsData, rollData, stopLossData, candidates]);
 
   const isFirstRender = useRef(true);
   useEffect(() => {
@@ -938,11 +1144,19 @@ export default function TradeBuilderPage({
           </div>
         )}
         {!selectedTicker ? (
-          <div className="rounded border py-16 text-center" style={{ borderColor: BORDER }}>
-            <BarChart2 className="w-10 h-10 mx-auto mb-3" style={{ color: DIM }} />
-            <p className="text-sm font-semibold" style={{ color: BRIGHT }}>Select a ticker to begin</p>
-            <p className="text-xs mt-1" style={{ color: DIM }}>Choose from your universe using the dropdown above</p>
-          </div>
+          <TradeLanding
+            positionsData={positionsData}
+            candidates={candidates}
+            pretradeData={pretradeData}
+            rollData={rollData}
+            stopLossData={stopLossData}
+            onSelect={(ticker, mode) => {
+              setSelectedTicker(ticker);
+              setMode(mode);
+              setSelectedStrategy(null);
+              setLegId(null);
+            }}
+          />
         ) : (
           <>
             {/* Step 1: Candidate summary */}
@@ -1064,18 +1278,25 @@ export default function TradeBuilderPage({
             )}
 
             {/* Step 5 — Strategy Sandbox (live-wired to selected ticker) */}
-            {selectedTicker && (
-              <div>
-                <div className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: DIM }}>
-                  Step 5 — Strategy Sandbox
+            {selectedTicker && (() => {
+              const ctx = positionContextMap.get(selectedTicker);
+              const sandboxDefault = (mode === 'roll' || mode === 'close')
+                ? 'PMCC'
+                : ctx?.strategy?.toUpperCase().includes('PMCC') ? 'PMCC' : 'CSP';
+              return (
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: DIM }}>
+                    Step 5 — Strategy Sandbox
+                  </div>
+                  <StrategySandbox
+                    ticker={selectedTicker}
+                    hideTickerSelect
+                    collapsed={false}
+                    defaultStrategy={sandboxDefault}
+                  />
                 </div>
-                <StrategySandbox
-                  ticker={selectedTicker}
-                  hideTickerSelect
-                  collapsed={false}
-                />
-              </div>
-            )}
+              );
+            })()}
           </>
         )}
       </div>
