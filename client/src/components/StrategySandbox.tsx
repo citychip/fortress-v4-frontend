@@ -3,7 +3,7 @@
  * Extracted from StrategyPage for use in the Analyse tab.
  * Props: ticker (syncs with AnalysisPage selection), onExport callback.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useCandidates, useMarketIntelligence, useCapitalEfficiency } from '@/hooks/useApi';
@@ -103,14 +103,18 @@ interface StrategySandboxProps {
   ticker?: string;        // pre-selected ticker from parent
   collapsed?: boolean;    // start collapsed
   hideTickerSelect?: boolean;  // when true (Trade tab): don't show internal ticker dropdown
+  defaultStrategy?: string;    // seed initial strategy (e.g. 'PMCC' on roll mode)
 }
 
-export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTickerSelect = false }: StrategySandboxProps) {
+export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTickerSelect = false, defaultStrategy }: StrategySandboxProps) {
   const [, navigate] = useLocation();
   const { config } = useConfig();
   const [open, setOpen] = useState(!collapsed);
   const [sandboxTicker, setSandboxTicker] = useState<string>('');
-  const [sandboxStrategy, setSandboxStrategy] = useState<string>('CSP');
+  const [sandboxStrategy, setSandboxStrategy] = useState<string>(defaultStrategy ?? 'CSP');
+  // Sync strategy when parent changes ticker/mode
+  useEffect(() => { if (defaultStrategy) setSandboxStrategy(defaultStrategy); }, [defaultStrategy]);
+
   const [sandboxDte, setSandboxDte] = useState<number>(45);
   const [sandboxDelta, setSandboxDelta] = useState<number>(0.20);
 
