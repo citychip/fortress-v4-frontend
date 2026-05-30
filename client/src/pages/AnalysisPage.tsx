@@ -1469,7 +1469,10 @@ export default function AnalysisPage() {
             <VolAnalyticsPanel ticker={selectedTicker} />
             <PositionRiskContextPanel ticker={selectedTicker} />
             <TickerLegs ticker={selectedTicker} />
-            <StrategySandbox ticker={selectedTicker} collapsed={true} />
+            <div className="rounded border px-4 py-3 flex items-center gap-3 text-xs" style={{ borderColor: 'oklch(1 0 0 / 10%)', background: 'oklch(0.19 0.012 258)', color: 'oklch(0.55 0.010 258)' }}>
+              <BarChart2 className="w-4 h-4 flex-shrink-0" style={{ color: 'oklch(0.80 0.15 200)' }} />
+              <span>Strategy Sandbox has moved to the <a href={`/trade?ticker=${encodeURIComponent(selectedTicker)}`} style={{ color: 'oklch(0.80 0.15 200)', textDecoration: 'underline' }}>Trade tab</a> — payoff chart, GEX walls, DP floors and flip zone update live with your selected ticker.</span>
+            </div>
           </>
         )}
       </div>
