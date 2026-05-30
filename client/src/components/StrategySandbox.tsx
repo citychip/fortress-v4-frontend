@@ -42,36 +42,52 @@ function calcPoP(spot: number, breakeven: number, iv: number, dte: number): numb
   return normalCDF(d2);
 }
 
-function buildPayoffData(spot: number, delta: number, dte: number, iv: number, strategy: string) {
+function defaultShortStrike(spot: number, delta: number, strategy: string): number {
+  const s = strategy.toUpperCase();
+  if (s === 'COVERED_CALL' || s === 'PMCC' || s === 'BEAR_CALL_SPREAD') return Math.round(spot * (1 + delta * 0.5));
+  return Math.round(spot * (1 - delta * 0.7));
+}
+
+function buildPayoffData(
+  spot: number, delta: number, dte: number, iv: number, strategy: string,
+  shortStrike?: number, longStrike?: number,
+) {
   if (!spot || spot <= 0) return [];
-  const range = spot * 0.25;
-  const steps = 60;
-  const step = (range * 2) / steps;
+  const sStrike = shortStrike && shortStrike > 0 ? shortStrike : defaultShortStrike(spot, delta, strategy);
+  // Extend range to cover all strikes + 15% buffer
+  const allLevels = [sStrike, longStrike ?? 0, spot].filter(Boolean);
+  const minLevel = Math.min(...allLevels);
+  const maxLevel = Math.max(...allLevels);
+  const pad = Math.max(spot * 0.20, (maxLevel - minLevel) * 0.5 + 20);
+  const rangeMin = minLevel - pad;
+  const rangeMax = maxLevel + pad;
+  const steps = 80;
+  const step = (rangeMax - rangeMin) / steps;
   const credit = spot * iv * Math.sqrt(dte / 365) * delta * 0.5;
   return Array.from({ length: steps + 1 }, (_, i) => {
-    const price = spot - range + i * step;
+    const price = rangeMin + i * step;
     let pnl = 0;
     const s = strategy.toUpperCase();
     if (s === 'CSP' || s === 'BULL_PUT_SPREAD') {
-      const strike = spot * (1 - delta * 0.7);
-      pnl = price >= strike ? credit : credit - (strike - price) * 100;
-      if (s === 'BULL_PUT_SPREAD') pnl = Math.max(pnl, -(spot * 0.05 * 100 - credit));
+      pnl = price >= sStrike ? credit : credit - (sStrike - price) * 100;
+      if (s === 'BULL_PUT_SPREAD' && longStrike) pnl = Math.max(pnl, -(sStrike - longStrike) * 100 + credit);
     } else if (s === 'COVERED_CALL' || s === 'PMCC') {
-      const strike = spot * (1 + delta * 0.5);
-      pnl = price <= strike ? credit : credit - (price - strike) * 100;
+      pnl = price <= sStrike ? credit : credit - (price - sStrike) * 100;
+    } else if (s === 'BEAR_CALL_SPREAD') {
+      pnl = price <= sStrike ? credit : credit - (price - sStrike) * 100;
+      if (longStrike) pnl = Math.max(pnl, -(longStrike - sStrike) * 100 + credit);
     } else if (s === 'IRON_CONDOR' || s === 'JADE_LIZARD') {
-      const callStrike = spot * 1.07;
-      const putStrike  = spot * 0.93;
+      const callStrike = longStrike ?? spot * 1.07;
+      const putStrike  = sStrike ?? spot * 0.93;
       const wing = spot * 0.05;
       const callPnl = price <= callStrike ? credit * 0.5 : Math.max(credit * 0.5 - (price - callStrike) * 100, -wing * 100);
       const putPnl  = price >= putStrike  ? credit * 0.5 : Math.max(credit * 0.5 - (putStrike - price) * 100, -wing * 100);
       pnl = callPnl + putPnl;
     } else if (s === 'LEAPS' || s === 'BULL_CALL_SPREAD') {
-      const strike = spot * (1 - delta * 0.3);
-      pnl = Math.max((price - strike) * 100 - credit, -credit);
+      pnl = Math.max((price - sStrike) * 100 - credit, -credit);
+      if (s === 'BULL_CALL_SPREAD' && longStrike) pnl = Math.min(pnl, (longStrike - sStrike) * 100 - credit);
     } else {
-      const strike = spot * (1 - delta * 0.7);
-      pnl = price >= strike ? credit : credit - (strike - price) * 100;
+      pnl = price >= sStrike ? credit : credit - (sStrike - price) * 100;
     }
     return { price: parseFloat(price.toFixed(2)), pnl: parseFloat(pnl.toFixed(2)) };
   });
@@ -117,6 +133,19 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTic
 
   const [sandboxDte, setSandboxDte] = useState<number>(45);
   const [sandboxDelta, setSandboxDelta] = useState<number>(0.20);
+  const [sandboxStrike, setSandboxStrike] = useState<number>(0);
+  const [sandboxLongStrike, setSandboxLongStrike] = useState<number>(0);
+  const [strikeManual, setStrikeManual] = useState(false);
+
+  // Auto-compute strike from spot + delta + strategy (unless manually overridden)
+  useEffect(() => {
+    if (!strikeManual && sbSpot > 0) {
+      setSandboxStrike(defaultShortStrike(sbSpot, sandboxDelta, sandboxStrategy));
+    }
+  }, [sbSpot, sandboxDelta, sandboxStrategy, strikeManual]);
+
+  // Reset manual override when strategy changes
+  useEffect(() => { setStrikeManual(false); }, [sandboxStrategy]);
 
   const { data: candidatesData } = useCandidates();
   const candidateTickers = useMemo(() =>
@@ -175,20 +204,31 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTic
   }, [spyIvr, spyGex]);
 
   const payoffData = useMemo(() =>
-    buildPayoffData(sbSpot, sandboxDelta, sandboxDte, sbIv, sandboxStrategy),
-    [sbSpot, sandboxDelta, sandboxDte, sbIv, sandboxStrategy]
+    buildPayoffData(sbSpot, sandboxDelta, sandboxDte, sbIv, sandboxStrategy, sandboxStrike || undefined, sandboxLongStrike || undefined),
+    [sbSpot, sandboxDelta, sandboxDte, sbIv, sandboxStrategy, sandboxStrike, sandboxLongStrike]
   );
 
   const sandboxMetrics = useMemo(() => {
     if (!payoffData.length || sbSpot <= 0) return null;
     const maxPnl = Math.max(...payoffData.map(d => d.pnl));
     const minPnl = Math.min(...payoffData.map(d => d.pnl));
+    // Find breakeven crossing in payoff data
     let breakeven: number | null = null;
     for (let i = 1; i < payoffData.length; i++) {
       if (payoffData[i-1].pnl >= 0 && payoffData[i].pnl < 0) {
         const ratio = payoffData[i-1].pnl / (payoffData[i-1].pnl - payoffData[i].pnl);
         breakeven = payoffData[i-1].price + ratio * (payoffData[i].price - payoffData[i-1].price);
         break;
+      }
+    }
+    // Also try upward crossing (debit spreads)
+    if (breakeven == null) {
+      for (let i = 1; i < payoffData.length; i++) {
+        if (payoffData[i-1].pnl < 0 && payoffData[i].pnl >= 0) {
+          const ratio = -payoffData[i-1].pnl / (payoffData[i].pnl - payoffData[i-1].pnl);
+          breakeven = payoffData[i-1].price + ratio * (payoffData[i].price - payoffData[i-1].price);
+          break;
+        }
       }
     }
     const pop = breakeven != null ? calcPoP(sbSpot, breakeven, sbIv, sandboxDte) : null;
@@ -293,18 +333,57 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTic
                 <span className="text-[10px] uppercase tracking-wider" style={{ color: SB_DIM }}>Short Delta</span>
                 <span className="font-mono-data text-xs font-bold" style={{ color: SB_AMBER }}>{sandboxDelta.toFixed(2)}</span>
               </div>
-              <Slider value={[sandboxDelta]} onValueChange={([v]) => setSandboxDelta(v)} min={0.05} max={0.50} step={0.01} className="h-1" />
+              <Slider value={[sandboxDelta]} onValueChange={([v]) => { setSandboxDelta(v); setStrikeManual(false); }} min={0.05} max={0.50} step={0.01} className="h-1" />
+            </div>
+          </div>
+
+          {/* Strike inputs */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: SB_DIM }}>Short Strike</span>
+                {strikeManual && (
+                  <button className="text-[9px]" style={{ color: SB_CYAN }}
+                    onClick={() => { setStrikeManual(false); setSandboxStrike(defaultShortStrike(sbSpot, sandboxDelta, sandboxStrategy)); }}>
+                    ↺ reset
+                  </button>
+                )}
+              </div>
+              <input
+                type="number"
+                value={sandboxStrike || ''}
+                onChange={e => { setSandboxStrike(Number(e.target.value)); setStrikeManual(true); }}
+                placeholder="auto"
+                className="w-full px-2 py-1.5 rounded text-xs font-mono-data outline-none"
+                style={{ background: 'oklch(0.22 0.010 258)', color: strikeManual ? SB_AMBER : SB_BRIGHT,
+                  border: `1px solid ${strikeManual ? 'oklch(0.78 0.18 85 / 40%)' : 'oklch(1 0 0 / 12%)'}` }}
+              />
+            </div>
+            <div>
+              <div className="mb-1.5">
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: SB_DIM }}>Long Strike</span>
+                <span className="text-[9px] ml-1" style={{ color: SB_DIM }}>(spreads)</span>
+              </div>
+              <input
+                type="number"
+                value={sandboxLongStrike || ''}
+                onChange={e => setSandboxLongStrike(Number(e.target.value))}
+                placeholder="optional"
+                className="w-full px-2 py-1.5 rounded text-xs font-mono-data outline-none"
+                style={{ background: 'oklch(0.22 0.010 258)', color: SB_DIM,
+                  border: '1px solid oklch(1 0 0 / 12%)' }}
+              />
             </div>
           </div>
 
           {/* Payoff chart */}
           {payoffData.length > 0 && sbSpot > 0 ? (
             <div className="rounded border p-3" style={{ background: SB_CARD, borderColor: SB_BORDER }}>
-              <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={payoffData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={payoffData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
-                  <XAxis dataKey="price" tick={{ fill: SB_DIM, fontSize: 9 }} tickFormatter={v => `$${v.toFixed(0)}`} />
-                  <YAxis tick={{ fill: SB_DIM, fontSize: 9 }} tickFormatter={v => `$${v.toFixed(0)}`} width={45} />
+                  <XAxis dataKey="price" tick={{ fill: SB_DIM, fontSize: 9 }} tickFormatter={v => `$${Number(v).toFixed(0)}`} />
+                  <YAxis tick={{ fill: SB_DIM, fontSize: 9 }} tickFormatter={v => `$${Number(v).toFixed(0)}`} width={45} />
                   <Tooltip
                     contentStyle={{ background: 'oklch(0.19 0.012 258)', border: `1px solid ${SB_BORDER}`, borderRadius: '6px', fontSize: '11px' }}
                     labelFormatter={v => `Price: $${Number(v).toFixed(2)}`}
@@ -312,20 +391,24 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTic
                   />
                   <ReferenceLine x={sbSpot} stroke={SB_CYAN} strokeDasharray="4 2" label={{ value: 'Spot', fill: SB_CYAN, fontSize: 9 }} />
                   {gexCallWalls.map((lvl, i) => (
-                    <ReferenceLine key={`gc${i}`} x={lvl} stroke={SB_RED} strokeDasharray="2 3"
-                      label={i === 0 ? { value: 'GEX↑', fill: SB_RED, fontSize: 8 } : undefined} />
+                    <ReferenceLine key={`gc${i}`} x={lvl} stroke={SB_RED} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.85}
+                      label={i === 0 ? { value: `GEX↑ $${lvl.toFixed(0)}`, fill: SB_RED, fontSize: 8, fontWeight: 600 } : undefined} />
                   ))}
                   {gexPutWalls.map((lvl, i) => (
-                    <ReferenceLine key={`gp${i}`} x={lvl} stroke={SB_GREEN} strokeDasharray="2 3"
-                      label={i === 0 ? { value: 'GEX↓', fill: SB_GREEN, fontSize: 8 } : undefined} />
+                    <ReferenceLine key={`gp${i}`} x={lvl} stroke={SB_GREEN} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.85}
+                      label={i === 0 ? { value: `GEX↓ $${lvl.toFixed(0)}`, fill: SB_GREEN, fontSize: 8, fontWeight: 600 } : undefined} />
                   ))}
                   {dpFloors.map((lvl, i) => (
-                    <ReferenceLine key={`dp${i}`} x={lvl} stroke={SB_AMBER} strokeDasharray="2 3"
-                      label={i === 0 ? { value: 'DP', fill: SB_AMBER, fontSize: 8 } : undefined} />
+                    <ReferenceLine key={`dp${i}`} x={lvl} stroke={SB_AMBER} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.85}
+                      label={i === 0 ? { value: `DP $${lvl.toFixed(0)}`, fill: SB_AMBER, fontSize: 8, fontWeight: 600 } : undefined} />
                   ))}
                   {sbFlipZone && (
-                    <ReferenceLine x={sbFlipZone} stroke="oklch(0.75 0.20 300)" strokeDasharray="3 2"
-                      label={{ value: 'Flip', fill: 'oklch(0.75 0.20 300)', fontSize: 8 }} />
+                    <ReferenceLine x={sbFlipZone} stroke="oklch(0.75 0.20 300)" strokeWidth={1.5} strokeDasharray="5 2" opacity={0.85}
+                      label={{ value: `Flip $${sbFlipZone.toFixed(0)}`, fill: 'oklch(0.75 0.20 300)', fontSize: 8, fontWeight: 600 }} />
+                  )}
+                  {sandboxStrike > 0 && (
+                    <ReferenceLine x={sandboxStrike} stroke={SB_AMBER} strokeWidth={2}
+                      label={{ value: `Strike $${sandboxStrike}`, fill: SB_AMBER, fontSize: 8, fontWeight: 700, position: 'top' }} />
                   )}
                   <ReferenceLine y={0} stroke="oklch(1 0 0 / 20%)" />
                   <Line type="monotone" dataKey="pnl" dot={false} strokeWidth={2}
@@ -341,8 +424,9 @@ export function StrategySandbox({ ticker: propTicker, collapsed = false, hideTic
 
           {/* Metrics */}
           {sandboxMetrics && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {[
+                { label: 'Strike', value: sandboxStrike > 0 ? `$${sandboxStrike}` : '—', color: strikeManual ? SB_AMBER : SB_DIM },
                 { label: 'Max Profit', value: sandboxMetrics.maxPnl > 0 ? `$${sandboxMetrics.maxPnl.toFixed(0)}` : '—', color: SB_GREEN },
                 { label: 'Max Loss',   value: sandboxMetrics.minPnl < 0 ? `$${Math.abs(sandboxMetrics.minPnl).toFixed(0)}` : 'Limited', color: SB_RED },
                 { label: 'PoP',        value: sandboxMetrics.pop != null ? `${(sandboxMetrics.pop * 100).toFixed(0)}%` : '—', color: SB_CYAN },
