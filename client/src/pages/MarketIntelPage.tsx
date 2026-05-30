@@ -4,12 +4,59 @@
  * Uses /api/market-intelligence?ticker=TICKER (nested regime object).
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useMarketIntelligence, regimeInfo, type MarketIntelligence } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, ShieldAlert, ArrowUpRight, Database, ArrowUpDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, ShieldAlert, ArrowUpRight, Database, ArrowUpDown, RefreshCw, Briefcase, Eye } from 'lucide-react';
+
+// ─── Portfolio position summary ───────────────────────────────────────────────
+
+interface PositionSummary {
+  ticker: string;
+  delta: number | null;
+  min_dte: number | null;
+  concentration_pct: number | null;
+  strategy: string | null;
+}
+
+function usePortfolioTickers(token: string): { byTicker: Map<string, PositionSummary>; loading: boolean } {
+  const [byTicker, setByTicker] = useState<Map<string, PositionSummary>>(new Map());
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch('/api/manage/positions', { headers })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const map = new Map<string, PositionSummary>();
+        const positions = data?.positions ?? data?.rows ?? [];
+        const today = new Date();
+        for (const pos of positions) {
+          const t = (pos.ticker ?? '').toUpperCase();
+          if (!t) continue;
+          const delta = pos.current_delta ?? pos.delta ?? pos.portfolio_delta ?? null;
+          const dte = pos.expiry
+            ? Math.max(0, Math.round((new Date(pos.expiry).getTime() - today.getTime()) / 86_400_000))
+            : (pos.min_dte ?? pos.dte ?? null);
+          const existing = map.get(t);
+          if (!existing) {
+            map.set(t, { ticker: t, delta, min_dte: dte, concentration_pct: pos.net_liq_pct ?? null, strategy: pos.strategy ?? null });
+          } else {
+            map.set(t, {
+              ...existing,
+              delta: existing.delta !== null && delta !== null ? existing.delta + delta : existing.delta ?? delta,
+              min_dte: existing.min_dte !== null && dte !== null ? Math.min(existing.min_dte, dte) : existing.min_dte ?? dte,
+            });
+          }
+        }
+        setByTicker(map);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  return { byTicker, loading };
+}
 
 // ─── Hydrated asset cache hook ────────────────────────────────────────────────
 
@@ -84,7 +131,7 @@ function MetricBox({ label, value, color }: { label: string; value: string; colo
 
 // ─── Ticker Intel Card ────────────────────────────────────────────────────────
 
-function TickerIntelCard({ ticker }: { ticker: string }) {
+function TickerIntelCard({ ticker, position }: { ticker: string; position?: PositionSummary }) {
   const { data, loading, error } = useMarketIntelligence(ticker);
   const hydrated = useHydratedAsset(ticker);
   const [expanded, setExpanded] = useState(false);
@@ -149,6 +196,19 @@ function TickerIntelCard({ ticker }: { ticker: string }) {
         <span className="font-display text-sm font-bold" style={{ color: 'oklch(0.93 0.005 258)' }}>
           {ticker}
         </span>
+
+        {/* Portfolio position badge */}
+        {position && (
+          <span
+            className="flex items-center gap-1 font-mono-data text-[10px] px-1.5 py-0.5 rounded"
+            style={{ background: 'oklch(0.78 0.18 85 / 15%)', color: 'oklch(0.85 0.18 85)', flexShrink: 0 }}
+          >
+            <Briefcase className="w-2.5 h-2.5" />
+            {position.strategy ?? 'held'}
+            {position.min_dte !== null ? ` · ${position.min_dte}d` : ''}
+            {position.delta !== null ? ` · Δ${(position.delta * 100).toFixed(0)}` : ''}
+          </span>
+        )}
 
         {data && (
           <span className="font-mono-data text-xs" style={{ color: 'oklch(0.55 0.010 258)' }}>
@@ -373,16 +433,37 @@ type SortMode = 'default' | 'alpha' | 'bias_bull' | 'bias_bear';
 export default function MarketIntelPage() {
   const { config } = useConfig();
   const [sortMode, setSortMode] = useState<SortMode>('default');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const { byTicker: portfolioMap } = usePortfolioTickers(config.apiToken ?? '');
 
-  const sortedTickers = useMemo(() => {
+  const handleRefreshAll = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    // Bust server cache for all tickers in parallel
+    const tickers = config.tickers;
+    const baseUrl = (window as any).__FORTRESS_API_URL__ || '';
+    const token = (window as any).__FORTRESS_TOKEN__ || localStorage.getItem('fortress_token') || '';
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    await Promise.allSettled(
+      tickers.map(t =>
+        fetch(`${baseUrl}/api/market-intelligence?ticker=${t}&refresh=true`, { headers })
+      )
+    );
+    // Remount all cards to pick up fresh data
+    setRefreshKey(k => k + 1);
+    setLastRefreshed(new Date());
+    setIsRefreshing(false);
+  }, [config.tickers, isRefreshing]);
+
+  const { portfolioTickers, universeTickers } = useMemo(() => {
     const tickers = [...config.tickers];
-    if (sortMode === 'alpha') return tickers.sort((a, b) => a.localeCompare(b));
-    // For score-based sort, we use the regime score from each card's data
-    // Since cards load independently, we sort by ticker name as fallback when scores unavailable
-    if (sortMode === 'bias_bull') return tickers; // cards will reorder on next render once data loads
-    if (sortMode === 'bias_bear') return tickers;
-    return tickers; // default: config order
-  }, [config.tickers, sortMode]);
+    const sort = (arr: string[]) => sortMode === 'alpha' ? [...arr].sort((a, b) => a.localeCompare(b)) : arr;
+    const portfolio = sort(tickers.filter(t => portfolioMap.has(t)));
+    const universe = sort(tickers.filter(t => !portfolioMap.has(t)));
+    return { portfolioTickers: portfolio, universeTickers: universe };
+  }, [config.tickers, sortMode, portfolioMap]);
 
   if (!config.tickers.length) {
     return (
@@ -417,7 +498,7 @@ export default function MarketIntelPage() {
         </div>
       </PageHeader>
       <div className="p-6 space-y-3">
-        {/* Sort controls */}
+        {/* Sort controls + Refresh */}
         <div className="flex items-center gap-2 flex-wrap">
           <ArrowUpDown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'oklch(0.55 0.010 258)' }} />
           <span className="text-[11px]" style={{ color: 'oklch(0.55 0.010 258)' }}>Sort:</span>
@@ -438,6 +519,29 @@ export default function MarketIntelPage() {
               {opt.label}
             </button>
           ))}
+
+          {/* Refresh button */}
+          <div className="ml-auto flex items-center gap-2">
+            {lastRefreshed && (
+              <span className="font-mono-data text-[10px]" style={{ color: 'oklch(0.45 0.010 258)' }}>
+                Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <button
+              onClick={handleRefreshAll}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1 rounded transition-all"
+              style={{
+                background: 'oklch(0.17 0.010 258)',
+                color: isRefreshing ? 'oklch(0.45 0.010 258)' : 'oklch(0.72 0.18 145)',
+                border: '1px solid oklch(0.72 0.18 145 / 30%)',
+                cursor: isRefreshing ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Refreshing…' : 'Refresh All'}
+            </button>
+          </div>
         </div>
         <div
           className="rounded p-3 text-xs"
@@ -450,9 +554,41 @@ export default function MarketIntelPage() {
             bias (bullish / bearish / neutral) to inform position evaluation and new entry decisions.
           </span>
         </div>
-        {sortedTickers.map(ticker => (
-          <TickerIntelCard key={ticker} ticker={ticker} />
-        ))}
+        {/* Portfolio section */}
+        {portfolioTickers.length > 0 && (
+          <>
+            <div className="flex items-center gap-2 pt-1">
+              <Briefcase className="w-3.5 h-3.5" style={{ color: 'oklch(0.78 0.18 85)' }} />
+              <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'oklch(0.78 0.18 85)' }}>
+                In My Portfolio
+              </span>
+              <span className="font-mono-data text-[10px]" style={{ color: 'oklch(0.50 0.010 258)' }}>
+                {portfolioTickers.length} ticker{portfolioTickers.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {portfolioTickers.map(ticker => (
+              <TickerIntelCard key={`${ticker}-${refreshKey}`} ticker={ticker} position={portfolioMap.get(ticker)} />
+            ))}
+          </>
+        )}
+
+        {/* Universe section */}
+        {universeTickers.length > 0 && (
+          <>
+            <div className="flex items-center gap-2 pt-2">
+              <Eye className="w-3.5 h-3.5" style={{ color: 'oklch(0.55 0.010 258)' }} />
+              <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'oklch(0.55 0.010 258)' }}>
+                Universe — Watching
+              </span>
+              <span className="font-mono-data text-[10px]" style={{ color: 'oklch(0.45 0.010 258)' }}>
+                {universeTickers.length} ticker{universeTickers.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {universeTickers.map(ticker => (
+              <TickerIntelCard key={`${ticker}-${refreshKey}`} ticker={ticker} />
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
