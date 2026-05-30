@@ -1229,16 +1229,43 @@ export default function DashboardPage() {
       return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } catch { return '--'; }
   }
+  const [briefingTab, setBriefingTab] = useState<'overview'|'market-intel'|'earnings'>('overview');
+
   return (
     <div className="min-h-screen">
       <PageHeader
-        title="Dashboard"
-        subtitle="Portfolio overview — account summary, quick navigation, and live alerts"
+        title="Briefing"
+        subtitle="Pre-session hub — account health, macro regime, market intelligence, earnings calendar"
         lastUpdated={null}
         onRefresh={refresh}
         refreshing={loading}
       />
-      <div className="p-6 space-y-6">
+      {/* Sub-tab bar */}
+      <div className="flex gap-1 mx-6 mt-4 rounded border p-1" style={{ background: 'oklch(0.14 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+        {([
+          { id: 'overview',     label: 'Overview' },
+          { id: 'market-intel', label: 'Market Intel' },
+          { id: 'earnings',     label: 'Earnings' },
+        ] as const).map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setBriefingTab(id)}
+            className="flex-1 py-1.5 rounded text-xs font-medium transition-all"
+            style={{
+              background: briefingTab === id ? 'oklch(0.22 0.010 258)' : 'transparent',
+              color: briefingTab === id ? 'oklch(0.93 0.005 258)' : 'oklch(0.55 0.010 258)',
+              border: briefingTab === id ? '1px solid oklch(1 0 0 / 10%)' : '1px solid transparent',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {briefingTab === 'market-intel' && <MarketIntelPage embedded />}
+      {briefingTab === 'earnings'     && <EarningsPage    embedded />}
+
+      {briefingTab === 'overview' && <div className="p-6 space-y-6">
         <AccountSummarySection />
         <IbkrSyncHistoryPanel />
         <QuickNav briefing={data} morningRanToday={morningRanToday} />
@@ -1265,8 +1292,8 @@ export default function DashboardPage() {
             >
               <Mail className="w-3 h-3" /> Send Briefing
             </button>
-            <Link href="/trade">
-              <span className="text-xs cursor-pointer" style={{ color: CYAN }}>Open Trade page →</span>
+            <Link href="/research">
+              <span className="text-xs cursor-pointer" style={{ color: CYAN }}>Open Research →</span>
             </Link>
           </div>
         </div>
@@ -1304,7 +1331,7 @@ export default function DashboardPage() {
             Data as of: {new Date(data.as_of).toLocaleString()}
           </p>
         )}
-      </div>
+      </div>}
 
       {showBriefingModal && (
         <SendBriefingModal

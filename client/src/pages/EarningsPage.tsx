@@ -260,7 +260,7 @@ function PushCalendarModal({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function EarningsPage() {
+export default function EarningsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, loading, error, refresh, lastUpdated } = useCalendar();
   const { fetchEarnings, loading: fetching } = useCalendarActions();
   const { config } = useConfig();

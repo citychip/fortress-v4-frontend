@@ -430,7 +430,7 @@ function TickerIntelCard({ ticker, position }: { ticker: string; position?: Posi
 
 type SortMode = 'default' | 'alpha' | 'bias_bull' | 'bias_bear';
 
-export default function MarketIntelPage() {
+export default function MarketIntelPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { config } = useConfig();
   const [sortMode, setSortMode] = useState<SortMode>('default');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -468,7 +468,9 @@ export default function MarketIntelPage() {
   if (!config.tickers.length) {
     return (
       <div className="min-h-screen">
+      {!embedded && (
         <PageHeader title="Market Intelligence" subtitle="Layer 2 — Per-ticker flow analysis" />
+      )}
         <div className="p-6">
           <EmptyState
             type="no-config"

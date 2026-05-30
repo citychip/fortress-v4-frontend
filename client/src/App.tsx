@@ -61,14 +61,12 @@ import BuildCenterPage from "./pages/BuildCenterPage";
 
 // ─── 8-item sidebar nav (LOCKED — do not add items without explicit request) ──
 const NAV_ITEMS = [
-  { path: '/',            label: 'Dashboard',   icon: LayoutDashboard },
-  { path: '/market-intel',label: 'Market Intel',icon: TrendingUp },
+  { path: '/',            label: 'Briefing',    icon: LayoutDashboard },
   { path: '/positions',   label: 'Positions',   icon: BookOpen },
   { path: '/research',    label: 'Research',    icon: Crosshair },
   { path: '/trade',       label: 'Trade',       icon: Activity },
   { path: '/analysis',    label: 'Analysis',    icon: BarChart2 },
   { path: '/performance', label: 'Performance', icon: DollarSign },
-  { path: '/earnings',    label: 'Earnings',    icon: CalendarDays },
   { path: '/config',      label: 'Config',      icon: Settings },
 ];
 

@@ -10,6 +10,7 @@
  *   Position             → { current_delta, market_value, local_symbol, expiry, right, strike, qty }
  */
 
+import { useSearch } from 'wouter';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   useChartData, useMarketIntelligence, usePositions, useChartLevels, useOrderFlow,
