@@ -42,6 +42,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { StrategySandbox } from '@/components/StrategySandbox';
 import { CYAN, GREEN, AMBER, RED, DIM, BRIGHT, CARD, BORDER, BG, MUTED, PURPLE, ACCENT, CARD2, CARD3, FAINT, CYAN_BG, GREEN_BG, RED_BG, AMBER_BG } from '@/lib/theme';
 
 // ─── Color constants ──────────────────────────────────────────────────────────
@@ -1059,6 +1060,20 @@ export default function TradeBuilderPage({
                     onQueue={handleQueue}
                   />
                 </div>
+              </div>
+            )}
+
+            {/* Step 5 — Strategy Sandbox (live-wired to selected ticker) */}
+            {selectedTicker && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: DIM }}>
+                  Step 5 — Strategy Sandbox
+                </div>
+                <StrategySandbox
+                  ticker={selectedTicker}
+                  hideTickerSelect
+                  collapsed={false}
+                />
               </div>
             )}
           </>
