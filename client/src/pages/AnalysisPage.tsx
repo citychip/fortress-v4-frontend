@@ -17,6 +17,7 @@ import {
   type Position,
 } from '@/hooks/useApi';
 import { useConfig } from '@/contexts/ConfigContext';
+import { StrategySandbox } from '@/components/StrategySandbox';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import {
@@ -1358,6 +1359,9 @@ export default function AnalysisPage() {
   const { data: briefingData } = useBriefing();
   const allPositions = positionsData?.positions ?? [];
   const vix = briefingData?.macro_regime?.vix ?? null;
+  // Read ticker from URL query param ?ticker=XYZ (set by Research tab)
+  const search = useSearch();
+  const urlTicker = new URLSearchParams(search).get('ticker') ?? '';
   // Indicator panel visibility — persisted to localStorage
   const [showBB, setShowBB] = useState(() => localStorage.getItem('fortress_show_bb') !== 'false');
   const [showRsi, setShowRsi] = useState(() => localStorage.getItem('fortress_show_rsi') !== 'false');
@@ -1368,13 +1372,16 @@ export default function AnalysisPage() {
   const toggleMacd = () => setShowMacd(v => { const next = !v; localStorage.setItem('fortress_show_macd', String(next)); return next; });
 
   const [selectedTicker, setSelectedTicker] = useState(() => {
-    // Check for triage ticker set by DTE shortcut from P&L page
+    // 1. URL query param ?ticker=XYZ (from Research tab click-through)
+    const urlParam = new URLSearchParams(window.location.search).get('ticker');
+    if (urlParam && config.tickers.includes(urlParam)) return urlParam;
+    // 2. Triage ticker set by DTE shortcut from P&L page
     const triage = sessionStorage.getItem('fortress_triage_ticker');
     if (triage && config.tickers.includes(triage)) {
       sessionStorage.removeItem('fortress_triage_ticker');
       return triage;
     }
-    // Check for deep-link ticker from Dashboard post-earnings / roll candidate navigation
+    // 3. Deep-link ticker from Dashboard post-earnings / roll candidate navigation
     const deepLink = sessionStorage.getItem('fortress_analysis_ticker');
     if (deepLink) {
       sessionStorage.removeItem('fortress_analysis_ticker');
@@ -1461,6 +1468,7 @@ export default function AnalysisPage() {
             <VolAnalyticsPanel ticker={selectedTicker} />
             <PositionRiskContextPanel ticker={selectedTicker} />
             <TickerLegs ticker={selectedTicker} />
+            <StrategySandbox ticker={selectedTicker} collapsed={true} />
           </>
         )}
       </div>
