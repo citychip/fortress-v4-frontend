@@ -1225,6 +1225,7 @@ function QuantDataCredentialsSection() {
   const [authToken, setAuthToken] = useState('');
   const [cookie, setCookie] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showAuthToken, setShowAuthToken] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = useState('');
   const [credStatus, setCredStatus] = useState<{ exists: boolean; token_preview: string | null; cookie_preview: string | null; mtime: string | null } | null>(null);
@@ -1320,9 +1321,9 @@ function QuantDataCredentialsSection() {
 
           <div className="space-y-3">
             <div>
-              <label className="block text-xs mb-1" style={{ color: DIM }}>Auth Token (authorization header value)</label>
+              <div className="flex items-center justify-between mb-1"><label className="block text-xs" style={{ color: DIM }}>Auth Token (authorization header value)</label><button type="button" onClick={() => setShowAuthToken(s => !s)} className="p-0.5 hover:opacity-70" style={{ color: 'oklch(0.55 0.010 258)' }}>{showAuthToken ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}</button></div>
               <input
-                type="password"
+                type={showAuthToken ? "text" : "password"}
                 value={authToken}
                 onChange={e => setAuthToken(e.target.value)}
                 placeholder="Bearer eyJ..."
@@ -1519,12 +1520,14 @@ function QuantDataLoginRefreshSection() {
 function SecuritySection() {
   const { config, updateConfig } = useConfig();
   const [rotating, setRotating] = useState(false);
+  const [showToken, setShowToken] = useState(false);
   const [rotateError, setRotateError] = useState<string | null>(null);
   const [rotateSuccess, setRotateSuccess] = useState(false);
 
   const maskedToken = config.apiToken
     ? '••••••••••••••••' + config.apiToken.slice(-8)
     : '(not set)';
+  const displayToken = showToken ? (config.apiToken ?? '(not set)') : maskedToken;
 
   const handleRotate = useCallback(async () => {
     if (!config.apiToken || !config.apiUrl) {
@@ -1579,7 +1582,12 @@ function SecuritySection() {
               letterSpacing: '0.05em',
             }}
           >
-            {maskedToken}
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono-data text-sm" style={{ letterSpacing: '0.05em' }}>{displayToken}</span>
+              <button onClick={() => setShowToken(s => !s)} className="p-1 hover:opacity-70 transition-opacity flex-shrink-0" style={{ color: 'oklch(0.55 0.010 258)' }}>
+                {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
         </Field>
 
@@ -1647,42 +1655,70 @@ function SyncBadge({ status }: { status: PrefsSaveStatus }) {
   );
 }
 
+type SettingsSubTab = 'connections' | 'trading' | 'system';
+
 export default function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { prefsSaveStatus } = useConfig();
+  const [subTab, setSubTab] = useState<SettingsSubTab>('connections');
+
+  const SUB_TABS: { id: SettingsSubTab; label: string }[] = [
+    { id: 'connections', label: 'Connections' },
+    { id: 'trading',     label: 'Trading' },
+    { id: 'system',      label: 'System' },
+  ];
+
   return (
     <div className="min-h-screen">
       <PageHeader
         title="Settings"
-        subtitle="All configuration — API, tickers, strategy parameters. Stored locally in your browser."
+        subtitle="Connections & API config · Trading universe & strategy · System preferences"
       >
         <SyncBadge status={prefsSaveStatus} />
       </PageHeader>
-
-      <div className="p-6 space-y-4 max-w-3xl">
-        {/* Important notice */}
-        <div
-          className="rounded border p-3 text-xs"
-          style={{ background: 'oklch(0.80 0.15 200 / 8%)', borderColor: 'oklch(0.80 0.15 200 / 25%)' }}
-        >
-          <span className="font-semibold" style={{ color: 'oklch(0.80 0.15 200)' }}>Note: </span>
-          <span style={{ color: 'oklch(0.65 0.010 258)' }}>
-            All settings are stored in your browser's localStorage. They persist across sessions but are
-            specific to this browser. Use Export/Import to transfer settings to another device.
-            The API token is never included in exports.
-          </span>
+      <div className="p-6 max-w-3xl space-y-4">
+        {/* Sub-tab bar */}
+        <div className="flex gap-1 rounded border p-1" style={{ background: 'oklch(0.14 0.010 258)', borderColor: 'oklch(1 0 0 / 8%)' }}>
+          {SUB_TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setSubTab(id)}
+              className="flex-1 py-1.5 rounded text-xs font-medium transition-all"
+              style={{
+                background: subTab === id ? 'oklch(0.22 0.010 258)' : 'transparent',
+                color: subTab === id ? 'oklch(0.93 0.005 258)' : 'oklch(0.55 0.010 258)',
+                border: subTab === id ? '1px solid oklch(1 0 0 / 10%)' : '1px solid transparent',
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <GeneralSection />
-        <ApiSection />
-        <ConnectionHealthSection />
-        <QuantDataCredentialsSection />
-        <QuantDataLoginRefreshSection />
-        <TickerSection />
-        <StrategySection />
-        <RefreshSection />
-        <ServerSettingsSection />
-        <BackupSection />
-        <SecuritySection />
+        {subTab === 'connections' && (
+          <div className="space-y-4">
+            <ApiSection />
+            <ConnectionHealthSection />
+            <QuantDataCredentialsSection />
+            <QuantDataLoginRefreshSection />
+            <SecuritySection />
+          </div>
+        )}
+
+        {subTab === 'trading' && (
+          <div className="space-y-4">
+            <TickerSection />
+            <StrategySection />
+          </div>
+        )}
+
+        {subTab === 'system' && (
+          <div className="space-y-4">
+            <GeneralSection />
+            <RefreshSection />
+            <ServerSettingsSection />
+            <BackupSection />
+          </div>
+        )}
       </div>
     </div>
   );
