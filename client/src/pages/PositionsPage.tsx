@@ -655,7 +655,7 @@ function TickerGroupCard({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function PositionsPage() {
+export default function PositionsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, loading, error, refresh, lastUpdated } = usePositions();
   const { data: stopData } = useStopLossAll();
   const { data: rollData } = useRollAll();
@@ -708,7 +708,7 @@ export default function PositionsPage() {
 
   return (
     <div className="min-h-screen">
-      <PageHeader
+      {!embedded && <PageHeader
         title="Portfolio"
         subtitle="Layer 3 — Per-leg evaluation: delta, DTE, concentration, stop-loss"
         lastUpdated={lastUpdated}
@@ -722,7 +722,7 @@ export default function PositionsPage() {
             {alertCount} alert{alertCount !== 1 ? 's' : ''}
           </div>
         )}
-      </PageHeader>
+      </PageHeader>}
 
       <div className="p-6 space-y-4">
         {/* Summary stat cards */}

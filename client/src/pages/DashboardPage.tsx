@@ -1,3 +1,5 @@
+import MarketIntelPage from './MarketIntelPage';
+import EarningsPage from './EarningsPage';
 /**
  * FORTRESS V2 — Dashboard Page
  * Layer 1 entry point: Trade Report (morning action list) + IBKR Live Preview +
@@ -900,10 +902,10 @@ function QuickNav({ briefing, morningRanToday }: { briefing: BriefingData | null
 
   const links = [
     { href: '/research',     label: 'Research',        sub: 'IV scan · Candidates · Gate',   icon: Crosshair,     color: tradeColor },
-    { href: '/positions',    label: 'Positions',      sub: 'Per-leg evaluation',             icon: BookOpen,      color: positionsColor },
+    { href: '/portfolio',    label: 'Portfolio',      sub: 'Positions · P&L · Journal',             icon: BookOpen,      color: positionsColor },
     { href: '/market-intel', label: 'Market Intel',   sub: 'GEX / DP / Drift',               icon: TrendingUp,    color: marketColor },
     { href: '/analysis',     label: 'Analysis',       sub: 'Ticker deep-dive + vol',         icon: AlertTriangle, color: CYAN },
-    { href: '/performance',  label: 'Performance',    sub: 'P&L · Journal',                  icon: DollarSign,    color: perfColor },
+    { href: '/portfolio',    label: 'Portfolio',      sub: 'Positions · P&L · Journal',                  icon: DollarSign,    color: perfColor },
     { href: '/earnings',     label: 'Earnings',       sub: 'Calendar & blackout windows',    icon: BookOpen,      color: earningsColor },
     { href: '/config',       label: 'Config',         sub: 'Strategy · Settings · Scripts',  icon: Zap,           color: AMBER },
     { href: '/scripts',      label: 'Scripts',        sub: 'Automation & tools',             icon: Shield,        color: scriptsColor },

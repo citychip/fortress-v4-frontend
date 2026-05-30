@@ -50,6 +50,7 @@ import MorningBriefPage from "./pages/MorningBriefPage";
 import TradeBuilderPage from "./pages/TradeBuilderPage";
 import StrategyPage from "./pages/StrategyPage";
 import ResearchPage from './pages/ResearchPage';
+import PortfolioPage from './pages/PortfolioPage';
 import TradePage from "./pages/TradePage";
 import PnLJournalPage from "./pages/PnLJournalPage";
 import ConfigPage from "./pages/ConfigPage";
@@ -62,11 +63,10 @@ import BuildCenterPage from "./pages/BuildCenterPage";
 // ─── 8-item sidebar nav (LOCKED — do not add items without explicit request) ──
 const NAV_ITEMS = [
   { path: '/',            label: 'Briefing',    icon: LayoutDashboard },
-  { path: '/positions',   label: 'Positions',   icon: BookOpen },
+  { path: '/portfolio',   label: 'Portfolio',   icon: BookOpen },
   { path: '/research',    label: 'Research',    icon: Crosshair },
   { path: '/trade',       label: 'Trade',       icon: Activity },
   { path: '/analysis',    label: 'Analysis',    icon: BarChart2 },
-  { path: '/performance', label: 'Performance', icon: DollarSign },
   { path: '/config',      label: 'Config',      icon: Settings },
 ];
 
@@ -357,6 +357,7 @@ function Router() {
           {/* 8-item nav routes */}
           <Route path="/"             component={DashboardPage} />
           <Route path="/market-intel" component={MarketIntelPage} />
+          <Route path="/portfolio"    component={() => <PortfolioPage />} />
           <Route path="/positions"    component={PositionsPage} />
           <Route path="/research"     component={() => <ResearchPage />} />
           <Route path="/trade"        component={() => <TradePage />} />
