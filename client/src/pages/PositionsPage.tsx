@@ -523,9 +523,21 @@ function TickerGroupCard({
   dteTriage: number;
   belowSma200: Set<string>;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(group.alertCount > 0);
   const isConcentrated = group.totalPctNL > strategy.maxSingleNamePct;
   const hasAlerts = group.alertCount > 0;
+
+  // TF-11: Strike range + nearest short-leg expiry for richer header
+  const optLegs      = group.legs.filter(l => l.sec_type === 'OPT');
+  const shortStrikes = optLegs.filter(l => l.leg_direction === 'short' && l.strike > 0).map(l => l.strike);
+  const longStrikes  = optLegs.filter(l => l.leg_direction === 'long'  && l.strike > 0).map(l => l.strike);
+  const strikeRange  = (shortStrikes.length > 0 || longStrikes.length > 0)
+    ? [shortStrikes.length > 0 ? `$${Math.max(...shortStrikes).toLocaleString()}↑` : null,
+       longStrikes.length  > 0 ? `$${Math.min(...longStrikes).toLocaleString()}↓`  : null].filter(Boolean).join(' / ')
+    : null;
+  const shortDtes    = optLegs.filter(l => l.leg_direction === 'short' && l.expiry).map(l => calcDte(l.expiry!));
+  const nearestDte   = shortDtes.length > 0 ? Math.min(...shortDtes) : null;
+  const alertDotColor = isConcentrated ? RED : hasAlerts ? AMBER : GREEN;
 
   const pnlColor = group.totalMktVal >= 0 ? GREEN : RED;
   const PnLIcon = group.totalMktVal >= 0 ? TrendingUp : TrendingDown;
@@ -558,16 +570,31 @@ function TickerGroupCard({
           {group.legs.length} leg{group.legs.length !== 1 ? 's' : ''}
         </span>
 
-        {/* Alert badge */}
-        {hasAlerts && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-            style={{ background: 'oklch(0.78 0.18 85 / 12%)', color: AMBER }}>
-            {group.alertCount} alert{group.alertCount !== 1 ? 's' : ''}
-          </span>
-        )}
+        {/* TF-11: Alert state dot (green=clean, amber=alerts, red=concentrated) */}
+        <span
+          className="w-2 h-2 rounded-full flex-shrink-0"
+          style={{ background: alertDotColor, boxShadow: hasAlerts || isConcentrated ? `0 0 4px ${alertDotColor}` : 'none' }}
+          title={isConcentrated ? 'Concentration breach' : hasAlerts ? `${group.alertCount} alert${group.alertCount !== 1 ? 's' : ''}` : 'No alerts'}
+        />
 
         {/* Right side: sparkline + metrics */}
         <div className="ml-auto flex items-center gap-5">
+          {/* TF-11: Strike range */}
+          {strikeRange && (
+            <span className="font-mono-data text-[10px]" style={{ color: DIM }}>
+              {strikeRange}
+            </span>
+          )}
+
+          {/* TF-11: Nearest short-leg expiry */}
+          {nearestDte !== null && (
+            <span className="font-mono-data text-[10px]" style={{
+              color: nearestDte <= 7 ? RED : nearestDte <= 21 ? AMBER : DIM,
+            }}>
+              {nearestDte}d
+            </span>
+          )}
+
           {/* P&L sparkline */}
           {group.pnlSeries.length >= 2 && (
             <PnLSparkline values={group.pnlSeries} color={pnlColor} />
